@@ -107,7 +107,10 @@ class _TranslationScreenState extends State<TranslationScreen> {
         title: const Text('Tradução ao Vivo'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.flip_camera_android, semanticsLabel: 'Alternar câmera frontal/traseira'),
+            icon: const Semantics(
+              label: 'Alternar câmera frontal/traseira',
+              child: Icon(Icons.flip_camera_android),
+            ),
             onPressed: () {
               // Alterna câmera
             },
@@ -228,7 +231,10 @@ class _TranslationScreenState extends State<TranslationScreen> {
                         ],
                       ),
                       IconButton(
-                        icon: const Icon(Icons.volume_up, semanticsLabel: 'Ouvir tradução em voz'),
+                        icon: const Semantics(
+                          label: 'Ouvir tradução em voz',
+                          child: Icon(Icons.volume_up),
+                        ),
                         onPressed: () {
                           // Síntese de voz
                         },
@@ -242,7 +248,10 @@ class _TranslationScreenState extends State<TranslationScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       IconButton.filledTonal(
-                        icon: Icon(_isTranslating ? Icons.pause : Icons.play_arrow, semanticsLabel: _isTranslating ? 'Pausar tradução' : 'Retomar tradução'),
+                        icon: Semantics(
+                          label: _isTranslating ? 'Pausar tradução' : 'Retomar tradução',
+                          child: Icon(_isTranslating ? Icons.pause : Icons.play_arrow),
+                        ),
                         onPressed: () {
                           setState(() {
                             _isTranslating = !_isTranslating;
@@ -257,7 +266,10 @@ class _TranslationScreenState extends State<TranslationScreen> {
                         },
                       ),
                       IconButton.filledTonal(
-                        icon: const Icon(Icons.stop, semanticsLabel: 'Encerrar tradução'),
+                        icon: const Semantics(
+                          label: 'Encerrar tradução',
+                          child: Icon(Icons.stop),
+                        ),
                         color: Colors.redAccent,
                         onPressed: () => context.pop(),
                       ),
