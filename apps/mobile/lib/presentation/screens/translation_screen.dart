@@ -107,9 +107,9 @@ class _TranslationScreenState extends State<TranslationScreen> {
         title: const Text('Tradução ao Vivo'),
         actions: [
           IconButton(
-            icon: const Semantics(
+            icon: Semantics(
               label: 'Alternar câmera frontal/traseira',
-              child: Icon(Icons.flip_camera_android),
+              child: const Icon(Icons.flip_camera_android),
             ),
             onPressed: () {
               // Alterna câmera
@@ -231,9 +231,9 @@ class _TranslationScreenState extends State<TranslationScreen> {
                         ],
                       ),
                       IconButton(
-                        icon: const Semantics(
+                        icon: Semantics(
                           label: 'Ouvir tradução em voz',
-                          child: Icon(Icons.volume_up),
+                          child: const Icon(Icons.volume_up),
                         ),
                         onPressed: () {
                           // Síntese de voz
@@ -266,9 +266,9 @@ class _TranslationScreenState extends State<TranslationScreen> {
                         },
                       ),
                       IconButton.filledTonal(
-                        icon: const Semantics(
+                        icon: Semantics(
                           label: 'Encerrar tradução',
-                          child: Icon(Icons.stop),
+                          child: const Icon(Icons.stop),
                         ),
                         color: Colors.redAccent,
                         onPressed: () => context.pop(),

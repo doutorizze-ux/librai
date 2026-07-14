@@ -108,9 +108,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
         title: const Text('Modo Conversa'),
         actions: [
           IconButton(
-            icon: const Semantics(
+            icon: Semantics(
               label: 'Exportar histórico da sessão',
-              child: Icon(Icons.share),
+              child: const Icon(Icons.share),
             ),
             onPressed: () {
               // Exportação LGPD formatada
@@ -121,9 +121,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
             },
           ),
           IconButton(
-            icon: const Semantics(
+            icon: Semantics(
               label: 'Salvar e sair da sessão',
-              child: Icon(Icons.check_circle_outline),
+              child: const Icon(Icons.check_circle_outline),
             ),
             onPressed: _saveAndExit,
           ),
@@ -240,9 +240,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
                           Align(
                             alignment: Alignment.bottomRight,
                             child: IconButton(
-                              icon: const Semantics(
+                              icon: Semantics(
                                 label: 'Ouvir tradução em voz',
-                                child: Icon(Icons.volume_up, size: 18),
+                                child: const Icon(Icons.volume_up, size: 18),
                               ),
                               onPressed: () => _ttsService.speak(text),
                             ),
