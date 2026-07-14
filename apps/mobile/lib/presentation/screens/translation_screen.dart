@@ -278,7 +278,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
 
   Widget _buildLandmarkChip(String label, bool detected) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, py: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: detected ? Colors.green.withOpacity(0.8) : Colors.red.withOpacity(0.8),
         borderRadius: BorderRadius.circular(12),
