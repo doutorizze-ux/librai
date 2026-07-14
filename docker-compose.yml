@@ -9,8 +9,8 @@ services:
       POSTGRES_USER: sinaliza_user
       POSTGRES_PASSWORD: sinaliza_secure_pass123
       POSTGRES_DB: sinaliza_db
-    ports:
-      - "5432:5432"
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -23,8 +23,8 @@ services:
     image: redis:7-alpine
     container_name: sinaliza_redis
     restart: always
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -39,8 +39,8 @@ services:
       dockerfile: apps/api-gateway/Dockerfile
     container_name: sinaliza_api_gateway
     restart: always
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
       - DATABASE_URL=postgresql://sinaliza_user:sinaliza_secure_pass123@postgres:5432/sinaliza_db
       - REDIS_URL=redis://redis:6379/0
@@ -57,8 +57,8 @@ services:
       dockerfile: apps/admin-web/Dockerfile
     container_name: sinaliza_admin_web
     restart: always
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
     depends_on:
