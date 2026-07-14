@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="/">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Sinaliza AI - Reconhecimento de Libras em tempo real.">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="sinaliza_ai">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Sinaliza AI</title>
+  <link rel="manifest" href="manifest.json">
+
+  <!-- CDN scripts do MediaPipe para Visão Computacional -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+
+  <style>
+    /* Esconder o elemento de vídeo de processamento de frames original */
+    #mediapipe-video-source {
+      display: none;
+      position: absolute;
+      width: 0;
+      height: 0;
+      opacity: 0;
+    }
+  </style>
+</head>
+<body>
+  <!-- Vídeo invisível usado como fonte para o processador do MediaPipe -->
+  <video id="mediapipe-video-source" autoplay playsinline></video>
+
+  <script>
+    // Interface Global de Interoperação JavaScript-Dart
+    window.sinalizaAiMediaPipe = {
+      handsDetected: false,
+      faceDetected: false,
+      poseDetected: false,
+      latestLandmarks: null,
+      isActive: false,
+
+      // Inicia a câmera e o loop de landmarks
+      init: function() {
+        const videoElement = document.getElementById('mediapipe-video-source');
+        
+        // Inicializar Hands
+        const hands = new Hands({
+          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+        hands.setOptions({
+          maxNumHands: 2,
+          modelComplexity: 1,
+          minDetectionConfidence: 0.5,
+          minTrackingConfidence: 0.5
+        });
+
+        hands.onResults((results) => {
+          if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            this.handsDetected = true;
+            this.latestLandmarks = results.multiHandLandmarks;
+          } else {
+            this.handsDetected = false;
+          }
+        });
+
+        // Configurar acesso à câmera nativa do navegador
+        const camera = new Camera(videoElement, {
+          onFrame: async () => {
+            if (this.isActive) {
+              await hands.send({ image: videoElement });
+            }
+          },
+          width: 640,
+          height: 480
+        });
+
+        this.start = function() {
+          this.isActive = true;
+          camera.start();
+        };
+
+        this.stop = function() {
+          this.isActive = false;
+          camera.stop();
+        };
+      }
+    };
+
+    // Inicializa a ponte ao carregar a página
+    window.addEventListener('load', function() {
+      try {
+        window.sinalizaAiMediaPipe.init();
+      } catch (e) {
+        console.warn("MediaPipe não pôde ser carregado na inicialização.", e);
+      }
+    });
+  </script>
+
+  <!-- Script de Boot do Flutter -->
+  <script src="flutter.js" defer></script>
+  <script>
+    window.addEventListener('load', function(ev) {
+      // Baixar flutter.js e inicializar o app
+      _flutter.loader.loadEntrypoint({
+        serviceWorker: {
+          serviceWorkerVersion: serviceWorkerVersion,
+        },
+        onEntrypointLoaded: function(engineInitializer) {
+          engineInitializer.initializeEngine().then(function(appRunner) {
+            appRunner.runApp();
+          });
+        }
+      });
+    });
+  </script>
+</body>
+</html>

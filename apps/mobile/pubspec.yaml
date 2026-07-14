@@ -1,0 +1,47 @@
+name: sinaliza_ai
+description: Aplicativo móvel e web para reconhecimento de Libras em tempo real.
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.2
+
+  # State Management
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # Navigation
+  go_router: ^14.0.1
+
+  # Network
+  dio: ^5.4.3
+
+  # Local Database (Drift / SQLite)
+  drift: ^2.18.0
+  sqlite3_flutter_libs: ^0.5.22
+  path_provider: ^2.1.3
+  path: ^1.9.0
+
+  # Hardware and Media
+  camera: ^0.10.6
+  flutter_tts: ^4.0.2
+  speech_to_text: ^6.6.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+  # Code Generation
+  build_runner: ^2.4.9
+  drift_dev: ^2.18.0
+  riverpod_generator: ^2.4.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/models/
