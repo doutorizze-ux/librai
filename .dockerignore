@@ -1,0 +1,13 @@
+.git
+.github
+node_modules
+apps/admin-web/.next
+apps/admin-web/node_modules
+apps/api-gateway/venv
+apps/api-gateway/__pycache__
+apps/mobile/.dart_tool
+apps/mobile/build
+apps/mobile/.flutter-plugins
+apps/mobile/.flutter-plugins-dependencies
+*.db
+.pytest_cache

@@ -8,6 +8,9 @@ RUN npm ci
 # Stage 2: Rebuild the source code only when needed
 FROM node:20-alpine AS builder
 WORKDIR /app
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NODE_OPTIONS="--max-old-space-size=1024"
 COPY --from=deps /app/node_modules ./node_modules
 COPY apps/admin-web/ ./
 ENV NEXT_TELEMETRY_DISABLED=1

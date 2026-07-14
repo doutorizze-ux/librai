@@ -55,12 +55,14 @@ services:
     build:
       context: .
       dockerfile: apps/admin-web/Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=https://api.tvcatolica.site
     container_name: sinaliza_admin_web
     restart: always
     expose:
       - "3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=https://api.tvcatolica.site
     depends_on:
       - api-gateway
 

@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 import '../domain/interfaces/libras_translator.dart';
 
 class LocalLibrasTranslator implements LibrasTranslator {
-  final Dio _dio = Dio(BaseOptions(baseUrl: 'http://localhost:8000'));
+  final Dio _dio = Dio(BaseOptions(baseUrl: const String.fromEnvironment('API_URL', defaultValue: 'https://api.tvcatolica.site')));
   
   // Dicionário local de regras gramaticais para funcionamento Offline
   final Map<String, String> _offlineDictionary = {
