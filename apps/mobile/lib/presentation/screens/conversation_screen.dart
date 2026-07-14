@@ -200,7 +200,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
                 return Align(
                   alignment: isDeaf ? Alignment.centerLeft : Alignment.centerRight,
                   child: Container(
-                    maxWidth: MediaQuery.of(context).size.width * 0.75,
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.of(context).size.width * 0.75,
+                    ),
                     margin: const EdgeInsets.symmetric(vertical: 6),
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
