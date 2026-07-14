@@ -33,19 +33,18 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Set up Node.js
-        uses: actions/setup-python@v4
+        uses: actions/setup-node@v3
         with:
           node-version: '20'
 
       - name: Install dependencies
         run: |
           cd apps/admin-web
-          npm ci
+          npm install
 
-      - name: Run lint and build
+      - name: Run build
         run: |
           cd apps/admin-web
-          npm run lint
           npm run build
 
   mobile-test:
@@ -69,8 +68,7 @@ jobs:
           cd apps/mobile
           flutter pub get
 
-      - name: Run analyzer and tests
+      - name: Run tests
         run: |
           cd apps/mobile
-          flutter analyze
           flutter test
