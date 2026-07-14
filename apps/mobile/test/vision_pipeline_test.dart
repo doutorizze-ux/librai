@@ -130,7 +130,7 @@ void main() {
       ]);
 
       expect(result.label, equals("AJUDA"));
-      expect(result.confidence, isGreaterThanOrEqualTo(0.75));
+      expect(result.confidence, greaterThanOrEqualTo(0.75));
       expect(result.isTestFixture, isTrue);
     });
 
@@ -146,7 +146,7 @@ void main() {
 
       // Deve cair na rejeição e retornar "SINAL_DESCONHECIDO"
       expect(result.label, equals("SINAL_DESCONHECIDO"));
-      expect(result.confidence, isLessThan(0.75));
+      expect(result.confidence, lessThan(0.75));
     });
   });
 
