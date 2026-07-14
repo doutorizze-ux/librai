@@ -1,26 +1,14 @@
 import 'package:flutter/foundation.dart';
-import 'package:js/js.dart' as js;
-import 'package:js/js_util.dart' as js_util;
-
-@js.JS('speechSynthesis')
-class JSSpeechSynthesis {
-  external static void speak(dynamic utterance);
-}
-
-@js.JS('SpeechSynthesisUtterance')
-class JSSpeechSynthesisUtterance {
-  external factory JSSpeechSynthesisUtterance(String text);
-  external set lang(String value);
-}
+import 'dart:html' as html;
 
 class TtsService {
   Future<void> speak(String text) async {
     if (text.trim().isEmpty) return;
 
     try {
-      final utterance = JSSpeechSynthesisUtterance(text);
+      final utterance = html.SpeechSynthesisUtterance(text);
       utterance.lang = 'pt-BR';
-      js_util.callMethod(js_util.globalThis, 'speechSynthesis.speak', [utterance]);
+      html.window.speechSynthesis?.speak(utterance);
       debugPrint("[TTS Web] Falando: '$text'");
     } catch (e) {
       debugPrint("[TTS Web Error] Falha ao sintetizar áudio no navegador: $e");
