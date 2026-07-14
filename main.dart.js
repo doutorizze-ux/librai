@@ -89052,7 +89052,7 @@ A.a_S().$1("[TTS Web] Falando: '"+b+"'")}catch(l){o=A.ab(l)
 A.a_S().$1("[TTS Web Error] Falha ao sintetizar \xe1udio no navegador: "+A.l(o))}case 1:return A.P(q,r)}})
 return A.Q($async$vQ,r)}}
 A.pd.prototype={
-ao(){var s,r,q,p=A.aLq("http://localhost:8000"),o=new A.M3(A.c([B.Bo],t.i6))
+ao(){var s,r,q,p=A.aLq("https://api.tvcatolica.site"),o=new A.M3(A.c([B.Bo],t.i6))
 o.N(o,B.Ig)
 o=new A.a36($,o,$,new A.a6h(51200),!1)
 o.W8$=p
