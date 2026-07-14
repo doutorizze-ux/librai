@@ -15,8 +15,10 @@ class HomeScreen extends StatelessWidget {
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings),
-            semanticsLabel: 'Acesso às configurações',
+            icon: Semantics(
+              label: 'Acesso às configurações',
+              child: const Icon(Icons.settings),
+            ),
             onPressed: () {
               // Ações de configurações
             },
