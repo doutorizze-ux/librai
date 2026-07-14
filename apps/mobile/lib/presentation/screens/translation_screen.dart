@@ -107,8 +107,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
         title: const Text('Tradução ao Vivo'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.flip_camera_android),
-            semanticsLabel: 'Alternar câmera frontal/traseira',
+            icon: const Icon(Icons.flip_camera_android, semanticsLabel: 'Alternar câmera frontal/traseira'),
             onPressed: () {
               // Alterna câmera
             },
@@ -229,8 +228,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
                         ],
                       ),
                       IconButton(
-                        icon: const Icon(Icons.volume_up),
-                        semanticsLabel: 'Ouvir tradução em voz',
+                        icon: const Icon(Icons.volume_up, semanticsLabel: 'Ouvir tradução em voz'),
                         onPressed: () {
                           // Síntese de voz
                         },
@@ -244,8 +242,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       IconButton.filledTonal(
-                        icon: Icon(_isTranslating ? Icons.pause : Icons.play_arrow),
-                        semanticsLabel: _isTranslating ? 'Pausar tradução' : 'Retomar tradução',
+                        icon: Icon(_isTranslating ? Icons.pause : Icons.play_arrow, semanticsLabel: _isTranslating ? 'Pausar tradução' : 'Retomar tradução'),
                         onPressed: () {
                           setState(() {
                             _isTranslating = !_isTranslating;
@@ -260,9 +257,8 @@ class _TranslationScreenState extends State<TranslationScreen> {
                         },
                       ),
                       IconButton.filledTonal(
-                        icon: const Icon(Icons.stop),
+                        icon: const Icon(Icons.stop, semanticsLabel: 'Encerrar tradução'),
                         color: Colors.redAccent,
-                        semanticsLabel: 'Encerrar tradução',
                         onPressed: () => context.pop(),
                       ),
                     ],
