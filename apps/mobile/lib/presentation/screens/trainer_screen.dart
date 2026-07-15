@@ -265,7 +265,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
                     alignment: Alignment.center,
                     children: [
                       if (kIsWeb)
-                        const HtmlElementView(viewType: 'video-container')
+                        const HtmlElementView(viewType: 'mediapipe-video-view')
                       else
                         const Center(child: Text("Câmera disponível no Web", style: TextStyle(color: Colors.white))),
                       
