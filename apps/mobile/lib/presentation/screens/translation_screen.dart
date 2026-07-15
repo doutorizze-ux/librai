@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import '../../platform/mediapipe_interop.dart';
 import '../../domain/vision_validator.dart';
@@ -30,6 +31,8 @@ class _TranslationScreenState extends State<TranslationScreen> {
   @override
   void initState() {
     super.initState();
+    // Registrar view da câmera no web antes de iniciar
+    _visionService.registerVideoView();
     // Inicia serviço de landmarks
     _visionService.start();
 
@@ -131,6 +134,12 @@ class _TranslationScreenState extends State<TranslationScreen> {
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
+                      // Renders live webcam stream on web
+                      if (kIsWeb)
+                        const Positioned.fill(
+                          child: HtmlElementView(viewType: 'mediapipe-video-view'),
+                        ),
+
                       // Moldura de enquadramento
                       Container(
                         decoration: BoxDecoration(
@@ -141,18 +150,35 @@ class _TranslationScreenState extends State<TranslationScreen> {
                         ),
                       ),
                       
-                      // Câmera Placeholder
-                      Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.person, color: theme.colorScheme.primary.withOpacity(0.3), size: 100),
-                          const SizedBox(height: 8),
-                          Text(
-                            _getWarningMessage(_framingState),
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      // Câmera Placeholder (só mostra o ícone de pessoa se não for web)
+                      if (!kIsWeb)
+                        Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.person, color: theme.colorScheme.primary.withOpacity(0.3), size: 100),
+                            const SizedBox(height: 8),
+                            Text(
+                              _getWarningMessage(_framingState),
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+
+                      if (kIsWeb)
+                        Positioned(
+                          bottom: 16,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.black54,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              _getWarningMessage(_framingState),
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
                           ),
-                        ],
-                      ),
+                        ),
                       
                       // Status de landmarks
                       Positioned(

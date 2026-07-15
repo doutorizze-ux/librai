@@ -1,8 +1,34 @@
-import 'package:flutter/foundation.dart';
 import 'dart:js' as js;
+import 'dart:ui' as ui;
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 
 class MediaPipeService {
   bool get isWeb => true;
+
+  void registerVideoView() {
+    try {
+      // ignore: undefined_prefixed_name
+      ui.platformViewRegistry.registerViewFactory(
+        'mediapipe-video-view',
+        (int viewId) {
+          final video = html.document.getElementById('mediapipe-video-source') as html.VideoElement?;
+          if (video != null) {
+            video.style.display = 'block';
+            video.style.width = '100%';
+            video.style.height = '100%';
+            video.style.objectFit = 'cover';
+            video.style.position = 'static';
+            video.style.opacity = '1';
+            return video;
+          }
+          return html.VideoElement();
+        },
+      );
+    } catch (e) {
+      debugPrint("Erro ao registrar factory de video web: $e");
+    }
+  }
 
   // Obter o objeto da ponte global do JS
   js.JsObject? get _bridge {

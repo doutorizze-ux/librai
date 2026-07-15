@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 class MediaPipeService {
   bool get isWeb => false;
 
+  void registerVideoView() {}
+
   void start() {
     debugPrint("[Mock Stub] Câmera e MediaPipe Iniciados.");
   }
