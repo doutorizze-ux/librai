@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base
-from routers import auth, translation, dictionary, models as model_router, privacy, admin
+from routers import auth, translation, dictionary, models as model_router, privacy, admin, training
 
 # Inicializar Tabelas do Banco de Dados local (SQLite)
 Base.metadata.create_all(bind=engine)
@@ -44,6 +44,7 @@ app.include_router(dictionary.router)
 app.include_router(model_router.router)
 app.include_router(privacy.router)
 app.include_router(admin.router)
+app.include_router(training.router)
 
 @app.get("/")
 def read_root():

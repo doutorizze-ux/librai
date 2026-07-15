@@ -2,8 +2,31 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../platform/tts_service.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _logoTapCount = 0;
+  DateTime? _lastLogoTapTime;
+
+  void _handleLogoTap() {
+    final now = DateTime.now();
+    if (_lastLogoTapTime == null || now.difference(_lastLogoTapTime!) > const Duration(seconds: 2)) {
+      _logoTapCount = 1;
+    } else {
+      _logoTapCount++;
+    }
+    _lastLogoTapTime = now;
+
+    if (_logoTapCount >= 5) {
+      _logoTapCount = 0;
+      context.push('/trainer');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -12,7 +35,10 @@ class HomeScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sinaliza AI'),
+        title: GestureDetector(
+          onTap: _handleLogoTap,
+          child: const Text('LibrAI', style: TextStyle(fontWeight: FontWeight.bold)),
+        ),
         centerTitle: true,
         actions: [
           IconButton(

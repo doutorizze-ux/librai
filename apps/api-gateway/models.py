@@ -120,3 +120,12 @@ class AuditLog(Base):
     action = Column(String, nullable=False) # Ex: "DEPLOY_MODEL", "EDIT_SIGN"
     target = Column(String, nullable=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
+
+
+class TrainingSample(Base):
+    __tablename__ = "training_samples"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    sign_name = Column(String, nullable=False)
+    landmarks = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)

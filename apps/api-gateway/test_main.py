@@ -98,3 +98,33 @@ def test_privacy_consents_flow():
     del_resp = client.post("/v1/privacy/deletion-requests", headers=headers)
     assert del_resp.status_code == 200
     assert "processada" in del_resp.json()["message"]
+
+
+def test_create_training_sample():
+    # 1. Enviar sem o cabeçalho secreto
+    response = client.post(
+        "/v1/training/samples",
+        json={"sign_name": "obrigado", "landmarks": [{"x": 0.1, "y": 0.2, "z": 0.3}]}
+    )
+    assert response.status_code == 422
+    
+    # 2. Enviar com cabeçalho secreto incorreto
+    response = client.post(
+        "/v1/training/samples",
+        json={"sign_name": "obrigado", "landmarks": [{"x": 0.1, "y": 0.2, "z": 0.3}]},
+        headers={"X-Trainer-Secret": "errado"}
+    )
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Chave secreta de treinamento inválida ou ausente."
+    
+    # 3. Enviar com cabeçalho secreto correto
+    response = client.post(
+        "/v1/training/samples",
+        json={"sign_name": "obrigado", "landmarks": [{"x": 0.1, "y": 0.2, "z": 0.3}]},
+        headers={"X-Trainer-Secret": "librAI_trainer_secret_2026"}
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["sign_name"] == "OBRIGADO"
+    assert data["landmarks"] == [{"x": 0.1, "y": 0.2, "z": 0.3}]
+    assert "id" in data

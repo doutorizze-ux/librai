@@ -13,7 +13,7 @@ void main() {
     );
 
     // Verificar se o título principal é renderizado
-    expect(find.text('Sinaliza AI'), findsOneWidget);
+    expect(find.text('LibrAI'), findsOneWidget);
 
     // Verificar a presença do botão principal de tradução
     expect(find.text('Traduzir Libras'), findsOneWidget);

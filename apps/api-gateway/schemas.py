@@ -119,3 +119,18 @@ class AuditLogResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# --- TRAINING SCHEMAS ---
+class TrainingSampleCreate(BaseModel):
+    sign_name: str
+    landmarks: List[dict]
+
+class TrainingSampleResponse(BaseModel):
+    id: str
+    sign_name: str
+    landmarks: List[dict]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

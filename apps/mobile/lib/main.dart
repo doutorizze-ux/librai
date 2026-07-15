@@ -5,6 +5,7 @@ import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/translation_screen.dart';
 import 'presentation/screens/dictionary_screen.dart';
 import 'presentation/screens/conversation_screen.dart';
+import 'presentation/screens/trainer_screen.dart';
 
 void main() {
   runApp(
@@ -38,11 +39,15 @@ class SinalizaAiApp extends StatelessWidget {
           path: '/conversation',
           builder: (context, state) => const ConversationScreen(),
         ),
+        GoRoute(
+          path: '/trainer',
+          builder: (context, state) => const TrainerScreen(),
+        ),
       ],
     );
 
     return MaterialApp.router(
-      title: 'Sinaliza AI',
+      title: 'LibrAI',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.system,
       theme: ThemeData(
