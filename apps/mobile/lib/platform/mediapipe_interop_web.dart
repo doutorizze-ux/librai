@@ -72,23 +72,11 @@ class MediaPipeService {
   }
 
   bool isFaceDetected() {
-    try {
-      final b = _bridge;
-      if (b == null) return false;
-      return b['faceDetected'] as bool? ?? false;
-    } catch (e) {
-      return false;
-    }
+    return true; // Ignorado no Web para estabilidade de memória e CPU
   }
 
   bool isBodyDetected() {
-    try {
-      final b = _bridge;
-      if (b == null) return false;
-      return b['poseDetected'] as bool? ?? false;
-    } catch (e) {
-      return false;
-    }
+    return true; // Ignorado no Web para estabilidade de memória e CPU
   }
 
   List<Map<String, double>>? getLatestLandmarks() {
