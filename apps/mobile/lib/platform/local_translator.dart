@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import '../domain/interfaces/libras_translator.dart';
 
 class LocalLibrasTranslator implements LibrasTranslator {
+  // URL de produção configurada via Coolify como fallback padrão
   final Dio _dio = Dio(BaseOptions(baseUrl: const String.fromEnvironment('API_URL', defaultValue: 'https://api.tvcatolica.site')));
   
   // Dicionário local de regras gramaticais para funcionamento Offline
