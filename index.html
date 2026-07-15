@@ -98,11 +98,28 @@
         self.start = function() {
           self.isActive = true;
           camera.start();
+          const videoElement = document.getElementById('mediapipe-video-source');
+          if (videoElement) {
+            videoElement.play().catch(e => console.warn("Erro ao iniciar reproducao do video:", e));
+          }
         };
 
         self.stop = function() {
           self.isActive = false;
           camera.stop();
+          
+          // Re-anexar o elemento de vídeo ao body para evitar que o navegador o descarte
+          const videoElement = document.getElementById('mediapipe-video-source');
+          if (videoElement) {
+            videoElement.style.display = 'none';
+            videoElement.style.position = 'absolute';
+            videoElement.style.width = '0';
+            videoElement.style.height = '0';
+            videoElement.style.opacity = '0';
+            if (!document.body.contains(videoElement)) {
+              document.body.appendChild(videoElement);
+            }
+          }
         };
       }
     };
