@@ -5,6 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../platform/mediapipe_interop.dart';
 import '../../domain/vision_validator.dart';
 import '../state/landmark_buffer.dart';
+import '../../platform/mock_interpreter.dart';
+import '../../platform/tts_service.dart';
+import '../../platform/local_translator.dart';
 
 class TranslationScreen extends StatefulWidget {
   const TranslationScreen({super.key});
@@ -16,6 +19,9 @@ class TranslationScreen extends StatefulWidget {
 class _TranslationScreenState extends State<TranslationScreen> {
   final MediaPipeService _visionService = MediaPipeService();
   final LandmarkBuffer _frameBuffer = LandmarkBuffer(maxFrames: 30);
+  final TtsService _ttsService = TtsService();
+  final MockSignInterpreter _interpreter = MockSignInterpreter();
+  final LocalLibrasTranslator _translator = LocalLibrasTranslator();
   Timer? _processingTimer;
 
   bool _isTranslating = true;
@@ -35,6 +41,8 @@ class _TranslationScreenState extends State<TranslationScreen> {
     _visionService.registerVideoView();
     // Inicia serviço de landmarks
     _visionService.start();
+    // Inicializar interpretador simulado
+    _interpreter.loadModel("weights.json");
 
     // Loop de processamento de quadros a ~30 FPS (a cada 33ms)
     _processingTimer = Timer.periodic(const Duration(milliseconds: 33), (timer) {
@@ -48,28 +56,55 @@ class _TranslationScreenState extends State<TranslationScreen> {
       // Validação de enquadramento
       final framing = VisionValidator.validateFraming(landmarks, faceOk);
 
-      // Buffer e backpressure
-      if (framing == VisionState.ok) {
-        _frameBuffer.addFrame(landmarks);
-      }
-
       setState(() {
         _handsDetected = handsOk;
         _faceDetected = faceOk;
         _bodyDetected = bodyOk;
         _framingState = framing;
-
-        // Simulação de tradução se enquadramento estiver perfeito e houver dados
-        if (framing == VisionState.ok && _frameBuffer.currentSize > 10) {
-          _partialText = "Sinalização detectada...";
-          _finalText = "Tudo bem";
-          _confidence = 0.96;
-        } else if (framing == VisionState.waitingPerson) {
-          _partialText = "Aguardando sinalização...";
-          _confidence = 0.0;
-        }
       });
+
+      // Processamento assíncrono do frame
+      _processFrame(landmarks, faceOk, handsOk, bodyOk, framing);
     });
+  }
+
+  Future<void> _processFrame(List<Map<String, double>>? landmarks, bool faceOk, bool handsOk, bool bodyOk, VisionState framing) async {
+    if (framing == VisionState.ok && landmarks != null && landmarks.isNotEmpty) {
+      _frameBuffer.addFrame(landmarks);
+
+      // Se acumulou frames e o interpretador não está ocupado
+      if (_frameBuffer.currentSize >= 15 && !_frameBuffer.isProcessing) {
+        _frameBuffer.setProcessing(true);
+        try {
+          final prediction = await _interpreter.predict(landmarks);
+          
+          if (prediction.label != "SINAL_DESCONHECIDO" && prediction.label != "DADOS_INSUFICIENTES") {
+            final translation = await _translator.translate([prediction.label], sessionId: "session_live");
+            
+            if (translation.isNotEmpty && translation != _finalText) {
+              setState(() {
+                _partialText = "Sinal detectado: ${prediction.label}";
+                _finalText = translation;
+                _confidence = prediction.confidence;
+              });
+              
+              // Falar a tradução via TTS (áudio)
+              await _ttsService.speak(translation);
+            }
+          }
+        } catch (e) {
+          debugPrint("Erro no processamento do sinal: $e");
+        } finally {
+          _frameBuffer.setProcessing(false);
+          _frameBuffer.clear();
+        }
+      }
+    } else if (framing == VisionState.waitingPerson) {
+      setState(() {
+        _partialText = "Aguardando sinalização...";
+        _confidence = 0.0;
+      });
+    }
   }
 
   @override
