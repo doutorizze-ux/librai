@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:js' as js;
 import 'dart:ui_web' as ui_web;
 // ignore: avoid_web_libraries_in_flutter
