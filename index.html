@@ -128,16 +128,25 @@
           updateLatestLandmarks();
         });
 
+        let frameCount = 0;
+
         // Configurar acesso à câmera nativa do navegador
         const camera = new Camera(videoElement, {
           onFrame: async () => {
             if (self.isActive) {
               try {
-                await Promise.all([
-                  hands.send({ image: videoElement }).catch(e => console.warn("Erro Hands:", e)),
-                  pose.send({ image: videoElement }).catch(e => console.warn("Erro Pose:", e)),
-                  faceMesh.send({ image: videoElement }).catch(e => console.warn("Erro FaceMesh:", e))
-                ]);
+                frameCount++;
+                const promises = [
+                  hands.send({ image: videoElement }).catch(e => console.warn("Erro Hands:", e))
+                ];
+                
+                // Executar Pose e FaceMesh apenas no frame 1 e a cada 15 frames (~500ms) para economizar RAM/CPU no celular
+                if (frameCount === 1 || frameCount % 15 === 0) {
+                  promises.push(pose.send({ image: videoElement }).catch(e => console.warn("Erro Pose:", e)));
+                  promises.push(faceMesh.send({ image: videoElement }).catch(e => console.warn("Erro FaceMesh:", e)));
+                }
+                
+                await Promise.all(promises);
               } catch (e) {
                 console.error("Erro ao enviar frame para o MediaPipe:", e);
               }
