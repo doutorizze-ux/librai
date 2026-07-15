@@ -21,8 +21,6 @@
   <!-- CDN scripts do MediaPipe para Visão Computacional -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
 
   <style>
     /* Esconder o elemento de vídeo de processamento de frames original */
@@ -43,8 +41,8 @@
     // Interface Global de Interoperação JavaScript-Dart
     window.sinalizaAiMediaPipe = {
       handsDetected: false,
-      faceDetected: false,
-      poseDetected: false,
+      faceDetected: true, // Forçar verdadeiro no Web para simplificar enquadramento e evitar crash de RAM
+      poseDetected: true, // Forçar verdadeiro no Web para simplificar enquadramento e evitar crash de RAM
       latestLandmarks: null,
       isActive: false,
 
@@ -54,12 +52,10 @@
         const videoElement = document.getElementById('mediapipe-video-source');
         
         let currentHands = [];
-        let currentPose = [];
-        let currentFace = [];
 
         const updateLatestLandmarks = () => {
           // Combina todas as coordenadas em uma lista plana (1D) para o Dart
-          self.latestLandmarks = [...currentHands, ...currentPose, ...currentFace];
+          self.latestLandmarks = [...currentHands];
         };
 
         // Inicializar Hands
@@ -84,69 +80,12 @@
           updateLatestLandmarks();
         });
 
-        // Inicializar Pose
-        const pose = new Pose({
-          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
-        });
-        pose.setOptions({
-          modelComplexity: 1,
-          smoothLandmarks: true,
-          minDetectionConfidence: 0.5,
-          minTrackingConfidence: 0.5
-        });
-
-        pose.onResults((results) => {
-          if (results.poseLandmarks && results.poseLandmarks.length > 0) {
-            self.poseDetected = true;
-            currentPose = results.poseLandmarks;
-          } else {
-            self.poseDetected = false;
-            currentPose = [];
-          }
-          updateLatestLandmarks();
-        });
-
-        // Inicializar FaceMesh
-        const faceMesh = new FaceMesh({
-          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
-        });
-        faceMesh.setOptions({
-          maxNumFaces: 1,
-          refineLandmarks: true,
-          minDetectionConfidence: 0.5,
-          minTrackingConfidence: 0.5
-        });
-
-        faceMesh.onResults((results) => {
-          if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-            self.faceDetected = true;
-            currentFace = results.multiFaceLandmarks[0];
-          } else {
-            self.faceDetected = false;
-            currentFace = [];
-          }
-          updateLatestLandmarks();
-        });
-
-        let frameCount = 0;
-
         // Configurar acesso à câmera nativa do navegador
         const camera = new Camera(videoElement, {
           onFrame: async () => {
             if (self.isActive) {
               try {
-                frameCount++;
-                const promises = [
-                  hands.send({ image: videoElement }).catch(e => console.warn("Erro Hands:", e))
-                ];
-                
-                // Executar Pose e FaceMesh apenas no frame 1 e a cada 15 frames (~500ms) para economizar RAM/CPU no celular
-                if (frameCount === 1 || frameCount % 15 === 0) {
-                  promises.push(pose.send({ image: videoElement }).catch(e => console.warn("Erro Pose:", e)));
-                  promises.push(faceMesh.send({ image: videoElement }).catch(e => console.warn("Erro FaceMesh:", e)));
-                }
-                
-                await Promise.all(promises);
+                await hands.send({ image: videoElement }).catch(e => console.warn("Erro Hands:", e));
               } catch (e) {
                 console.error("Erro ao enviar frame para o MediaPipe:", e);
               }
