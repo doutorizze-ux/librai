@@ -3,9 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../platform/tts_service.dart';
 
 class HomeScreen extends StatelessWidget {
-  final TtsService _ttsService = TtsService();
-
-  HomeScreen({super.key});
+  const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -86,7 +84,7 @@ class HomeScreen extends StatelessWidget {
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   onPressed: () {
-                    _ttsService.unlock();
+                    TtsService().unlock();
                     context.push('/translate');
                   },
                 ),
