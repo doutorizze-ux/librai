@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../platform/tts_service.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+  final TtsService _ttsService = TtsService();
+
+  HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -82,7 +85,10 @@ class HomeScreen extends StatelessWidget {
                     'Traduzir Libras',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
-                  onPressed: () => context.push('/translate'),
+                  onPressed: () {
+                    _ttsService.unlock();
+                    context.push('/translate');
+                  },
                 ),
               ),
               const SizedBox(height: 20),

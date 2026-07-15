@@ -5,4 +5,6 @@ class TtsService {
     if (text.trim().isEmpty) return;
     debugPrint("[TTS Stub] Falando: '$text'");
   }
+
+  void unlock() {}
 }

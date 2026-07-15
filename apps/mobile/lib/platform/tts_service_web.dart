@@ -14,4 +14,15 @@ class TtsService {
       debugPrint("[TTS Web Error] Falha ao sintetizar áudio no navegador: $e");
     }
   }
+
+  void unlock() {
+    try {
+      final utterance = html.SpeechSynthesisUtterance(" ");
+      utterance.volume = 0;
+      html.window.speechSynthesis?.speak(utterance);
+      debugPrint("[TTS Web] Desbloqueando SpeechSynthesis no iOS");
+    } catch (e) {
+      debugPrint("[TTS Web Error] Falha ao desbloquear SpeechSynthesis: $e");
+    }
+  }
 }
