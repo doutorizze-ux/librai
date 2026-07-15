@@ -37,7 +37,7 @@
 </head>
 <body>
   <!-- Vídeo invisível usado como fonte para o processador do MediaPipe -->
-  <video id="mediapipe-video-source" autoplay playsinline></video>
+  <video id="mediapipe-video-source" autoplay playsinline muted></video>
 
   <script>
     // Interface Global de Interoperação JavaScript-Dart
@@ -134,9 +134,9 @@
             if (self.isActive) {
               try {
                 await Promise.all([
-                  hands.send({ image: videoElement }),
-                  pose.send({ image: videoElement }),
-                  faceMesh.send({ image: videoElement })
+                  hands.send({ image: videoElement }).catch(e => console.warn("Erro Hands:", e)),
+                  pose.send({ image: videoElement }).catch(e => console.warn("Erro Pose:", e)),
+                  faceMesh.send({ image: videoElement }).catch(e => console.warn("Erro FaceMesh:", e))
                 ]);
               } catch (e) {
                 console.error("Erro ao enviar frame para o MediaPipe:", e);
