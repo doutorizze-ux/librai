@@ -34,11 +34,17 @@ class _TrainerScreenState extends State<TrainerScreen> {
   String _statusMessage = "Posicione a mão em frente à câmera";
   bool _isUploading = false;
 
+  Timer? _debounceTimer;
+  int _existingSamplesCount = 0;
+  bool _isLoadingCount = false;
+
   @override
   void initState() {
     super.initState();
     _visionService.registerVideoView();
     _visionService.start();
+
+    _signNameController.addListener(_onSignNameChanged);
 
     // Loop de monitoramento de mão (apenas para feedback visual do frame)
     _frameTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
@@ -54,9 +60,55 @@ class _TrainerScreenState extends State<TrainerScreen> {
   void dispose() {
     _frameTimer?.cancel();
     _countdownTimer?.cancel();
+    _signNameController.removeListener(_onSignNameChanged);
     _signNameController.dispose();
+    _debounceTimer?.cancel();
     _visionService.stop();
     super.dispose();
+  }
+
+  void _onSignNameChanged() {
+    final text = _signNameController.text.trim().toUpperCase();
+    if (text.isEmpty) {
+      setState(() {
+        _existingSamplesCount = 0;
+        _isLoadingCount = false;
+      });
+      return;
+    }
+
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingCount = true;
+      });
+
+      try {
+        final response = await _dio.get(
+          '/v1/training/samples/count',
+          queryParameters: {'sign_name': text},
+          options: Options(
+            headers: {
+              'X-Trainer-Secret': 'librAI_trainer_secret_2026',
+            },
+          ),
+        );
+        if (mounted && response.statusCode == 200) {
+          setState(() {
+            _existingSamplesCount = response.data['count'] as int? ?? 0;
+          });
+        }
+      } catch (e) {
+        debugPrint("Erro ao buscar contagem de amostras: $e");
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoadingCount = false;
+          });
+        }
+      }
+    });
   }
 
   // Iniciar fluxo de gravação com contagem regressiva
@@ -151,6 +203,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
         setState(() {
           _statusMessage = "Sinal '$signName' enviado com sucesso!";
           _signNameController.clear();
+          _existingSamplesCount = 0;
+          _isLoadingCount = false;
         });
         _ttsService.speak("Sinal gravado com sucesso!");
         _showSnackBar("Sinal enviado com sucesso para a base da IA!", Colors.green);
@@ -263,6 +317,17 @@ class _TrainerScreenState extends State<TrainerScreen> {
                   labelText: 'Nome do Sinal (ex: OBRIGADO)',
                   hintText: 'Digite a palavra correspondente',
                   prefixIcon: const Icon(Icons.label),
+                  helperText: _isLoadingCount
+                      ? 'Verificando banco de dados...'
+                      : (_signNameController.text.trim().isNotEmpty
+                          ? (_existingSamplesCount >= 30
+                              ? 'Meta atingida! $_existingSamplesCount/30 amostras gravadas (Excelente!).'
+                              : 'Amostras gravadas: $_existingSamplesCount/30 (Grave mais para maior precisão).')
+                          : 'Digite o nome do sinal para ver o progresso do treino.'),
+                  helperStyle: TextStyle(
+                    color: _existingSamplesCount >= 30 ? Colors.green : theme.colorScheme.primary,
+                    fontWeight: FontWeight.w500,
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),

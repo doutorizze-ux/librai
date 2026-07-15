@@ -29,3 +29,25 @@ def create_training_sample(
     db.commit()
     db.refresh(db_sample)
     return db_sample
+
+
+@router.get("/training/samples/count")
+def get_sample_count(
+    sign_name: str,
+    db: Session = Depends(get_db),
+    x_trainer_secret: str = Header(..., alias="X-Trainer-Secret")
+):
+    if x_trainer_secret != TRAINER_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chave secreta de treinamento inválida ou ausente."
+        )
+    
+    count = db.query(models.TrainingSample).filter(
+        models.TrainingSample.sign_name == sign_name.upper().strip()
+    ).count()
+    
+    return {
+        "sign_name": sign_name.upper().strip(),
+        "count": count
+    }

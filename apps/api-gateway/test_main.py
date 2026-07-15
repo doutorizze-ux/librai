@@ -128,3 +128,12 @@ def test_create_training_sample():
     assert data["sign_name"] == "OBRIGADO"
     assert data["landmarks"] == [{"x": 0.1, "y": 0.2, "z": 0.3}]
     assert "id" in data
+
+    # 4. Consultar contagem de amostras
+    count_resp = client.get(
+        "/v1/training/samples/count?sign_name=obrigado",
+        headers={"X-Trainer-Secret": "librAI_trainer_secret_2026"}
+    )
+    assert count_resp.status_code == 200
+    assert count_resp.json()["sign_name"] == "OBRIGADO"
+    assert count_resp.json()["count"] == 1
