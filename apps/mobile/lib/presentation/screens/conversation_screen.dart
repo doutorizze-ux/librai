@@ -36,6 +36,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
   int _frameCount = 0;
   final List<String> _predictionHistory = [];
   bool _handsDetected = false;
+  bool _isProcessing = false;
 
   @override
   void initState() {
@@ -62,11 +63,12 @@ class _ConversationScreenState extends State<ConversationScreen> {
   }
 
   Future<void> _processFrame(List<Map<String, double>> landmarks) async {
-    if (_interpreter.isProcessing) return;
+    if (_isProcessing) return;
     
     _frameCount++;
     if (_frameCount % 15 != 0) return;
     
+    _isProcessing = true;
     try {
       final prediction = await _interpreter.predict(landmarks);
       if (prediction.label != "SINAL_DESCONHECIDO" && prediction.label != "DADOS_INSUFICIENTES") {
@@ -96,6 +98,8 @@ class _ConversationScreenState extends State<ConversationScreen> {
       }
     } catch (e) {
       debugPrint("Erro na predição da conversa: $e");
+    } finally {
+      _isProcessing = false;
     }
   }
 
