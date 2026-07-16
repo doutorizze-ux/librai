@@ -92865,7 +92865,7 @@ s=r.style
 s.height="100%"
 s=r.style
 s.toString
-B.du.GS(s,B.du.E3(s,"object-fit"),"contain","")
+B.du.GS(s,B.du.E3(s,"object-fit"),"cover","")
 s=r.style
 s.position="static"
 s=r.style
