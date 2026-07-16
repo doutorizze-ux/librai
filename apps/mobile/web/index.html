@@ -51,20 +51,9 @@
         const self = window.sinalizaAiMediaPipe;
         const videoElement = document.getElementById('mediapipe-video-source');
         
-        if (videoElement) {
-          videoElement.addEventListener('pause', () => {
-            if (self.isActive) {
-              videoElement.play().catch(e => console.warn("Erro ao forçar play após pausa:", e));
-            }
-          });
-          videoElement.addEventListener('loadedmetadata', () => {
-            if (self.isActive) {
-              videoElement.play().catch(e => console.warn("Erro ao forçar play após metadados:", e));
-            }
-          });
-        }
-        
         let currentHands = [];
+        let activeStream = null;
+        let animationFrameId = null;
 
         const updateLatestLandmarks = () => {
           // Combina todas as coordenadas em uma lista plana (1D) para o Dart
@@ -93,37 +82,92 @@
           updateLatestLandmarks();
         });
 
-        // Configurar acesso à câmera nativa do navegador
-        const camera = new Camera(videoElement, {
-          onFrame: async () => {
-            if (self.isActive) {
-              try {
-                await hands.send({ image: videoElement }).catch(e => console.warn("Erro Hands:", e));
-              } catch (e) {
-                console.error("Erro ao enviar frame para o MediaPipe:", e);
-              }
+        // Loop de processamento de frames nativo
+        async function processFrameLoop() {
+          if (!self.isActive) return;
+          
+          if (videoElement && videoElement.readyState === 4) { // HAVE_ENOUGH_DATA
+            try {
+              await hands.send({ image: videoElement });
+            } catch (e) {
+              console.warn("Erro ao processar frame:", e);
             }
-          },
-          width: 640,
-          height: 480
-        });
+          }
+          
+          if (self.isActive) {
+            animationFrameId = requestAnimationFrame(processFrameLoop);
+          }
+        }
 
-        self.start = function() {
+        if (videoElement) {
+          videoElement.addEventListener('pause', () => {
+            if (self.isActive) {
+              videoElement.play().catch(e => console.warn("Erro ao forçar play após pausa:", e));
+            }
+          });
+          videoElement.addEventListener('loadedmetadata', () => {
+            if (self.isActive) {
+              videoElement.play().catch(e => console.warn("Erro ao forçar play após metadados:", e));
+            }
+          });
+        }
+
+        self.start = async function() {
+          if (self.isActive) return;
           self.isActive = true;
-          camera.start();
-          const videoElement = document.getElementById('mediapipe-video-source');
-          if (videoElement) {
-            videoElement.play().catch(e => console.warn("Erro ao iniciar reproducao do video:", e));
+
+          try {
+            // Garantir que o elemento de vídeo esteja no body
+            if (videoElement && !document.body.contains(videoElement)) {
+              document.body.appendChild(videoElement);
+            }
+
+            // Solicitar fluxo de câmera de forma estável usando WebRTC nativo
+            const stream = await navigator.mediaDevices.getUserMedia({
+              video: {
+                width: { ideal: 640 },
+                height: { ideal: 480 },
+                facingMode: "user"
+              },
+              audio: false
+            });
+
+            activeStream = stream;
+            if (videoElement) {
+              videoElement.srcObject = stream;
+              videoElement.style.display = 'block';
+              await videoElement.play().catch(e => console.warn("Erro no play inicial:", e));
+            }
+
+            // Iniciar loop de frames
+            processFrameLoop();
+          } catch (err) {
+            console.error("Erro ao acessar câmera física:", err);
           }
         };
 
         self.stop = function() {
           self.isActive = false;
-          camera.stop();
           
-          // Re-anexar o elemento de vídeo ao body para evitar que o navegador o descarte
-          const videoElement = document.getElementById('mediapipe-video-source');
+          // Parar loop
+          if (animationFrameId) {
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+          }
+
+          // Fechar hardware da câmera completamente
+          if (activeStream) {
+            activeStream.getTracks().forEach(track => {
+              try {
+                track.stop();
+              } catch (e) {}
+            });
+            activeStream = null;
+          }
+
+          // Limpar elemento e re-anexar de forma oculta no body
           if (videoElement) {
+            videoElement.srcObject = null;
             videoElement.style.display = 'none';
             videoElement.style.position = 'absolute';
             videoElement.style.width = '0';
