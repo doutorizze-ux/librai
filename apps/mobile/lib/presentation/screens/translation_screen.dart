@@ -23,6 +23,8 @@ class _TranslationScreenState extends State<TranslationScreen> {
   final MockSignInterpreter _interpreter = MockSignInterpreter();
   final LocalLibrasTranslator _translator = LocalLibrasTranslator();
   Timer? _processingTimer;
+  final List<String> _spellingBuffer = [];
+  Timer? _spellingEndTimer;
 
   bool _isTranslating = true;
   String _partialText = "Aguardando sinalização...";
@@ -68,6 +70,30 @@ class _TranslationScreenState extends State<TranslationScreen> {
     });
   }
 
+  bool _isSpellingUnit(String label) {
+    final clean = label.trim().toUpperCase();
+    if (clean.isEmpty) return false;
+    
+    // Se for uma única letra (A-Z)
+    if (clean.length == 1 && RegExp(r'[A-Z]').hasMatch(clean)) {
+      return true;
+    }
+    
+    // Lista de palavras curtas conhecidas que NÃO são sílabas
+    final knownWords = {'SIM', 'NÃO', 'OLÁ', 'RUA', 'SUS', 'CPF', 'RG'};
+    if (clean.length <= 3 && !knownWords.contains(clean)) {
+      return true;
+    }
+    
+    // Sílabas conhecidas
+    final knownSyllables = {'FRE', 'DE', 'RI', 'CO', 'BO', 'MA', 'TA', 'RA', 'PA', 'LI', 'AI'};
+    if (knownSyllables.contains(clean)) {
+      return true;
+    }
+    
+    return false;
+  }
+
   Future<void> _processFrame(List<Map<String, double>>? landmarks, bool faceOk, bool handsOk, bool bodyOk, VisionState framing) async {
     if (framing == VisionState.ok && landmarks != null && landmarks.isNotEmpty) {
       _frameBuffer.addFrame(landmarks);
@@ -79,17 +105,60 @@ class _TranslationScreenState extends State<TranslationScreen> {
           final prediction = await _interpreter.predict(landmarks);
           
           if (prediction.label != "SINAL_DESCONHECIDO" && prediction.label != "DADOS_INSUFICIENTES") {
-            final translation = await _translator.translate([prediction.label], sessionId: "session_live");
-            
-            if (translation.isNotEmpty && translation != _finalText) {
-              setState(() {
-                _partialText = "Sinal detectado: ${prediction.label}";
-                _finalText = translation;
-                _confidence = prediction.confidence;
-              });
+            if (_isSpellingUnit(prediction.label)) {
+              // Cancelar timer de finalização anterior
+              _spellingEndTimer?.cancel();
               
-              // Falar a tradução via TTS (áudio)
-              await _ttsService.speak(translation);
+              // Evitar duplicar a mesma sílaba se for detectada repetida muito rápido
+              if (_spellingBuffer.isEmpty || _spellingBuffer.last != prediction.label) {
+                _spellingBuffer.add(prediction.label);
+                
+                // Mostrar progresso (ex: F-R-E ou FRE-DE)
+                final separator = prediction.label.length == 1 ? "" : "-";
+                final progressText = _spellingBuffer.join(separator);
+                setState(() {
+                  _partialText = "Soletrando: $progressText";
+                  _confidence = prediction.confidence;
+                });
+              }
+              
+              // Agendar a finalização da palavra soletrada (1.5 segundos sem novos sinais)
+              _spellingEndTimer = Timer(const Duration(milliseconds: 1500), () async {
+                if (_spellingBuffer.isNotEmpty) {
+                  final fullWord = _spellingBuffer.join("");
+                  setState(() {
+                    _partialText = "Palavra soletrada";
+                    _finalText = fullWord;
+                  });
+                  await _ttsService.speak(fullWord);
+                  _spellingBuffer.clear();
+                }
+              });
+            } else {
+              // Se tinha alguma soletragem em andamento, finaliza ela primeiro
+              if (_spellingBuffer.isNotEmpty) {
+                _spellingEndTimer?.cancel();
+                final fullWord = _spellingBuffer.join("");
+                setState(() {
+                  _finalText = fullWord;
+                });
+                await _ttsService.speak(fullWord);
+                _spellingBuffer.clear();
+              }
+
+              // Processamento de palavra/sinal completo
+              final translation = await _translator.translate([prediction.label], sessionId: "session_live");
+              
+              if (translation.isNotEmpty && translation != _finalText) {
+                setState(() {
+                  _partialText = "Sinal detectado: ${prediction.label}";
+                  _finalText = translation;
+                  _confidence = prediction.confidence;
+                });
+                
+                // Falar a tradução via TTS
+                await _ttsService.speak(translation);
+              }
             }
           }
         } catch (e) {
@@ -110,6 +179,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
   @override
   void dispose() {
     _processingTimer?.cancel();
+    _spellingEndTimer?.cancel();
     _visionService.stop();
     _frameBuffer.clear();
     super.dispose();
