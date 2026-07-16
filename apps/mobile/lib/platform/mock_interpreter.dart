@@ -1,9 +1,16 @@
-import 'dart:math';
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../domain/interfaces/sign_interpreter.dart';
 
 class MockSignInterpreter implements SignInterpreter {
   String? _loadedModelPath;
   final double confidenceThreshold = 0.75;
+
+  final Dio _dio = Dio(BaseOptions(
+    baseUrl: const String.fromEnvironment('API_URL', defaultValue: 'https://api.tvcatolica.site'),
+    connectTimeout: const Duration(seconds: 5),
+    receiveTimeout: const Duration(seconds: 5),
+  ));
 
   @override
   Future<void> loadModel(String modelPath) async {
@@ -33,8 +40,29 @@ class MockSignInterpreter implements SignInterpreter {
       }
     }
 
-    // Simulação do cálculo de confiança e previsão
-    // Usamos a média do eixo X para simular diferentes sinais
+    try {
+      // Tentar predição real no servidor (usando o dataset gravado em tempo real!)
+      final response = await _dio.post(
+        '/v1/translation/predict',
+        data: {'landmarks': landmarks},
+      );
+      
+      if (response.statusCode == 200) {
+        final label = response.data['label'] as String;
+        final confidence = (response.data['confidence'] as num).toDouble();
+        
+        return PredictionResult(
+          label: label,
+          confidence: confidence,
+          isTestFixture: false,
+          modelVersion: "live-realtime",
+        );
+      }
+    } catch (e) {
+      debugPrint("[Remote Interpreter] Falha na predição online, usando modo de simulação local: $e");
+    }
+
+    // Simulação do cálculo de confiança e previsão (Fallback Local)
     double sumX = 0;
     for (final p in landmarks) {
       sumX += p['x'] ?? 0.5;
@@ -54,12 +82,10 @@ class MockSignInterpreter implements SignInterpreter {
       predictedLabel = "BOM_DIA";
       confidence = 0.81;
     } else {
-      // Gestos aleatórios fora dos padrões conhecidos
       predictedLabel = "GESTO_DESCONHECIDO";
-      confidence = 0.45; // Baixa confiança
+      confidence = 0.45;
     }
 
-    // SISTEMA DE REJEIÇÃO: Limiar estatístico contra alucinações de sinais
     if (confidence < confidenceThreshold) {
       return PredictionResult(
         label: "SINAL_DESCONHECIDO",

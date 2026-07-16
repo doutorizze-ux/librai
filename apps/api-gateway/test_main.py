@@ -137,3 +137,18 @@ def test_create_training_sample():
     assert count_resp.status_code == 200
     assert count_resp.json()["sign_name"] == "OBRIGADO"
     assert count_resp.json()["count"] == 1
+
+
+def test_predict_sign():
+    # 1. Enviar sem dados
+    resp = client.post("/v1/translation/predict", json={})
+    assert resp.status_code == 200
+    assert resp.json()["label"] == "SINAL_DESCONHECIDO"
+
+    # 2. Enviar landmarks válidos (com banco de dados vazio)
+    resp = client.post(
+        "/v1/translation/predict",
+        json={"landmarks": [{"x": 0.1, "y": 0.2, "z": 0.3}] * 21}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["label"] == "SINAL_DESCONHECIDO"

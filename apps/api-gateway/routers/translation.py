@@ -9,6 +9,71 @@ from routers.auth import get_current_user, get_current_user_helper
 
 router = APIRouter(prefix="/v1", tags=["translation"])
 
+@router.post("/translation/predict")
+def predict_sign(
+    payload: dict,
+    db: Session = Depends(get_db)
+):
+    input_landmarks = payload.get("landmarks")
+    if not input_landmarks or len(input_landmarks) != 21:
+        return {"label": "SINAL_DESCONHECIDO", "confidence": 0.0}
+    
+    # 1. Normalizar input em relação ao pulso (landmark 0) para ser independente de posição
+    try:
+        wrist_in = input_landmarks[0]
+        norm_input = []
+        for p in input_landmarks:
+            norm_input.append({
+                "x": p.get("x", 0.0) - wrist_in.get("x", 0.0),
+                "y": p.get("y", 0.0) - wrist_in.get("y", 0.0),
+                "z": p.get("z", 0.0) - wrist_in.get("z", 0.0),
+            })
+    except Exception as e:
+        return {"label": "SINAL_DESCONHECIDO", "confidence": 0.0}
+    
+    # 2. Carregar amostras de treino gravadas pelos profissionais
+    samples = db.query(models.TrainingSample).all()
+    if not samples:
+        return {"label": "SINAL_DESCONHECIDO", "confidence": 0.0}
+    
+    best_label = "SINAL_DESCONHECIDO"
+    min_dist = 999.0
+    
+    # 3. K-Nearest Neighbors (KNN) de Geometria de Mão
+    for sample in samples:
+        db_points = sample.landmarks
+        if not db_points or len(db_points) < 21:
+            continue
+            
+        num_frames = len(db_points) // 21
+        for f in range(num_frames):
+            frame_points = db_points[f*21 : (f+1)*21]
+            if len(frame_points) != 21:
+                continue
+                
+            try:
+                wrist_db = frame_points[0]
+                dist = 0.0
+                for i in range(21):
+                    dx = (norm_input[i]["x"]) - (frame_points[i].get("x", 0.0) - wrist_db.get("x", 0.0))
+                    dy = (norm_input[i]["y"]) - (frame_points[i].get("y", 0.0) - wrist_db.get("y", 0.0))
+                    dz = (norm_input[i]["z"]) - (frame_points[i].get("z", 0.0) - wrist_db.get("z", 0.0))
+                    dist += (dx * dx + dy * dy + dz * dz)
+                
+                if dist < min_dist:
+                    min_dist = dist
+                    best_label = sample.sign_name
+            except Exception:
+                continue
+                
+    # Limiar empírico para coordenadas normalizadas
+    threshold = 0.35
+    if min_dist < threshold:
+        confidence = float(max(0.5, 1.0 - (min_dist / threshold) * 0.5))
+        return {"label": best_label, "confidence": round(confidence, 2)}
+        
+    return {"label": "SINAL_DESCONHECIDO", "confidence": 0.0}
+
 @router.post("/translation/sessions", response_model=schemas.SessionResponse)
 def create_session(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     session = models.TranslationSession(user_id=current_user.id)
