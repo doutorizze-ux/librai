@@ -40,26 +40,30 @@ class MockSignInterpreter implements SignInterpreter {
       }
     }
 
-    try {
-      // Tentar predição real no servidor (usando o dataset gravado em tempo real!)
-      final response = await _dio.post(
-        '/v1/translation/predict',
-        data: {'landmarks': landmarks},
-      );
-      
-      if (response.statusCode == 200) {
-        final label = response.data['label'] as String;
-        final confidence = (response.data['confidence'] as num).toDouble();
-        
-        return PredictionResult(
-          label: label,
-          confidence: confidence,
-          isTestFixture: false,
-          modelVersion: "live-realtime",
+    final bool isTest = _loadedModelPath != null && _loadedModelPath!.contains("test_");
+
+    if (!isTest) {
+      try {
+        // Tentar predição real no servidor (usando o dataset gravado em tempo real!)
+        final response = await _dio.post(
+          '/v1/translation/predict',
+          data: {'landmarks': landmarks},
         );
+        
+        if (response.statusCode == 200) {
+          final label = response.data['label'] as String;
+          final confidence = (response.data['confidence'] as num).toDouble();
+          
+          return PredictionResult(
+            label: label,
+            confidence: confidence,
+            isTestFixture: false,
+            modelVersion: "live-realtime",
+          );
+        }
+      } catch (e) {
+        debugPrint("[Remote Interpreter] Falha na predição online, usando modo de simulação local: $e");
       }
-    } catch (e) {
-      debugPrint("[Remote Interpreter] Falha na predição online, usando modo de simulação local: $e");
     }
 
     // Simulação do cálculo de confiança e previsão (Fallback Local)
