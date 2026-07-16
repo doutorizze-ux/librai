@@ -71,7 +71,7 @@ jobs:
       - name: Run tests
         run: |
           cd apps/mobile
-          flutter test
+          flutter test > ../../test_output.log 2>&1 || (cd ../.. && git config user.name "CI Bot" && git config user.email "ci@sinaliza.ai" && git add test_output.log && git commit -m "chore: test failure log" && git push origin main && exit 1)
 
   deploy-web:
     needs: [backend-test, admin-test, mobile-test]
