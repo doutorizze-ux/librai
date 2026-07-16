@@ -17,9 +17,10 @@ class MediaPipeService {
             video.style.display = 'block';
             video.style.width = '100%';
             video.style.height = '100%';
-            video.style.objectFit = 'cover';
+            video.style.objectFit = 'contain';
             video.style.position = 'static';
             video.style.opacity = '1';
+            video.style.transform = 'scaleX(-1)';
             
             // Forçar a reprodução após o elemento ser re-anexado no DOM do Flutter
             Future.delayed(const Duration(milliseconds: 150), () {
