@@ -26,6 +26,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
   final List<String> _spellingBuffer = [];
   Timer? _spellingEndTimer;
   final List<String> _predictionHistory = [];
+  DateTime _lastPredictionTime = DateTime.now().subtract(const Duration(seconds: 1));
 
   bool _isTranslating = true;
   String _partialText = "Aguardando sinalização...";
@@ -97,39 +98,35 @@ class _TranslationScreenState extends State<TranslationScreen> {
 
   Future<void> _processFrame(List<Map<String, double>>? landmarks, bool faceOk, bool handsOk, bool bodyOk, VisionState framing) async {
     if (framing == VisionState.ok && landmarks != null && landmarks.isNotEmpty) {
-      _frameBuffer.addFrame(landmarks);
+      final now = DateTime.now();
+      if (now.difference(_lastPredictionTime).inMilliseconds < 250) {
+        return; // Throttle para no máximo 4 requisições por segundo
+      }
 
-      // Se acumulou frames e o interpretador não está ocupado
-      if (_frameBuffer.currentSize >= 15 && !_frameBuffer.isProcessing) {
-        _frameBuffer.setProcessing(true);
-        try {
-          final prediction = await _interpreter.predict(landmarks);
-          
-          // Adicionar a predição no histórico de votos para suavizar e evitar oscilações
+      if (_frameBuffer.isProcessing) return;
+      _frameBuffer.setProcessing(true);
+      _lastPredictionTime = now;
+
+      try {
+        final prediction = await _interpreter.predict(landmarks);
+        
+        if (prediction.label != "SINAL_DESCONHECIDO" && prediction.label != "DADOS_INSUFICIENTES") {
+          // Histórico rápido de 2 predições para eliminar pequenas cintilações instantaneamente
           _predictionHistory.add(prediction.label);
-          if (_predictionHistory.length > 3) {
+          if (_predictionHistory.length > 2) {
             _predictionHistory.removeAt(0);
           }
           
-          // Encontrar a classe mais votada (Moda) no histórico
-          final Map<String, int> votes = {};
-          for (final label in _predictionHistory) {
-            votes[label] = (votes[label] ?? 0) + 1;
+          bool isConsistent = false;
+          if (_predictionHistory.length == 1) {
+            isConsistent = true;
+          } else if (_predictionHistory[0] == _predictionHistory[1]) {
+            isConsistent = true;
           }
           
-          String votedLabel = prediction.label;
-          int maxVotes = 0;
-          votes.forEach((key, val) {
-            if (val > maxVotes) {
-              maxVotes = val;
-              votedLabel = key;
-            }
-          });
-          
-          // Exigir pelo menos 2 votos de consistência se tivermos histórico suficiente
-          final requiredVotes = _predictionHistory.length < 2 ? 1 : 2;
-          
-          if (maxVotes >= requiredVotes && votedLabel != "SINAL_DESCONHECIDO" && votedLabel != "DADOS_INSUFICIENTES") {
+          if (isConsistent) {
+            final votedLabel = prediction.label;
+            
             if (_isSpellingUnit(votedLabel)) {
               // Cancelar timer de finalização anterior
               _spellingEndTimer?.cancel();
@@ -186,12 +183,11 @@ class _TranslationScreenState extends State<TranslationScreen> {
               }
             }
           }
-        } catch (e) {
-          debugPrint("Erro no processamento do sinal: $e");
-        } finally {
-          _frameBuffer.setProcessing(false);
-          _frameBuffer.clear();
         }
+      } catch (e) {
+        debugPrint("Erro no processamento do sinal: $e");
+      } finally {
+        _frameBuffer.setProcessing(false);
       }
     } else if (framing == VisionState.waitingPerson) {
       _predictionHistory.clear();

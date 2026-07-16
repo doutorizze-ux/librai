@@ -66,34 +66,26 @@ class _ConversationScreenState extends State<ConversationScreen> {
     if (_isProcessing) return;
     
     _frameCount++;
-    if (_frameCount % 15 != 0) return;
+    if (_frameCount % 8 != 0) return;
     
     _isProcessing = true;
     try {
       final prediction = await _interpreter.predict(landmarks);
       if (prediction.label != "SINAL_DESCONHECIDO" && prediction.label != "DADOS_INSUFICIENTES") {
         _predictionHistory.add(prediction.label);
-        if (_predictionHistory.length > 3) {
+        if (_predictionHistory.length > 2) {
           _predictionHistory.removeAt(0);
         }
         
-        final Map<String, int> votes = {};
-        for (final l in _predictionHistory) {
-          votes[l] = (votes[l] ?? 0) + 1;
+        bool isConsistent = false;
+        if (_predictionHistory.length == 1) {
+          isConsistent = true;
+        } else if (_predictionHistory[0] == _predictionHistory[1]) {
+          isConsistent = true;
         }
         
-        String votedLabel = prediction.label;
-        int maxVotes = 0;
-        votes.forEach((k, v) {
-          if (v > maxVotes) {
-            maxVotes = v;
-            votedLabel = k;
-          }
-        });
-        
-        final requiredVotes = _predictionHistory.length < 2 ? 1 : 2;
-        if (maxVotes >= requiredVotes) {
-          await _simulateDeafSign(votedLabel);
+        if (isConsistent) {
+          await _simulateDeafSign(prediction.label);
         }
       }
     } catch (e) {
