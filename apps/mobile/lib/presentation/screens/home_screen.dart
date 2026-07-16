@@ -135,7 +135,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () => _showSettingsDialog(context),
           ),
         ],
-      );
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
