@@ -51,6 +51,19 @@
         const self = window.sinalizaAiMediaPipe;
         const videoElement = document.getElementById('mediapipe-video-source');
         
+        if (videoElement) {
+          videoElement.addEventListener('pause', () => {
+            if (self.isActive) {
+              videoElement.play().catch(e => console.warn("Erro ao forçar play após pausa:", e));
+            }
+          });
+          videoElement.addEventListener('loadedmetadata', () => {
+            if (self.isActive) {
+              videoElement.play().catch(e => console.warn("Erro ao forçar play após metadados:", e));
+            }
+          });
+        }
+        
         let currentHands = [];
 
         const updateLatestLandmarks = () => {

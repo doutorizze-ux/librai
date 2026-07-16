@@ -90447,26 +90447,29 @@ if(i===0||i<2){q=new A.qL("DADOS_INSUFICIENTES",0,!0)
 s=1
 break}for(h=0;h<a0.length;a0.length===i||(0,A.x)(a0),++h){g=a0[h]
 f=J.dD(g)
-if(!f.am(g,"x")||!f.am(g,"y")||!f.am(g,"z"))throw A.e(A.bM("Landmarks devem conter chaves x, y, z",null))}p=4
-s=7
+if(!f.am(g,"x")||!f.am(g,"y")||!f.am(g,"z"))throw A.e(A.bM("Landmarks devem conter chaves x, y, z",null))}i=n.a
+s=!(i!=null&&B.c.u(i,"test_"))?3:4
+break
+case 3:p=6
+s=9
 return A.U(n.c.atr("/v1/translation/predict",A.ay(["landmarks",a0],t.N,t.PV),t.z),$async$Bd)
-case 7:m=a2
+case 9:m=a2
 if(m.c===200){l=A.br(J.bj(m.a,"label"))
 k=A.dQ(J.bj(m.a,"confidence"))
 q=new A.qL(l,k,!1)
 s=1
 break}p=2
-s=6
+s=8
 break
-case 4:p=3
+case 6:p=5
 a=o.pop()
 j=A.a7(a)
 A.iZ().$1("[Remote Interpreter] Falha na predi\xe7\xe3o online, usando modo de simula\xe7\xe3o local: "+A.l(j))
-s=6
+s=8
 break
-case 3:s=2
+case 5:s=2
 break
-case 6:for(i=a0.length,d=0,h=0;f=a0.length,h<f;a0.length===i||(0,A.x)(a0),++h){f=J.bj(a0[h],"x")
+case 8:case 4:for(i=a0.length,d=0,h=0;f=a0.length,h<f;a0.length===i||(0,A.x)(a0),++h){f=J.bj(a0[h],"x")
 d+=f==null?0.5:f}c=d/f
 if(c>0.45&&c<0.55){b="AJUDA"
 k=0.88}else if(c>=0.55&&c<0.65){b="SA\xdaDE"
