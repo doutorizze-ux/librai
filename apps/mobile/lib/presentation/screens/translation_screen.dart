@@ -25,6 +25,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
   Timer? _processingTimer;
   final List<String> _spellingBuffer = [];
   Timer? _spellingEndTimer;
+  final List<String> _predictionHistory = [];
 
   bool _isTranslating = true;
   String _partialText = "Aguardando sinalização...";
@@ -104,17 +105,41 @@ class _TranslationScreenState extends State<TranslationScreen> {
         try {
           final prediction = await _interpreter.predict(landmarks);
           
-          if (prediction.label != "SINAL_DESCONHECIDO" && prediction.label != "DADOS_INSUFICIENTES") {
-            if (_isSpellingUnit(prediction.label)) {
+          // Adicionar a predição no histórico de votos para suavizar e evitar oscilações
+          _predictionHistory.add(prediction.label);
+          if (_predictionHistory.length > 3) {
+            _predictionHistory.removeAt(0);
+          }
+          
+          // Encontrar a classe mais votada (Moda) no histórico
+          final Map<String, int> votes = {};
+          for (final label in _predictionHistory) {
+            votes[label] = (votes[label] ?? 0) + 1;
+          }
+          
+          String votedLabel = prediction.label;
+          int maxVotes = 0;
+          votes.forEach((key, val) {
+            if (val > maxVotes) {
+              maxVotes = val;
+              votedLabel = key;
+            }
+          });
+          
+          // Exigir pelo menos 2 votos de consistência se tivermos histórico suficiente
+          final requiredVotes = _predictionHistory.length < 2 ? 1 : 2;
+          
+          if (maxVotes >= requiredVotes && votedLabel != "SINAL_DESCONHECIDO" && votedLabel != "DADOS_INSUFICIENTES") {
+            if (_isSpellingUnit(votedLabel)) {
               // Cancelar timer de finalização anterior
               _spellingEndTimer?.cancel();
               
               // Evitar duplicar a mesma sílaba se for detectada repetida muito rápido
-              if (_spellingBuffer.isEmpty || _spellingBuffer.last != prediction.label) {
-                _spellingBuffer.add(prediction.label);
+              if (_spellingBuffer.isEmpty || _spellingBuffer.last != votedLabel) {
+                _spellingBuffer.add(votedLabel);
                 
                 // Mostrar progresso (ex: F-R-E ou FRE-DE)
-                final separator = prediction.label.length == 1 ? "" : "-";
+                final separator = votedLabel.length == 1 ? "" : "-";
                 final progressText = _spellingBuffer.join(separator);
                 setState(() {
                   _partialText = "Soletrando: $progressText";
@@ -147,11 +172,11 @@ class _TranslationScreenState extends State<TranslationScreen> {
               }
 
               // Processamento de palavra/sinal completo
-              final translation = await _translator.translate([prediction.label], sessionId: "session_live");
+              final translation = await _translator.translate([votedLabel], sessionId: "session_live");
               
               if (translation.isNotEmpty && translation != _finalText) {
                 setState(() {
-                  _partialText = "Sinal detectado: ${prediction.label}";
+                  _partialText = "Sinal detectado: $votedLabel";
                   _finalText = translation;
                   _confidence = prediction.confidence;
                 });
@@ -169,6 +194,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
         }
       }
     } else if (framing == VisionState.waitingPerson) {
+      _predictionHistory.clear();
       setState(() {
         _partialText = "Aguardando sinalização...";
         _confidence = 0.0;
@@ -180,6 +206,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
   void dispose() {
     _processingTimer?.cancel();
     _spellingEndTimer?.cancel();
+    _predictionHistory.clear();
     _visionService.stop();
     _frameBuffer.clear();
     super.dispose();

@@ -125,8 +125,9 @@
             // Solicitar fluxo de câmera de forma estável usando WebRTC nativo
             const stream = await navigator.mediaDevices.getUserMedia({
               video: {
-                width: { ideal: 640 },
-                height: { ideal: 480 },
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+                aspectRatio: 1.7777777778,
                 facingMode: "user"
               },
               audio: false
