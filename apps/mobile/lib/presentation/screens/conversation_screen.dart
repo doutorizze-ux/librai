@@ -1,10 +1,14 @@
 import 'dart:math';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import '../../data/datasources/local_history_storage.dart';
 import '../../platform/tts_service.dart';
 import '../../platform/local_translator.dart';
 import '../state/glosses_buffer.dart';
+import '../../platform/mediapipe_interop.dart';
+import '../../platform/mock_interpreter.dart';
 
 class ConversationScreen extends StatefulWidget {
   const ConversationScreen({super.key});
@@ -26,10 +30,81 @@ class _ConversationScreenState extends State<ConversationScreen> {
   final String _sessionId = "session_${DateTime.now().millisecondsSinceEpoch}";
   bool _isCameraActive = true;
 
+  final MediaPipeService _visionService = MediaPipeService();
+  final MockSignInterpreter _interpreter = MockSignInterpreter();
+  Timer? _processingTimer;
+  int _frameCount = 0;
+  final List<String> _predictionHistory = [];
+  bool _handsDetected = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _visionService.registerVideoView();
+    _visionService.start();
+    _interpreter.loadModel("weights.json");
+
+    _processingTimer = Timer.periodic(const Duration(milliseconds: 33), (timer) {
+      if (!mounted) return;
+      if (!_isCameraActive) return;
+
+      final landmarks = _visionService.getLatestLandmarks();
+      final handsOk = _visionService.isHandsDetected();
+      
+      setState(() {
+        _handsDetected = handsOk;
+      });
+
+      if (handsOk && landmarks != null && landmarks.isNotEmpty) {
+        _processFrame(landmarks);
+      }
+    });
+  }
+
+  Future<void> _processFrame(List<Map<String, double>> landmarks) async {
+    if (_interpreter.isProcessing) return;
+    
+    _frameCount++;
+    if (_frameCount % 15 != 0) return;
+    
+    try {
+      final prediction = await _interpreter.predict(landmarks);
+      if (prediction.label != "SINAL_DESCONHECIDO" && prediction.label != "DADOS_INSUFICIENTES") {
+        _predictionHistory.add(prediction.label);
+        if (_predictionHistory.length > 3) {
+          _predictionHistory.removeAt(0);
+        }
+        
+        final Map<String, int> votes = {};
+        for (final l in _predictionHistory) {
+          votes[l] = (votes[l] ?? 0) + 1;
+        }
+        
+        String votedLabel = prediction.label;
+        int maxVotes = 0;
+        votes.forEach((k, v) {
+          if (v > maxVotes) {
+            maxVotes = v;
+            votedLabel = k;
+          }
+        });
+        
+        final requiredVotes = _predictionHistory.length < 2 ? 1 : 2;
+        if (maxVotes >= requiredVotes) {
+          await _simulateDeafSign(votedLabel);
+        }
+      }
+    } catch (e) {
+      debugPrint("Erro na predição da conversa: $e");
+    }
+  }
+
   @override
   void dispose() {
     _textController.dispose();
     _scrollController.dispose();
+    _processingTimer?.cancel();
+    _visionService.stop();
     super.dispose();
   }
 
@@ -141,52 +216,78 @@ class _ConversationScreenState extends State<ConversationScreen> {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: theme.colorScheme.primary, width: 2),
               ),
-              child: Stack(
-                children: [
-                  Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.videocam, color: theme.colorScheme.primary.withOpacity(0.4), size: 48),
-                        const Text(
-                          'Câmera Ativa - Sinalize abaixo',
-                          style: TextStyle(color: Colors.white70, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 8,
-                    left: 8,
-                    right: 8,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Renders live webcam stream on web
+                    if (kIsWeb)
+                      const Positioned.fill(
+                        child: HtmlElementView(viewType: 'mediapipe-video-view'),
+                      ),
+
+                    // Status and warnings
+                    Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          _buildSimulateButton('BOM_DIA'),
-                          const SizedBox(width: 8),
-                          _buildSimulateButton('AJUDA'),
-                          const SizedBox(width: 8),
-                          _buildSimulateButton('SAÚDE'),
-                          const SizedBox(width: 8),
-                          _buildSimulateButton('EMERGÊNCIA'),
-                          const SizedBox(width: 8),
-                          _buildSimulateButton('EU'),
-                          const SizedBox(width: 8),
-                          _buildSimulateButton('IR'),
-                          const SizedBox(width: 8),
-                          _buildSimulateButton('HOSPITAL'),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                            onPressed: _finalizeDeafSentence,
-                            child: const Text('Falar Frase (TTS)'),
-                          ),
+                          if (!kIsWeb) ...[
+                            Icon(Icons.videocam, color: theme.colorScheme.primary.withOpacity(0.4), size: 48),
+                            const Text(
+                              'Câmera Ativa - Sinalize abaixo',
+                              style: TextStyle(color: Colors.white70, fontSize: 12),
+                            ),
+                          ] else if (!_handsDetected) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                'Aguardando detecção das mãos...',
+                                style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ]
                         ],
                       ),
                     ),
-                  ),
-                ],
+
+                    Positioned(
+                      bottom: 8,
+                      left: 8,
+                      right: 8,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildSimulateButton('BOM_DIA'),
+                            const SizedBox(width: 8),
+                            _buildSimulateButton('AJUDA'),
+                            const SizedBox(width: 8),
+                            _buildSimulateButton('SAÚDE'),
+                            const SizedBox(width: 8),
+                            _buildSimulateButton('EMERGÊNCIA'),
+                            const SizedBox(width: 8),
+                            _buildSimulateButton('EU'),
+                            const SizedBox(width: 8),
+                            _buildSimulateButton('IR'),
+                            const SizedBox(width: 8),
+                            _buildSimulateButton('HOSPITAL'),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                              onPressed: _finalizeDeafSentence,
+                              child: const Text('Falar Frase (TTS)'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           

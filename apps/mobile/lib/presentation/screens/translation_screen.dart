@@ -212,6 +212,65 @@ class _TranslationScreenState extends State<TranslationScreen> {
     super.dispose();
   }
 
+  void _showCorrectionDialog() {
+    final controller = TextEditingController(text: _finalText);
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.edit),
+              SizedBox(width: 8),
+              Text("Corrigir Tradução"),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("Ajuste o texto traduzido abaixo:"),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  hintText: "Digite a tradução correta...",
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancelar"),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final corrected = controller.text.trim();
+                if (corrected.isNotEmpty) {
+                  setState(() {
+                    _finalText = corrected;
+                  });
+                  Navigator.pop(context);
+                  await _ttsService.speak(corrected);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Tradução corrigida com sucesso!"),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              },
+              child: const Text("Confirmar"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   String _getWarningMessage(VisionState state) {
     switch (state) {
       case VisionState.waitingPerson:
@@ -393,9 +452,9 @@ class _TranslationScreenState extends State<TranslationScreen> {
                           label: 'Ouvir tradução em voz',
                           child: const Icon(Icons.volume_up),
                         ),
-                        onPressed: () {
-                          // Síntese de voz
-                        },
+                        onPressed: _finalText.isNotEmpty
+                            ? () => _ttsService.speak(_finalText)
+                            : null,
                       ),
                     ],
                   ),
@@ -419,9 +478,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
                       ElevatedButton.icon(
                         icon: const Icon(Icons.edit),
                         label: const Text('Corrigir'),
-                        onPressed: () {
-                          // Modal de correção
-                        },
+                        onPressed: _showCorrectionDialog,
                       ),
                       IconButton.filledTonal(
                         icon: Semantics(

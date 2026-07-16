@@ -1,13 +1,14 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../domain/interfaces/sign_interpreter.dart';
+import 'app_config.dart';
 
 class MockSignInterpreter implements SignInterpreter {
   String? _loadedModelPath;
   final double confidenceThreshold = 0.75;
 
-  final Dio _dio = Dio(BaseOptions(
-    baseUrl: const String.fromEnvironment('API_URL', defaultValue: 'https://api.tvcatolica.site'),
+  Dio get _dio => Dio(BaseOptions(
+    baseUrl: AppConfig.apiUrl,
     connectTimeout: const Duration(seconds: 5),
     receiveTimeout: const Duration(seconds: 5),
   ));

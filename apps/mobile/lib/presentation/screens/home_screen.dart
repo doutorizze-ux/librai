@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../platform/tts_service.dart';
+import '../../platform/app_config.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -28,6 +29,91 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _showSettingsDialog(BuildContext context) {
+    final controller = TextEditingController(text: AppConfig.apiUrl);
+    double tempSpeed = AppConfig.ttsSpeed;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.settings),
+                  SizedBox(width: 8),
+                  Text("Configurações"),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "URL da API do Servidor (Coolify):",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: controller,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        hintText: "https://api.tvcatolica.site",
+                        prefixIcon: Icon(Icons.link),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      "Velocidade da Voz (TTS): ${tempSpeed.toStringAsFixed(1)}x",
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Slider(
+                      value: tempSpeed,
+                      min: 0.5,
+                      max: 2.0,
+                      divisions: 15,
+                      label: "${tempSpeed.toStringAsFixed(1)}x",
+                      onChanged: (val) {
+                        setDialogState(() {
+                          tempSpeed = val;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Cancelar"),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final newUrl = controller.text.trim();
+                    if (newUrl.isNotEmpty) {
+                      AppConfig.apiUrl = newUrl;
+                      AppConfig.ttsSpeed = tempSpeed;
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Configurações salvas com sucesso!"),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  },
+                  child: const Text("Salvar"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -46,12 +132,10 @@ class _HomeScreenState extends State<HomeScreen> {
               label: 'Acesso às configurações',
               child: const Icon(Icons.settings),
             ),
-            onPressed: () {
-              // Ações de configurações
-            },
+            onPressed: () => _showSettingsDialog(context),
           ),
         ],
-      ),
+      );
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),

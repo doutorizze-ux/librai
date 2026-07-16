@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'dart:html' as html;
+import 'app_config.dart';
 
 class TtsService {
   Future<void> speak(String text) async {
@@ -8,6 +9,7 @@ class TtsService {
     try {
       final utterance = html.SpeechSynthesisUtterance(text);
       utterance.lang = 'pt-BR';
+      utterance.rate = AppConfig.ttsSpeed;
       html.window.speechSynthesis?.speak(utterance);
       debugPrint("[TTS Web] Falando: '$text'");
     } catch (e) {
