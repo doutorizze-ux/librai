@@ -20,6 +20,14 @@ class MediaPipeService {
             video.style.objectFit = 'cover';
             video.style.position = 'static';
             video.style.opacity = '1';
+            
+            // Forçar a reprodução após o elemento ser re-anexado no DOM do Flutter
+            Future.delayed(const Duration(milliseconds: 150), () {
+              video.play().catchError((e) {
+                debugPrint("Erro ao forçar play pós-anexo no DOM: $e");
+              });
+            });
+            
             return video;
           }
           return html.VideoElement();
