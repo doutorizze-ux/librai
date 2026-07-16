@@ -18,23 +18,15 @@ def predict_sign(
     if not input_landmarks or len(input_landmarks) != 21:
         return {"label": "SINAL_DESCONHECIDO", "confidence": 0.0}
     
-    # 1. Normalizar input em relação ao pulso e escala do tamanho da mão (pontos 0 a 9)
+    # 1. Normalizar input em relação ao pulso (landmark 0) para ser independente de posição
     try:
         wrist_in = input_landmarks[0]
-        mcp_in = input_landmarks[9]
-        dx_scale = mcp_in.get("x", 0.0) - wrist_in.get("x", 0.0)
-        dy_scale = mcp_in.get("y", 0.0) - wrist_in.get("y", 0.0)
-        dz_scale = mcp_in.get("z", 0.0) - wrist_in.get("z", 0.0)
-        scale_in = (dx_scale**2 + dy_scale**2 + dz_scale**2) ** 0.5
-        if scale_in == 0:
-            scale_in = 1.0
-
         norm_input = []
         for p in input_landmarks:
             norm_input.append({
-                "x": (p.get("x", 0.0) - wrist_in.get("x", 0.0)) / scale_in,
-                "y": (p.get("y", 0.0) - wrist_in.get("y", 0.0)) / scale_in,
-                "z": (p.get("z", 0.0) - wrist_in.get("z", 0.0)) / scale_in,
+                "x": p.get("x", 0.0) - wrist_in.get("x", 0.0),
+                "y": p.get("y", 0.0) - wrist_in.get("y", 0.0),
+                "z": p.get("z", 0.0) - wrist_in.get("z", 0.0),
             })
     except Exception as e:
         return {"label": "SINAL_DESCONHECIDO", "confidence": 0.0}
@@ -47,7 +39,7 @@ def predict_sign(
     best_label = "SINAL_DESCONHECIDO"
     min_dist = 999.0
     
-    # 3. K-Nearest Neighbors (KNN) com invariância de escala e translação
+    # 3. K-Nearest Neighbors (KNN) de Geometria de Mão
     for sample in samples:
         db_points = sample.landmarks
         if not db_points or len(db_points) < 21:
@@ -61,27 +53,11 @@ def predict_sign(
                 
             try:
                 wrist_db = frame_points[0]
-                mcp_db = frame_points[9]
-                dx_db_scale = mcp_db.get("x", 0.0) - wrist_db.get("x", 0.0)
-                dy_db_scale = mcp_db.get("y", 0.0) - wrist_db.get("y", 0.0)
-                dz_db_scale = mcp_db.get("z", 0.0) - wrist_db.get("z", 0.0)
-                scale_db = (dx_db_scale**2 + dy_db_scale**2 + dz_db_scale**2) ** 0.5
-                if scale_db == 0:
-                    scale_db = 1.0
-
                 dist = 0.0
                 for i in range(21):
-                    val_in_x = norm_input[i]["x"]
-                    val_in_y = norm_input[i]["y"]
-                    val_in_z = norm_input[i]["z"]
-
-                    val_db_x = (frame_points[i].get("x", 0.0) - wrist_db.get("x", 0.0)) / scale_db
-                    val_db_y = (frame_points[i].get("y", 0.0) - wrist_db.get("y", 0.0)) / scale_db
-                    val_db_z = (frame_points[i].get("z", 0.0) - wrist_db.get("z", 0.0)) / scale_db
-
-                    dx = val_in_x - val_db_x
-                    dy = val_in_y - val_db_y
-                    dz = val_in_z - val_db_z
+                    dx = (norm_input[i]["x"]) - (frame_points[i].get("x", 0.0) - wrist_db.get("x", 0.0))
+                    dy = (norm_input[i]["y"]) - (frame_points[i].get("y", 0.0) - wrist_db.get("y", 0.0))
+                    dz = (norm_input[i]["z"]) - (frame_points[i].get("z", 0.0) - wrist_db.get("z", 0.0))
                     dist += (dx * dx + dy * dy + dz * dz)
                 
                 if dist < min_dist:
@@ -90,8 +66,8 @@ def predict_sign(
             except Exception:
                 continue
                 
-    # Limiar preciso para vetor normalizado de translação + escala
-    threshold = 0.40
+    # Limiar empírico para coordenadas normalizadas
+    threshold = 0.35
     if min_dist < threshold:
         confidence = float(max(0.5, 1.0 - (min_dist / threshold) * 0.5))
         return {"label": best_label, "confidence": round(confidence, 2)}
