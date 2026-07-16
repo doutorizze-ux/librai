@@ -128,11 +128,11 @@ class _TranslationScreenState extends State<TranslationScreen> {
             final votedLabel = prediction.label;
             
             if (_isSpellingUnit(votedLabel)) {
-              // Cancelar timer de finalização anterior
-              _spellingEndTimer?.cancel();
-              
               // Evitar duplicar a mesma sílaba se for detectada repetida muito rápido
               if (_spellingBuffer.isEmpty || _spellingBuffer.last != votedLabel) {
+                // Cancelar timer de finalização anterior apenas ao entrar nova sílaba
+                _spellingEndTimer?.cancel();
+                
                 _spellingBuffer.add(votedLabel);
                 
                 // Mostrar progresso (ex: F-R-E ou FRE-DE)
@@ -142,20 +142,20 @@ class _TranslationScreenState extends State<TranslationScreen> {
                   _partialText = "Soletrando: $progressText";
                   _confidence = prediction.confidence;
                 });
+                
+                // Agendar a finalização da palavra soletrada (1.5 segundos sem novos sinais)
+                _spellingEndTimer = Timer(const Duration(milliseconds: 1500), () async {
+                  if (_spellingBuffer.isNotEmpty) {
+                    final fullWord = _spellingBuffer.join("");
+                    setState(() {
+                      _partialText = "Palavra soletrada";
+                      _finalText = fullWord;
+                    });
+                    await _ttsService.speak(fullWord);
+                    _spellingBuffer.clear();
+                  }
+                });
               }
-              
-              // Agendar a finalização da palavra soletrada (1.5 segundos sem novos sinais)
-              _spellingEndTimer = Timer(const Duration(milliseconds: 1500), () async {
-                if (_spellingBuffer.isNotEmpty) {
-                  final fullWord = _spellingBuffer.join("");
-                  setState(() {
-                    _partialText = "Palavra soletrada";
-                    _finalText = fullWord;
-                  });
-                  await _ttsService.speak(fullWord);
-                  _spellingBuffer.clear();
-                }
-              });
             } else {
               // Se tinha alguma soletragem em andamento, finaliza ela primeiro
               if (_spellingBuffer.isNotEmpty) {
@@ -191,10 +191,23 @@ class _TranslationScreenState extends State<TranslationScreen> {
       }
     } else if (framing == VisionState.waitingPerson) {
       _predictionHistory.clear();
-      setState(() {
-        _partialText = "Aguardando sinalização...";
-        _confidence = 0.0;
-      });
+      
+      // Se estava no meio de uma soletragem, finaliza imediatamente ao retirar a mão
+      if (_spellingBuffer.isNotEmpty) {
+        _spellingEndTimer?.cancel();
+        final fullWord = _spellingBuffer.join("");
+        setState(() {
+          _finalText = fullWord;
+          _partialText = "Palavra finalizada";
+        });
+        _ttsService.speak(fullWord);
+        _spellingBuffer.clear();
+      } else {
+        setState(() {
+          _partialText = "Aguardando sinalização...";
+          _confidence = 0.0;
+        });
+      }
     }
   }
 
