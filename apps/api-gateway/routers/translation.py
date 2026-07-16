@@ -91,7 +91,7 @@ def predict_sign(
                 continue
                 
     # Limiar preciso para vetor normalizado de translação + escala
-    threshold = 0.22
+    threshold = 0.40
     if min_dist < threshold:
         confidence = float(max(0.5, 1.0 - (min_dist / threshold) * 0.5))
         return {"label": best_label, "confidence": round(confidence, 2)}
