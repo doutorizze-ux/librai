@@ -92976,14 +92976,12 @@ p=4
 s=7
 return A.U(m.at.wc(a),$async$tP)
 case 7:l=c
-s=l.a!=="SINAL_DESCONHECIDO"&&l.a!=="DADOS_INSUFICIENTES"?8:9
+s=l.a!=="SINAL_DESCONHECIDO"&&l.a!=="DADOS_INSUFICIENTES"&&l.b>=0.7?8:9
 break
 case 8:i=m.ch
 i.push(l.a)
 if(i.length>2)B.b.iE(i,0)
-k=!1
-if(i.length===1)k=!0
-else if(i[0]===i[1])k=!0
+k=i.length>=2&&i[0]===i[1]
 s=k?10:11
 break
 case 10:s=12
@@ -93506,14 +93504,12 @@ p=7
 s=10
 return A.U(m.r.wc(a2),$async$o0)
 case 10:l=a8
-s=l.a!=="SINAL_DESCONHECIDO"&&l.a!=="DADOS_INSUFICIENTES"?11:12
+s=l.a!=="SINAL_DESCONHECIDO"&&l.a!=="DADOS_INSUFICIENTES"&&l.b>=0.7?11:12
 break
 case 11:b=m.Q
 b.push(l.a)
 if(b.length>2)B.b.iE(b,0)
-k=!1
-if(b.length===1)k=!0
-else if(b[0]===b[1])k=!0
+k=b.length>=2&&b[0]===b[1]
 s=k?13:14
 break
 case 13:j=l.a
