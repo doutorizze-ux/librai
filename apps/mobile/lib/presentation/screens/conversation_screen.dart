@@ -71,18 +71,16 @@ class _ConversationScreenState extends State<ConversationScreen> {
     _isProcessing = true;
     try {
       final prediction = await _interpreter.predict(landmarks);
-      if (prediction.label != "SINAL_DESCONHECIDO" && prediction.label != "DADOS_INSUFICIENTES") {
+      if (prediction.label != "SINAL_DESCONHECIDO" && 
+          prediction.label != "DADOS_INSUFICIENTES" &&
+          prediction.confidence >= 0.70) {
         _predictionHistory.add(prediction.label);
         if (_predictionHistory.length > 2) {
           _predictionHistory.removeAt(0);
         }
         
-        bool isConsistent = false;
-        if (_predictionHistory.length == 1) {
-          isConsistent = true;
-        } else if (_predictionHistory[0] == _predictionHistory[1]) {
-          isConsistent = true;
-        }
+        bool isConsistent = _predictionHistory.length >= 2 && 
+                             _predictionHistory[0] == _predictionHistory[1];
         
         if (isConsistent) {
           await _simulateDeafSign(prediction.label);

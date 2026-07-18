@@ -110,19 +110,19 @@ class _TranslationScreenState extends State<TranslationScreen> {
       try {
         final prediction = await _interpreter.predict(landmarks);
         
-        if (prediction.label != "SINAL_DESCONHECIDO" && prediction.label != "DADOS_INSUFICIENTES") {
+        if (prediction.label != "SINAL_DESCONHECIDO" && 
+            prediction.label != "DADOS_INSUFICIENTES" && 
+            prediction.confidence >= 0.70) {
+          
           // Histórico rápido de 2 predições para eliminar pequenas cintilações instantaneamente
           _predictionHistory.add(prediction.label);
           if (_predictionHistory.length > 2) {
             _predictionHistory.removeAt(0);
           }
           
-          bool isConsistent = false;
-          if (_predictionHistory.length == 1) {
-            isConsistent = true;
-          } else if (_predictionHistory[0] == _predictionHistory[1]) {
-            isConsistent = true;
-          }
+          // Exigir estritamente 2 ocorrências idênticas seguidas antes de aceitar o sinal
+          bool isConsistent = _predictionHistory.length >= 2 && 
+                              _predictionHistory[0] == _predictionHistory[1];
           
           if (isConsistent) {
             final votedLabel = prediction.label;
