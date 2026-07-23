@@ -11,6 +11,7 @@ void main() {
         child: SinalizaAiApp(),
       ),
     );
+    await tester.pumpAndSettle();
 
     // Verificar se o título principal é renderizado
     expect(find.text('LibrAI'), findsOneWidget);
