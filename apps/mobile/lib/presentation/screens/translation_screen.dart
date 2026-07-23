@@ -321,7 +321,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
         actions: [
           IconButton(
             tooltip: 'Alternar câmera',
-            icon: const Semantics(
+            icon: Semantics(
               label: 'Alternar câmera frontal ou traseira',
               child: Icon(Icons.flip_camera_android),
             ),
@@ -459,7 +459,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
                         onPressed: _finalText.isNotEmpty
                             ? () => _ttsService.speak(_finalText)
                             : null,
-                        icon: const Semantics(
+                        icon: Semantics(
                           label: 'Ouvir tradução em voz',
                           child: Icon(Icons.volume_up),
                         ),
@@ -511,7 +511,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
                           foregroundColor: theme.colorScheme.onError,
                         ),
                         onPressed: () => context.pop(),
-                        icon: const Semantics(
+                        icon: Semantics(
                           label: 'Encerrar tradução',
                           child: Icon(Icons.stop),
                         ),
