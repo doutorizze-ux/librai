@@ -1,6 +1,6 @@
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'package:flutter/foundation.dart';
-import 'dart:js' as js;
+import 'dart:js_util' as js_util;
 import 'dart:ui_web' as ui_web;
 import 'dart:html' as html;
 
@@ -39,14 +39,11 @@ class MediaPipeService {
     }
   }
 
-  // Obter o objeto da ponte global do JS
-  js.JsObject? get _bridge {
+  // Obter o objeto da ponte global do JS usando js_util seguro
+  dynamic get _bridge {
     try {
-      if (js.context.hasProperty('sinalizaAiMediaPipe')) {
-        final bridgeObj = js.context['sinalizaAiMediaPipe'];
-        if (bridgeObj != null) {
-          return bridgeObj as js.JsObject;
-        }
+      if (js_util.hasProperty(html.window, 'sinalizaAiMediaPipe')) {
+        return js_util.getProperty(html.window, 'sinalizaAiMediaPipe');
       }
     } catch (e) {
       debugPrint("Erro ao acessar sinalizaAiMediaPipe: $e");
@@ -56,7 +53,10 @@ class MediaPipeService {
 
   void start() {
     try {
-      _bridge?.callMethod('start');
+      final b = _bridge;
+      if (b != null) {
+        js_util.callMethod(b, 'start', []);
+      }
     } catch (e) {
       debugPrint("Falha ao iniciar MediaPipe JS: $e");
     }
@@ -64,7 +64,10 @@ class MediaPipeService {
 
   void stop() {
     try {
-      _bridge?.callMethod('stop');
+      final b = _bridge;
+      if (b != null) {
+        js_util.callMethod(b, 'stop', []);
+      }
     } catch (e) {
       debugPrint("Falha ao parar MediaPipe JS: $e");
     }
@@ -74,7 +77,8 @@ class MediaPipeService {
     try {
       final b = _bridge;
       if (b == null) return false;
-      return b['handsDetected'] as bool? ?? false;
+      final val = js_util.getProperty(b, 'handsDetected');
+      return val == true;
     } catch (e) {
       return false;
     }
@@ -93,16 +97,21 @@ class MediaPipeService {
       final b = _bridge;
       if (b == null) return null;
       
-      final jsLandmarks = b['latestLandmarks'] as js.JsArray?;
+      final jsLandmarks = js_util.getProperty(b, 'latestLandmarks');
       if (jsLandmarks == null) return null;
       
+      final length = js_util.getProperty(jsLandmarks, 'length') as int?;
+      if (length == null || length == 0) return null;
+
       final List<Map<String, double>> result = [];
-      for (int i = 0; i < jsLandmarks.length; i++) {
-        final item = jsLandmarks[i] as js.JsObject;
-        final double x = (item['x'] as num).toDouble();
-        final double y = (item['y'] as num).toDouble();
-        final double z = (item['z'] as num).toDouble();
-        result.add({'x': x, 'y': y, 'z': z});
+      for (int i = 0; i < length; i++) {
+        final item = js_util.getProperty(jsLandmarks, i);
+        if (item != null) {
+          final double x = (js_util.getProperty(item, 'x') as num).toDouble();
+          final double y = (js_util.getProperty(item, 'y') as num).toDouble();
+          final double z = (js_util.getProperty(item, 'z') as num).toDouble();
+          result.add({'x': x, 'y': y, 'z': z});
+        }
       }
       return result;
     } catch (e) {
