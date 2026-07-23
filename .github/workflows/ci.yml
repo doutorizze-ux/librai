@@ -61,6 +61,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.19.6'
           channel: 'stable'
 
       - name: Install dependencies
@@ -90,6 +91,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.19.6'
           channel: 'stable'
 
       - name: Install dependencies
@@ -100,8 +102,7 @@ jobs:
       - name: Build Web Application
         run: |
           cd apps/mobile
-          flutter config --enable-web
-          flutter build web --release --base-href "/librai/" --no-pub
+          flutter build web --release --base-href "/librai/"
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
