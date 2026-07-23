@@ -304,6 +304,231 @@ class _TranslationScreenState extends State<TranslationScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final topInset = MediaQuery.paddingOf(context).top;
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        title: const Text(
+          'Tradução ao vivo',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Alternar câmera',
+            icon: const Semantics(
+              label: 'Alternar câmera frontal ou traseira',
+              child: Icon(Icons.flip_camera_android),
+            ),
+            onPressed: () {},
+          ),
+        ],
+      ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          ColoredBox(
+            color: const Color(0xFF111318),
+            child: kIsWeb
+                ? const HtmlElementView(viewType: 'mediapipe-video-view')
+                : Center(
+                    child: Icon(
+                      Icons.person_outline,
+                      color: Colors.white.withOpacity(0.35),
+                      size: 120,
+                    ),
+                  ),
+          ),
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0x99000000),
+                  Color(0x00000000),
+                  Color(0x22000000),
+                  Color(0xCC000000),
+                ],
+                stops: [0, 0.28, 0.58, 1],
+              ),
+            ),
+          ),
+          Positioned(
+            top: topInset + kToolbarHeight + 8,
+            left: 16,
+            child: Row(
+              children: [
+                _buildLandmarkChip('Mãos', _handsDetected),
+                const SizedBox(width: 6),
+                _buildLandmarkChip('Rosto', _faceDetected),
+                const SizedBox(width: 6),
+                _buildLandmarkChip('Tronco', _bodyDetected),
+              ],
+            ),
+          ),
+          Positioned(
+            top: topInset + kToolbarHeight + 58,
+            left: 20,
+            right: 20,
+            child: Semantics(
+              liveRegion: true,
+              label: _getWarningMessage(_framingState),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.62),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    _getWarningMessage(_framingState),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: SafeArea(
+              top: false,
+              minimum: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    _partialText,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      _finalText.isNotEmpty
+                          ? _finalText
+                          : 'Sinalize em frente à câmera',
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        height: 1.08,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Icon(
+                        _confidence >= 0.8
+                            ? Icons.verified
+                            : Icons.warning_amber_rounded,
+                        color: _confidence >= 0.8
+                            ? Colors.lightGreenAccent
+                            : Colors.amber,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _confidence > 0
+                              ? 'Confiança: ${(_confidence * 100).toStringAsFixed(0)}%'
+                              : 'Sem sinalização ativa',
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Ouvir tradução',
+                        color: Colors.white,
+                        onPressed: _finalText.isNotEmpty
+                            ? () => _ttsService.speak(_finalText)
+                            : null,
+                        icon: const Semantics(
+                          label: 'Ouvir tradução em voz',
+                          child: Icon(Icons.volume_up),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      IconButton.filled(
+                        tooltip: _isTranslating
+                            ? 'Pausar tradução'
+                            : 'Retomar tradução',
+                        style: IconButton.styleFrom(
+                          minimumSize: const Size(56, 56),
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black87,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _isTranslating = !_isTranslating;
+                          });
+                        },
+                        icon: Semantics(
+                          label: _isTranslating
+                              ? 'Pausar tradução'
+                              : 'Retomar tradução',
+                          child: Icon(
+                            _isTranslating ? Icons.pause : Icons.play_arrow,
+                          ),
+                        ),
+                      ),
+                      FilledButton.tonalIcon(
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(132, 56),
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black87,
+                        ),
+                        onPressed: _showCorrectionDialog,
+                        icon: const Icon(Icons.edit_outlined),
+                        label: const Text('Corrigir'),
+                      ),
+                      IconButton.filled(
+                        tooltip: 'Encerrar tradução',
+                        style: IconButton.styleFrom(
+                          minimumSize: const Size(56, 56),
+                          backgroundColor: theme.colorScheme.error,
+                          foregroundColor: theme.colorScheme.onError,
+                        ),
+                        onPressed: () => context.pop(),
+                        icon: const Semantics(
+                          label: 'Encerrar tradução',
+                          child: Icon(Icons.stop),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegacyLayout(BuildContext context) {
+    final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
