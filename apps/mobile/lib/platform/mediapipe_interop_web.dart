@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
+// ignore: avoid_web_libraries_in_flutter, uri_does_not_exist
 import 'dart:js' as js;
+// ignore: avoid_web_libraries_in_flutter, uri_does_not_exist, undefined_primary_export
 import 'dart:ui_web' as ui_web;
-// ignore: avoid_web_libraries_in_flutter
+// ignore: avoid_web_libraries_in_flutter, uri_does_not_exist
 import 'dart:html' as html;
 
 class MediaPipeService {
