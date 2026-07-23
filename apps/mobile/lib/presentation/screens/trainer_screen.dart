@@ -326,7 +326,10 @@ class _TrainerScreenState extends State<TrainerScreen> {
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.all(24.0),
+            padding: EdgeInsets.symmetric(
+              horizontal: MediaQuery.sizeOf(context).width < 600 ? 12 : 24,
+              vertical: 16,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -334,8 +337,9 @@ class _TrainerScreenState extends State<TrainerScreen> {
                 Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 900),
-                    child: AspectRatio(
-                      aspectRatio: 16 / 9,
+                    child: SizedBox(
+                      height: (MediaQuery.sizeOf(context).height * 0.68)
+                          .clamp(460.0, 720.0),
                       child: Container(
                   decoration: BoxDecoration(
                     color: Colors.black,
@@ -352,7 +356,11 @@ class _TrainerScreenState extends State<TrainerScreen> {
                     alignment: Alignment.center,
                     children: [
                       if (kIsWeb)
-                        const HtmlElementView(viewType: 'mediapipe-video-view')
+                        const Positioned.fill(
+                          child: HtmlElementView(
+                            viewType: 'mediapipe-video-view',
+                          ),
+                        )
                       else
                         const Center(child: Text("Câmera disponível no Web", style: TextStyle(color: Colors.white))),
                       
