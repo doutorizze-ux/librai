@@ -1,4 +1,4 @@
-// ignore_for_file: avoid_web_libraries_in_flutter, uri_does_not_exist, undefined_primary_export, undefined_class, undefined_identifier, undefined_method
+// ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'package:flutter/foundation.dart';
 import 'dart:js' as js;
 import 'dart:ui_web' as ui_web;
