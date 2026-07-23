@@ -48,6 +48,12 @@ jobs:
         working-directory: apps/mobile
         run: flutter pub get
 
+      - name: Apply Android Gradle compatibility fix
+        run: |
+          plugin_gradle="$(find "$PUB_CACHE/hosted/pub.dev" -path '*/flutter_inappwebview_android-*/android/build.gradle' -print -quit)"
+          test -n "$plugin_gradle"
+          sed -i "s/proguard-android.txt/proguard-android-optimize.txt/g" "$plugin_gradle"
+
       - name: Build installable release APK
         working-directory: apps/mobile
         run: flutter build apk --release --target lib/main_android.dart
