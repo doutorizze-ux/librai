@@ -117,8 +117,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final size = MediaQuery.of(context).size;
-
     return Scaffold(
       appBar: AppBar(
         title: GestureDetector(
@@ -137,11 +135,12 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
               // Banner de Boas-vindas / Info do App
               Card(
                 elevation: 0,
@@ -173,7 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(height: 48),
               
               // Botão Principal: Traduzir Libras
               Semantics(
@@ -241,7 +240,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ],
               ),
-              const Spacer(),
+              const SizedBox(height: 48),
               
               // Histórico e Privacidade
               TextButton.icon(
@@ -260,7 +259,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                 ),
               ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

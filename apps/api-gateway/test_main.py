@@ -139,6 +139,33 @@ def test_create_training_sample():
     assert count_resp.json()["count"] == 1
 
 
+def test_delete_training_samples_with_url_punctuation():
+    headers = {"X-Trainer-Secret": "librAI_trainer_secret_2026"}
+    sign_name = "OI, TUDO BEM? BOA TARDE"
+
+    create_resp = client.post(
+        "/v1/training/samples",
+        json={"sign_name": sign_name, "landmarks": [{"x": 0.1, "y": 0.2, "z": 0.3}]},
+        headers=headers,
+    )
+    assert create_resp.status_code == 201
+
+    delete_resp = client.delete(
+        "/v1/training/samples",
+        params={"sign_name": sign_name},
+        headers=headers,
+    )
+    assert delete_resp.status_code == 200
+    assert delete_resp.json() == {"sign_name": sign_name, "deleted_count": 1}
+
+    missing_resp = client.delete(
+        "/v1/training/samples",
+        params={"sign_name": sign_name},
+        headers=headers,
+    )
+    assert missing_resp.status_code == 404
+
+
 def test_predict_sign():
     # 1. Enviar sem dados
     resp = client.post("/v1/translation/predict", json={})

@@ -95,3 +95,32 @@ def delete_training_samples(
     
     db.commit()
     return {"sign_name": name, "deleted_count": deleted_count}
+
+
+@router.delete("/training/samples")
+def delete_training_samples_by_query(
+    sign_name: str,
+    db: Session = Depends(get_db),
+    x_trainer_secret: str = Header(..., alias="X-Trainer-Secret")
+):
+    """Exclui amostras sem colocar o nome do sinal no caminho da URL."""
+    if x_trainer_secret != TRAINER_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chave secreta de treinamento inválida ou ausente."
+        )
+
+    name = sign_name.upper().strip()
+    deleted_count = db.query(models.TrainingSample).filter(
+        models.TrainingSample.sign_name == name
+    ).delete(synchronize_session=False)
+
+    if deleted_count == 0:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Nenhuma amostra encontrada para o sinal '{name}'."
+        )
+
+    db.commit()
+    return {"sign_name": name, "deleted_count": deleted_count}

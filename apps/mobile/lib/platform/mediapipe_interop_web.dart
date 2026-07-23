@@ -17,7 +17,10 @@ class MediaPipeService {
             video.style.display = 'block';
             video.style.width = '100%';
             video.style.height = '100%';
-            video.style.objectFit = 'cover';
+            // Libras exige mãos, braços e tronco visíveis. "cover" ampliava e
+            // cortava o vídeo no celular, deixando quase somente o rosto.
+            video.style.objectFit = 'contain';
+            video.style.backgroundColor = '#111318';
             video.style.position = 'static';
             video.style.opacity = '1';
             video.style.transform = 'scaleX(-1)';

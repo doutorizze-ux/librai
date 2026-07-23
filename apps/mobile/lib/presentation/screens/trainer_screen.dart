@@ -278,18 +278,29 @@ class _TrainerScreenState extends State<TrainerScreen> {
 
     try {
       final response = await _dio.delete(
-        '/v1/training/samples/$signName',
+        '/v1/training/samples',
+        queryParameters: {'sign_name': signName},
         options: Options(
           headers: {'X-Trainer-Secret': 'librAI_trainer_secret_2026'},
         ),
       );
       if (mounted && response.statusCode == 200) {
-        _showSnackBar("Amostras de '$signName' apagadas! Pronto para regravar.", Colors.orange);
+        final deletedCount = response.data['deleted_count'] as int? ?? 0;
+        _showSnackBar(
+          "$deletedCount amostra(s) de '$signName' apagada(s).",
+          Colors.orange,
+        );
         _signNameController.text = signName;
-        _fetchSummary();
+        await _fetchSummary();
       }
-    } catch (e) {
-      _showSnackBar("Erro ao apagar amostras.", Colors.redAccent);
+    } on DioException catch (e) {
+      final detail = e.response?.data is Map
+          ? e.response?.data['detail']?.toString()
+          : null;
+      _showSnackBar(
+        detail ?? "Erro ao apagar as amostras. Tente novamente.",
+        Colors.redAccent,
+      );
     }
   }
 
@@ -321,7 +332,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
               children: [
                 // Vídeo / Camera View Box
                 SizedBox(
-                  height: 320,
+                  height: (MediaQuery.sizeOf(context).width * 0.72)
+                      .clamp(300.0, 520.0),
                   child: Container(
                   decoration: BoxDecoration(
                     color: Colors.black,
