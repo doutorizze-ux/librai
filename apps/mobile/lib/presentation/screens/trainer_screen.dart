@@ -237,8 +237,17 @@ class _TrainerScreenState extends State<TrainerScreen> {
       );
       if (mounted && response.statusCode == 200) {
         final data = response.data as List<dynamic>? ?? [];
+        final List<Map<String, dynamic>> summaryList = [];
+        for (final item in data) {
+          if (item is Map) {
+            summaryList.add({
+              'sign_name': item['sign_name']?.toString() ?? '',
+              'count': (item['count'] as num?)?.toInt() ?? 0,
+            });
+          }
+        }
         setState(() {
-          _trainedSignsSummary = data.cast<Map<String, dynamic>>();
+          _trainedSignsSummary = summaryList;
         });
       }
     } catch (e) {
