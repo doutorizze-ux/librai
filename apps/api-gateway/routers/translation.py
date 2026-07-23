@@ -9,6 +9,42 @@ from routers.auth import get_current_user, get_current_user_helper
 
 router = APIRouter(prefix="/v1", tags=["translation"])
 
+import math
+
+def extract_hand_angles(landmarks):
+    """Extrai vetor de características de ângulos articulares das mãos (invariante a escala, posição e rotação)."""
+    def vec(p1_idx, p2_idx):
+        p1, p2 = landmarks[p1_idx], landmarks[p2_idx]
+        return [
+            p2.get('x', 0.0) - p1.get('x', 0.0),
+            p2.get('y', 0.0) - p1.get('y', 0.0),
+            p2.get('z', 0.0) - p1.get('z', 0.0)
+        ]
+
+    def angle_between(v1, v2):
+        dot = v1[0]*v2[0] + v1[1]*v2[1] + v1[2]*v2[2]
+        m1 = math.sqrt(v1[0]**2 + v1[1]**2 + v1[2]**2)
+        m2 = math.sqrt(v2[0]**2 + v2[1]**2 + v2[2]**2)
+        if m1 == 0 or m2 == 0:
+            return 0.0
+        cos_val = max(-1.0, min(1.0, dot / (m1 * m2)))
+        return math.degrees(math.acos(cos_val))
+
+    try:
+        angles = [
+            angle_between(vec(0, 2), vec(2, 4)),   # Flexão Polegar
+            angle_between(vec(0, 5), vec(5, 8)),   # Flexão Indicador
+            angle_between(vec(0, 9), vec(9, 12)),  # Flexão Médio
+            angle_between(vec(0, 13), vec(13, 16)),# Flexão Anelar
+            angle_between(vec(0, 17), vec(17, 20)),# Flexão Mínimo
+            angle_between(vec(5, 8), vec(9, 12)),  # Abertura Indicador-Médio
+            angle_between(vec(9, 12), vec(13, 16)),# Abertura Médio-Anelar
+            angle_between(vec(13, 16), vec(17, 20))# Abertura Anelar-Mínimo
+        ]
+        return angles
+    except Exception:
+        return None
+
 @router.post("/translation/predict")
 def predict_sign(
     payload: dict,
@@ -18,17 +54,8 @@ def predict_sign(
     if not input_landmarks or len(input_landmarks) != 21:
         return {"label": "SINAL_DESCONHECIDO", "confidence": 0.0}
     
-    # 1. Normalizar input em relação ao pulso (landmark 0) para ser independente de posição
-    try:
-        wrist_in = input_landmarks[0]
-        norm_input = []
-        for p in input_landmarks:
-            norm_input.append({
-                "x": p.get("x", 0.0) - wrist_in.get("x", 0.0),
-                "y": p.get("y", 0.0) - wrist_in.get("y", 0.0),
-                "z": p.get("z", 0.0) - wrist_in.get("z", 0.0),
-            })
-    except Exception as e:
+    input_angles = extract_hand_angles(input_landmarks)
+    if not input_angles:
         return {"label": "SINAL_DESCONHECIDO", "confidence": 0.0}
     
     # 2. Carregar amostras de treino gravadas pelos profissionais
@@ -39,7 +66,7 @@ def predict_sign(
     best_label = "SINAL_DESCONHECIDO"
     min_dist = 999.0
     
-    # 3. K-Nearest Neighbors (KNN) de Geometria de Mão
+    # 3. K-Nearest Neighbors (KNN) de Vetores Angulares Articulares
     for sample in samples:
         db_points = sample.landmarks
         if not db_points or len(db_points) < 21:
@@ -52,13 +79,12 @@ def predict_sign(
                 continue
                 
             try:
-                wrist_db = frame_points[0]
-                dist = 0.0
-                for i in range(21):
-                    dx = (norm_input[i]["x"]) - (frame_points[i].get("x", 0.0) - wrist_db.get("x", 0.0))
-                    dy = (norm_input[i]["y"]) - (frame_points[i].get("y", 0.0) - wrist_db.get("y", 0.0))
-                    dz = (norm_input[i]["z"]) - (frame_points[i].get("z", 0.0) - wrist_db.get("z", 0.0))
-                    dist += (dx * dx + dy * dy + dz * dz)
+                db_angles = extract_hand_angles(frame_points)
+                if not db_angles:
+                    continue
+                
+                # Distância euclidiana no espaço vetorial de ângulos (em graus)
+                dist = math.sqrt(sum((a - b)**2 for a, b in zip(input_angles, db_angles)))
                 
                 if dist < min_dist:
                     min_dist = dist
@@ -66,8 +92,8 @@ def predict_sign(
             except Exception:
                 continue
                 
-    # Limiar rigoroso para evitar falsos positivos ao apenas levantar as mãos
-    threshold = 0.10
+    # Limiar em graus: 30.0 graus de diferença total permitida no espaço angular
+    threshold = 30.0
     if min_dist < threshold:
         confidence = float(max(0.5, 1.0 - (min_dist / threshold) * 0.5))
         return {"label": best_label, "confidence": round(confidence, 2)}
