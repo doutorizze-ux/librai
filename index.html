@@ -180,11 +180,12 @@
             }
 
             // Solicitar fluxo de câmera de forma estável usando WebRTC nativo
+            const isPortrait = window.innerHeight > window.innerWidth;
             const stream = await navigator.mediaDevices.getUserMedia({
               video: {
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-                aspectRatio: 1.7777777778,
+                width: { ideal: isPortrait ? 720 : 1280 },
+                height: { ideal: isPortrait ? 1280 : 720 },
+                aspectRatio: { ideal: isPortrait ? 0.5625 : 1.7777777778 },
                 facingMode: "user"
               },
               audio: false
