@@ -323,11 +323,14 @@ class _TranslationScreenState extends State<TranslationScreen> {
       body: Column(
         children: [
           // Área da Câmera
-          Expanded(
-            flex: 3,
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: ClipRRect(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 900),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: ClipRRect(
                 borderRadius: BorderRadius.circular(16.0),
                 child: Container(
                   color: Colors.black87,
@@ -396,6 +399,8 @@ class _TranslationScreenState extends State<TranslationScreen> {
                         ),
                       ),
                     ],
+                  ),
+                ),
                   ),
                 ),
               ),

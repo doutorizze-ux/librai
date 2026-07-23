@@ -331,10 +331,12 @@ class _TrainerScreenState extends State<TrainerScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // Vídeo / Camera View Box
-                SizedBox(
-                  height: (MediaQuery.sizeOf(context).width * 0.72)
-                      .clamp(300.0, 520.0),
-                  child: Container(
+                Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 900),
+                    child: AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: Container(
                   decoration: BoxDecoration(
                     color: Colors.black,
                     borderRadius: BorderRadius.circular(20),
@@ -378,7 +380,9 @@ class _TrainerScreenState extends State<TrainerScreen> {
                         ),
                     ],
                   ),
-                ),
+                      ),
+                    ),
+                  ),
               ),
               const SizedBox(height: 20),
 
