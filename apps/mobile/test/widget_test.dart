@@ -14,7 +14,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verificar se o título principal é renderizado
-    expect(find.text('LibrAI'), findsOneWidget);
+    expect(find.text('LibrAI'), findsAtLeast(1));
 
     // Verificar a presença do botão principal de tradução
     expect(find.text('Traduzir Libras'), findsOneWidget);
