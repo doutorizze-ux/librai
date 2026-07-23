@@ -71,13 +71,70 @@
           minTrackingConfidence: 0.5
         });
 
+        const drawSkeletonCanvas = (multiHandLandmarks) => {
+          const canvas = document.getElementById('mediapipe-overlay-canvas');
+          if (!canvas) return;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+
+          const width = canvas.width = videoElement ? (videoElement.videoWidth || 640) : 640;
+          const height = canvas.height = videoElement ? (videoElement.videoHeight || 480) : 480;
+          
+          ctx.clearRect(0, 0, width, height);
+
+          const connections = [
+            [0,1],[1,2],[2,3],[3,4],
+            [0,5],[5,6],[6,7],[7,8],
+            [9,10],[10,11],[11,12],[0,9],
+            [13,14],[14,15],[15,16],[0,13],
+            [17,18],[18,19],[19,20],[0,17],
+            [5,9],[9,13],[13,17]
+          ];
+
+          for (const landmarks of multiHandLandmarks) {
+            ctx.strokeStyle = '#00FFCC';
+            ctx.lineWidth = 3;
+            ctx.shadowColor = '#00FFCC';
+            ctx.shadowBlur = 6;
+
+            for (const [start, end] of connections) {
+              const p1 = landmarks[start];
+              const p2 = landmarks[end];
+              if (p1 && p2) {
+                ctx.beginPath();
+                ctx.moveTo(p1.x * width, p1.y * height);
+                ctx.lineTo(p2.x * width, p2.y * height);
+                ctx.stroke();
+              }
+            }
+
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#FFFFFF';
+            for (const pt of landmarks) {
+              ctx.beginPath();
+              ctx.arc(pt.x * width, pt.y * height, 4, 0, 2 * Math.PI);
+              ctx.fill();
+            }
+          }
+        };
+
+        const clearSkeletonCanvas = () => {
+          const canvas = document.getElementById('mediapipe-overlay-canvas');
+          if (canvas) {
+            const ctx = canvas.getContext('2d');
+            if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+          }
+        };
+
         hands.onResults((results) => {
           if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
             self.handsDetected = true;
             currentHands = results.multiHandLandmarks.flat();
+            drawSkeletonCanvas(results.multiHandLandmarks);
           } else {
             self.handsDetected = false;
             currentHands = [];
+            clearSkeletonCanvas();
           }
           updateLatestLandmarks();
         });
@@ -192,7 +249,21 @@
     });
   </script>
 
-  <!-- Script de Boot do Flutter Moderno -->
-  <script src="flutter_bootstrap.js" async></script>
+  <!-- Script de Boot do Flutter -->
+  <script src="flutter.js" defer></script>
+  <script>
+    window.addEventListener('load', function(ev) {
+      _flutter.loader.loadEntrypoint({
+        serviceWorker: {
+          serviceWorkerVersion: null,
+        },
+        onEntrypointLoaded: function(engineInitializer) {
+          engineInitializer.initializeEngine().then(function(appRunner) {
+            appRunner.runApp();
+          });
+        }
+      });
+    });
+  </script>
 </body>
 </html>
