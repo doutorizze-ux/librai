@@ -100,7 +100,7 @@ jobs:
       - name: Build Web Application
         run: |
           cd apps/mobile
-          flutter build web --release --base-href "/librai/" --web-renderer html
+          flutter build web --release --base-href "/librai/" > build.log 2>&1 || (cat build.log && exit 1)
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
