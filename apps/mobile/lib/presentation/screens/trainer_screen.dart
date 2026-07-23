@@ -353,11 +353,11 @@ class _TrainerScreenState extends State<TrainerScreen> {
                           ),
                         ),
                       if (_isRecording)
-                        const Positioned(
+                        Positioned(
                           top: 16,
                           right: 16,
                           child: Row(
-                            children: [
+                            children: const [
                               Icon(Icons.fiber_manual_record, color: Colors.redAccent, size: 24),
                               SizedBox(width: 8),
                               Text("GRAVANDO", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
