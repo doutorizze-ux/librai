@@ -101,7 +101,7 @@ jobs:
         run: |
           cd apps/mobile
           flutter config --enable-web
-          flutter build web --release --base-href "/librai/" -v
+          flutter build web --release --base-href "/librai/" --no-pub
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
