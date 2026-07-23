@@ -7,10 +7,13 @@ class MockSignInterpreter implements SignInterpreter {
   String? _loadedModelPath;
   final double confidenceThreshold = 0.75;
 
-  Dio get _dio => Dio(BaseOptions(
+  final Dio _dio = Dio(BaseOptions(
     baseUrl: AppConfig.apiUrl,
     connectTimeout: const Duration(seconds: 5),
     receiveTimeout: const Duration(seconds: 5),
+    sendTimeout: const Duration(seconds: 5),
+    persistentConnection: true,
+    headers: const {'Content-Type': 'application/json'},
   ));
 
   @override

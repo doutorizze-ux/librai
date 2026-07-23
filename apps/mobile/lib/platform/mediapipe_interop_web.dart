@@ -95,6 +95,16 @@ class MediaPipeService {
     return true; // Ignorado no Web para estabilidade de memória e CPU
   }
 
+  int getLandmarkRevision() {
+    try {
+      final b = _bridge;
+      if (b == null) return 0;
+      return (js_util.getProperty(b, 'landmarkRevision') as num?)?.toInt() ?? 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
   List<Map<String, double>>? getLatestLandmarks() {
     try {
       final b = _bridge;

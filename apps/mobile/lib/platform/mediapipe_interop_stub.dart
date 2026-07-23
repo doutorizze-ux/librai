@@ -25,6 +25,10 @@ class MediaPipeService {
     return true;
   }
 
+  int getLandmarkRevision() {
+    return DateTime.now().millisecondsSinceEpoch ~/ 33;
+  }
+
   List<Map<String, double>>? getLatestLandmarks() {
     // Retorna landmarks de teste dinâmicos
     final int now = DateTime.now().millisecondsSinceEpoch;

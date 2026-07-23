@@ -1,6 +1,8 @@
 import json
+import threading
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from database import get_db
 import models
@@ -10,6 +12,10 @@ from routers.auth import get_current_user, get_current_user_helper
 router = APIRouter(prefix="/v1", tags=["translation"])
 
 import math
+
+_feature_index_lock = threading.Lock()
+_feature_index_fingerprint = None
+_feature_index = []
 
 def extract_hand_angles(landmarks):
     """Extrai vetor de características de ângulos articulares das mãos (invariante a escala, posição e rotação)."""
@@ -45,6 +51,43 @@ def extract_hand_angles(landmarks):
     except Exception:
         return None
 
+def get_training_feature_index(db: Session):
+    """Reutiliza os vetores calculados enquanto o conjunto de treino não mudar."""
+    global _feature_index_fingerprint, _feature_index
+
+    sample_stats = db.query(
+        func.count(models.TrainingSample.id),
+        func.max(models.TrainingSample.created_at),
+    ).one()
+    fingerprint = (str(db.get_bind().url), sample_stats[0], sample_stats[1])
+
+    if fingerprint == _feature_index_fingerprint:
+        return _feature_index
+
+    with _feature_index_lock:
+        if fingerprint == _feature_index_fingerprint:
+            return _feature_index
+
+        rebuilt_index = []
+        samples = db.query(
+            models.TrainingSample.sign_name,
+            models.TrainingSample.landmarks,
+        ).all()
+
+        for sign_name, db_points in samples:
+            if not db_points or len(db_points) < 21:
+                continue
+
+            for offset in range(0, len(db_points) - 20, 21):
+                angles = extract_hand_angles(db_points[offset:offset + 21])
+                if angles:
+                    rebuilt_index.append((sign_name, angles))
+
+        _feature_index = rebuilt_index
+        _feature_index_fingerprint = fingerprint
+        return _feature_index
+
+
 @router.post("/translation/predict")
 def predict_sign(
     payload: dict,
@@ -58,39 +101,22 @@ def predict_sign(
     if not input_angles:
         return {"label": "SINAL_DESCONHECIDO", "confidence": 0.0}
     
-    # 2. Carregar amostras de treino gravadas pelos profissionais
-    samples = db.query(models.TrainingSample).all()
-    if not samples:
+    # 2. Consultar o índice de treino pré-calculado.
+    feature_index = get_training_feature_index(db)
+    if not feature_index:
         return {"label": "SINAL_DESCONHECIDO", "confidence": 0.0}
     
     best_label = "SINAL_DESCONHECIDO"
     min_dist = 999.0
     
     # 3. K-Nearest Neighbors (KNN) de Vetores Angulares Articulares
-    for sample in samples:
-        db_points = sample.landmarks
-        if not db_points or len(db_points) < 21:
-            continue
-            
-        num_frames = len(db_points) // 21
-        for f in range(num_frames):
-            frame_points = db_points[f*21 : (f+1)*21]
-            if len(frame_points) != 21:
-                continue
-                
-            try:
-                db_angles = extract_hand_angles(frame_points)
-                if not db_angles:
-                    continue
-                
-                # Distância euclidiana no espaço vetorial de ângulos (em graus)
-                dist = math.sqrt(sum((a - b)**2 for a, b in zip(input_angles, db_angles)))
-                
-                if dist < min_dist:
-                    min_dist = dist
-                    best_label = sample.sign_name
-            except Exception:
-                continue
+    for sign_name, db_angles in feature_index:
+        # Distância euclidiana no mesmo espaço angular usado anteriormente.
+        dist = math.sqrt(sum((a - b)**2 for a, b in zip(input_angles, db_angles)))
+
+        if dist < min_dist:
+            min_dist = dist
+            best_label = sign_name
                 
     # Limiar em graus: 30.0 graus de diferença total permitida no espaço angular
     threshold = 30.0

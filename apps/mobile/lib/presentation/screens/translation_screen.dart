@@ -26,7 +26,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
   final List<String> _spellingBuffer = [];
   Timer? _spellingEndTimer;
   final List<String> _predictionHistory = [];
-  DateTime _lastPredictionTime = DateTime.now().subtract(const Duration(seconds: 1));
+  int _lastLandmarkRevision = -1;
 
   bool _isTranslating = true;
   String _partialText = "Aguardando sinalização...";
@@ -52,6 +52,10 @@ class _TranslationScreenState extends State<TranslationScreen> {
     _processingTimer = Timer.periodic(const Duration(milliseconds: 33), (timer) {
       if (!_isTranslating) return;
 
+      final revision = _visionService.getLandmarkRevision();
+      if (revision == _lastLandmarkRevision) return;
+      _lastLandmarkRevision = revision;
+
       final landmarks = _visionService.getLatestLandmarks();
       final handsOk = _visionService.isHandsDetected();
       final faceOk = _visionService.isFaceDetected();
@@ -60,12 +64,17 @@ class _TranslationScreenState extends State<TranslationScreen> {
       // Validação de enquadramento
       final framing = VisionValidator.validateFraming(landmarks, faceOk);
 
-      setState(() {
-        _handsDetected = handsOk;
-        _faceDetected = faceOk;
-        _bodyDetected = bodyOk;
-        _framingState = framing;
-      });
+      if (_handsDetected != handsOk ||
+          _faceDetected != faceOk ||
+          _bodyDetected != bodyOk ||
+          _framingState != framing) {
+        setState(() {
+          _handsDetected = handsOk;
+          _faceDetected = faceOk;
+          _bodyDetected = bodyOk;
+          _framingState = framing;
+        });
+      }
 
       // Processamento assíncrono do frame
       _processFrame(landmarks, faceOk, handsOk, bodyOk, framing);
@@ -98,17 +107,12 @@ class _TranslationScreenState extends State<TranslationScreen> {
 
   Future<void> _processFrame(List<Map<String, double>>? landmarks, bool faceOk, bool handsOk, bool bodyOk, VisionState framing) async {
     if (framing == VisionState.ok && landmarks != null && landmarks.isNotEmpty) {
-      final now = DateTime.now();
-      if (now.difference(_lastPredictionTime).inMilliseconds < 250) {
-        return; // Throttle para no máximo 4 requisições por segundo
-      }
-
       if (_frameBuffer.isProcessing) return;
       _frameBuffer.setProcessing(true);
-      _lastPredictionTime = now;
 
       try {
         final prediction = await _interpreter.predict(landmarks);
+        if (!mounted || !_isTranslating) return;
         
         if (prediction.label != "SINAL_DESCONHECIDO" && 
             prediction.label != "DADOS_INSUFICIENTES" && 
