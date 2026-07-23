@@ -1,7 +1,7 @@
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'package:flutter/foundation.dart';
 import 'dart:js_util' as js_util;
-import 'dart:ui_web' as ui_web;
+import 'dart:ui' as ui;
 import 'dart:html' as html;
 
 class MediaPipeService {
@@ -9,7 +9,8 @@ class MediaPipeService {
 
   void registerVideoView() {
     try {
-      ui_web.platformViewRegistry.registerViewFactory(
+      // ignore: undefined_prefixed_name
+      ui.platformViewRegistry.registerViewFactory(
         'mediapipe-video-view',
         (int viewId) {
           final video = html.document.getElementById('mediapipe-video-source') as html.VideoElement?;
