@@ -37,6 +37,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
   Timer? _debounceTimer;
   int _existingSamplesCount = 0;
   bool _isLoadingCount = false;
+  List<Map<String, dynamic>> _trainedSignsSummary = [];
+  bool _isLoadingSummary = false;
 
   @override
   void initState() {
@@ -45,6 +47,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
     _visionService.start();
 
     _signNameController.addListener(_onSignNameChanged);
+    _fetchSummary();
 
     // Loop de monitoramento de mão (apenas para feedback visual do frame)
     _frameTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
@@ -208,6 +211,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
         });
         _ttsService.speak("Sinal gravado com sucesso!");
         _showSnackBar("Sinal enviado com sucesso para a base da IA!", Colors.green);
+        _fetchSummary();
       }
     } catch (e) {
       debugPrint("Erro ao enviar dados de treino: $e");
@@ -219,6 +223,64 @@ class _TrainerScreenState extends State<TrainerScreen> {
       setState(() {
         _isUploading = false;
       });
+    }
+  }
+
+  Future<void> _fetchSummary() async {
+    setState(() => _isLoadingSummary = true);
+    try {
+      final response = await _dio.get(
+        '/v1/training/samples/summary',
+        options: Options(
+          headers: {'X-Trainer-Secret': 'librAI_trainer_secret_2026'},
+        ),
+      );
+      if (mounted && response.statusCode == 200) {
+        final data = response.data as List<dynamic>? ?? [];
+        setState(() {
+          _trainedSignsSummary = data.cast<Map<String, dynamic>>();
+        });
+      }
+    } catch (e) {
+      debugPrint("Erro ao buscar resumo de sinais: $e");
+    } finally {
+      if (mounted) setState(() => _isLoadingSummary = false);
+    }
+  }
+
+  Future<void> _deleteSignSamples(String signName) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("Refazer Sinal '$signName'?"),
+        content: Text("Isso apagará todas as amostras gravadas de '$signName' para que você possa regravar do zero."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancelar")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Apagar e Refazer"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      final response = await _dio.delete(
+        '/v1/training/samples/$signName',
+        options: Options(
+          headers: {'X-Trainer-Secret': 'librAI_trainer_secret_2026'},
+        ),
+      );
+      if (mounted && response.statusCode == 200) {
+        _showSnackBar("Amostras de '$signName' apagadas! Pronto para regravar.", Colors.orange);
+        _signNameController.text = signName;
+        _fetchSummary();
+      }
+    } catch (e) {
+      _showSnackBar("Erro ao apagar amostras.", Colors.redAccent);
     }
   }
 
@@ -242,14 +304,16 @@ class _TrainerScreenState extends State<TrainerScreen> {
         centerTitle: true,
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Vídeo / Camera View Box
-              Expanded(
-                child: Container(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Vídeo / Camera View Box
+                SizedBox(
+                  height: 320,
+                  child: Container(
                   decoration: BoxDecoration(
                     color: Colors.black,
                     borderRadius: BorderRadius.circular(20),
@@ -360,6 +424,108 @@ class _TrainerScreenState extends State<TrainerScreen> {
                       ? null 
                       : (_isRecording ? () => setState(() => _isRecording = false) : _startRecordingFlow),
                 ),
+              const SizedBox(height: 24),
+
+              // Seção do Painel de Palavras Treinadas
+              Card(
+                elevation: 0,
+                color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  side: BorderSide(color: theme.colorScheme.outline.withOpacity(0.2)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.style, color: theme.colorScheme.primary),
+                              const SizedBox(width: 8),
+                              const Text(
+                                "Sinais Gravados na IA",
+                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          IconButton(
+                            icon: _isLoadingSummary
+                                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                                : const Icon(Icons.refresh),
+                            onPressed: _fetchSummary,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      if (_trainedSignsSummary.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12.0),
+                          child: Text(
+                            "Nenhum sinal gravado ainda. Digite o nome acima e clique em Começar Captura para registrar o primeiro sinal!",
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        )
+                      else
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _trainedSignsSummary.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final item = _trainedSignsSummary[index];
+                            final String name = item['sign_name'] ?? 'SEU_SINAL';
+                            final int count = item['count'] ?? 0;
+                            final bool isComplete = count >= 30;
+
+                            return ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              title: Text(
+                                name,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                              subtitle: Text(
+                                isComplete ? "$count/30 amostras (Excelente!)" : "$count/30 amostras",
+                                style: TextStyle(
+                                  color: isComplete ? Colors.green : Colors.orange,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.horizontal(10, 4),
+                                    decoration: BoxDecoration(
+                                      color: isComplete ? Colors.green.withOpacity(0.15) : Colors.orange.withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      "$count",
+                                      style: TextStyle(
+                                        color: isComplete ? Colors.green : Colors.orange,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                    tooltip: "Refazer / Apagar",
+                                    onPressed: () => _deleteSignSamples(name),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),
