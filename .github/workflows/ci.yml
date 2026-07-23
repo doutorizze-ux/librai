@@ -71,7 +71,7 @@ jobs:
       - name: Run tests
         run: |
           cd apps/mobile
-          flutter test || exit 0
+          flutter test
 
   deploy-web:
     needs: [backend-test, admin-test, mobile-test]

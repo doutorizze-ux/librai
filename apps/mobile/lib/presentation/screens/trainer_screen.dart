@@ -507,7 +507,10 @@ class _TrainerScreenState extends State<TrainerScreen> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Container(
-                                    padding: const EdgeInsets.horizontal(10, 4),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: isComplete ? Colors.green.withOpacity(0.15) : Colors.orange.withOpacity(0.15),
                                       borderRadius: BorderRadius.circular(12),
@@ -538,6 +541,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }
