@@ -1,0 +1,64 @@
+name: Android APK - Librai
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "apps/mobile/**"
+      - ".github/workflows/android-apk.yml"
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Create Android project
+        working-directory: apps/mobile
+        run: |
+          flutter create . \
+            --platforms=android \
+            --org br.com.librai \
+            --project-name sinaliza_ai
+
+      - name: Configure Librai Android permissions and name
+        working-directory: apps/mobile
+        run: |
+          sed -i 's/android:label="sinaliza_ai"/android:label="Librai"/' android/app/src/main/AndroidManifest.xml
+          sed -i '/<manifest/a\    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.CAMERA" />' android/app/src/main/AndroidManifest.xml
+
+      - name: Install dependencies
+        working-directory: apps/mobile
+        run: flutter pub get
+
+      - name: Build installable release APK
+        working-directory: apps/mobile
+        run: flutter build apk --release --target lib/main_android.dart
+
+      - name: Name APK
+        run: mv apps/mobile/build/app/outputs/flutter-apk/app-release.apk Librai.apk
+
+      - name: Upload Librai APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Librai-Android
+          path: Librai.apk
+          if-no-files-found: error
+          retention-days: 7
