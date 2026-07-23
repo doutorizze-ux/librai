@@ -12,57 +12,26 @@ class MediaPipeService {
       ui_web.platformViewRegistry.registerViewFactory(
         'mediapipe-video-view',
         (int viewId) {
-          final container = html.DivElement()
-            ..style.position = 'relative'
-            ..style.width = '100%'
-            ..style.height = '100%'
-            ..style.overflow = 'hidden';
-
           final video = html.document.getElementById('mediapipe-video-source') as html.VideoElement?;
           if (video != null) {
             video.style.display = 'block';
             video.style.width = '100%';
             video.style.height = '100%';
             video.style.objectFit = 'cover';
-            video.style.position = 'absolute';
-            video.style.top = '0';
-            video.style.left = '0';
+            video.style.position = 'static';
             video.style.opacity = '1';
             video.style.transform = 'scaleX(-1)';
-            container.children.add(video);
-
+            
+            // Forçar a reprodução após o elemento ser re-anexado no DOM do Flutter
             Future.delayed(const Duration(milliseconds: 150), () {
               video.play().catchError((e) {
                 debugPrint("Erro ao forçar play pós-anexo no DOM: $e");
               });
             });
+            
+            return video;
           }
-
-          var canvas = html.document.getElementById('mediapipe-overlay-canvas') as html.CanvasElement?;
-          if (canvas == null) {
-            canvas = html.CanvasElement()
-              ..id = 'mediapipe-overlay-canvas'
-              ..style.position = 'absolute'
-              ..style.top = '0'
-              ..style.left = '0'
-              ..style.width = '100%'
-              ..style.height = '100%'
-              ..style.objectFit = 'cover'
-              ..style.pointerEvents = 'none'
-              ..style.transform = 'scaleX(-1)';
-          } else {
-            canvas.style.position = 'absolute';
-            canvas.style.top = '0';
-            canvas.style.left = '0';
-            canvas.style.width = '100%';
-            canvas.style.height = '100%';
-            canvas.style.objectFit = 'cover';
-            canvas.style.pointerEvents = 'none';
-            canvas.style.transform = 'scaleX(-1)';
-          }
-          container.children.add(canvas);
-
-          return container;
+          return html.VideoElement();
         },
       );
     } catch (e) {
