@@ -66,8 +66,8 @@ def predict_sign(
             except Exception:
                 continue
                 
-    # Limiar empírico para coordenadas normalizadas
-    threshold = 0.35
+    # Limiar rigoroso para evitar falsos positivos ao apenas levantar as mãos
+    threshold = 0.10
     if min_dist < threshold:
         confidence = float(max(0.5, 1.0 - (min_dist / threshold) * 0.5))
         return {"label": best_label, "confidence": round(confidence, 2)}
