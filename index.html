@@ -44,6 +44,7 @@
       faceDetected: true, // Forçar verdadeiro no Web para simplificar enquadramento e evitar crash de RAM
       poseDetected: true, // Forçar verdadeiro no Web para simplificar enquadramento e evitar crash de RAM
       latestLandmarks: null,
+      landmarkRevision: 0,
       isActive: false,
 
       // Inicia a câmera e o loop de landmarks
@@ -137,6 +138,8 @@
             clearSkeletonCanvas();
           }
           updateLatestLandmarks();
+          // Permite ao Flutter consumir cada resultado apenas uma vez.
+          self.landmarkRevision++;
         });
 
         // Loop de processamento de frames nativo
