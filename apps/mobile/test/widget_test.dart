@@ -11,7 +11,8 @@ void main() {
         child: SinalizaAiApp(),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
 
     // Verificar se o título principal é renderizado
     expect(find.text('LibrAI'), findsAtLeast(1));
