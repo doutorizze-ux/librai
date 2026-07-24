@@ -5,6 +5,7 @@ import 'package:sinaliza_ai/platform/mock_interpreter.dart';
 import 'package:sinaliza_ai/presentation/state/glosses_buffer.dart';
 import 'package:sinaliza_ai/platform/local_translator.dart';
 import 'package:sinaliza_ai/data/datasources/local_history_storage.dart';
+import 'package:sinaliza_ai/domain/sign_phrase_composer.dart';
 
 void main() {
   group('Testes do Buffer Temporal (LandmarkBuffer)', () {
@@ -184,6 +185,18 @@ void main() {
 
       final result2 = await translator.translate(["BOM_DIA"], sessionId: "session_test");
       expect(result2, equals("Bom dia!"));
+
+      final result3 = await translator.translate(
+        ["BOM", "DIA"],
+        sessionId: "session_test",
+      );
+      expect(result3, equals("Bom dia!"));
+
+      final result4 = await translator.translate(
+        ["BOM", "TARDE"],
+        sessionId: "session_test",
+      );
+      expect(result4, equals("Boa tarde!"));
     });
 
     test('Deve efetuar tradução literal em caso de sequência desconhecida', () async {
@@ -191,6 +204,64 @@ void main() {
 
       final result = await translator.translate(["CASA", "AZUL"], sessionId: "session_test");
       expect(result, equals("Casa azul."));
+    });
+  });
+
+  group('Composição linguística de sinais', () {
+    test('Compõe BOM seguido de DIA como Bom dia', () {
+      final composer = SignPhraseComposer();
+
+      final first = composer.accept('BOM');
+      composer.releaseCurrentSign();
+      final second = composer.accept('DIA');
+
+      expect(first?.text, equals('Bom/boa…'));
+      expect(first?.isFinal, isFalse);
+      expect(second?.text, equals('Bom dia!'));
+      expect(second?.glosses, equals(['BOM', 'DIA']));
+    });
+
+    test('Usa o mesmo sinal BOM/BOA para compor Boa tarde', () {
+      final composer = SignPhraseComposer();
+
+      composer.accept('BOA');
+      composer.releaseCurrentSign();
+      final result = composer.accept('TARDE');
+
+      expect(result?.text, equals('Boa tarde!'));
+      expect(result?.glosses, equals(['BOM', 'TARDE']));
+    });
+
+    test('Mantém compatibilidade com rótulos compostos antigos', () {
+      final composer = SignPhraseComposer();
+
+      expect(composer.accept('BOM_DIA')?.text, equals('Bom dia!'));
+      composer.releaseCurrentSign();
+      expect(composer.accept('BOA_TARDE')?.text, equals('Boa tarde!'));
+    });
+
+    test('Não repete o mesmo sinal enquanto ele permanecer na câmera', () {
+      final composer = SignPhraseComposer();
+
+      expect(composer.accept('BOM'), isNotNull);
+      expect(composer.accept('BOM'), isNull);
+      composer.releaseCurrentSign();
+      expect(composer.accept('BOM'), isNotNull);
+    });
+
+    test('Orienta o treinamento separado de expressões compostas', () {
+      expect(
+        SignPhraseComposer.trainingComponentsFor('Bom dia!'),
+        equals(['BOM', 'DIA']),
+      );
+      expect(
+        SignPhraseComposer.trainingComponentsFor('boa tarde'),
+        equals(['BOM', 'TARDE']),
+      );
+      expect(
+        SignPhraseComposer.trainingComponentsFor('OBRIGADO'),
+        isNull,
+      );
     });
   });
 

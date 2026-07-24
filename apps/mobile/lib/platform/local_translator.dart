@@ -8,6 +8,12 @@ class LocalLibrasTranslator implements LibrasTranslator {
   // Dicionário local de regras gramaticais para funcionamento Offline
   final Map<String, String> _offlineDictionary = {
     "BOM_DIA": "Bom dia!",
+    "BOM DIA": "Bom dia!",
+    "BOA DIA": "Bom dia!",
+    "BOM TARDE": "Boa tarde!",
+    "BOA TARDE": "Boa tarde!",
+    "BOM NOITE": "Boa noite!",
+    "BOA NOITE": "Boa noite!",
     "AJUDA": "Você pode me ajudar?",
     "SAÚDE": "Espero que você tenha saúde.",
     "EMERGÊNCIA": "Isto é uma emergência!",

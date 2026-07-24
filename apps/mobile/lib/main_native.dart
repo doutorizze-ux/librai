@@ -7,6 +7,7 @@ import 'package:hand_landmarker/hand_landmarker.dart';
 
 import 'data/native_training_model.dart';
 import 'domain/interfaces/sign_interpreter.dart';
+import 'domain/sign_phrase_composer.dart';
 
 late final List<CameraDescription> _availableCameras;
 
@@ -50,6 +51,7 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
     with WidgetsBindingObserver {
   final NativeModelRepository _modelRepository = NativeModelRepository();
   final LocalKnnInterpreter _interpreter = LocalKnnInterpreter();
+  final SignPhraseComposer _phraseComposer = SignPhraseComposer();
   final Stopwatch _inferenceWatch = Stopwatch();
   final List<String> _predictionHistory = [];
 
@@ -182,12 +184,16 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
       if (_predictionHistory.length > 2) _predictionHistory.removeAt(0);
       if (_predictionHistory.length == 2 &&
           _predictionHistory[0] == _predictionHistory[1]) {
-        _detectedText = bestPrediction.label.replaceAll('_', ' ');
-        _confidence = bestPrediction.confidence;
+        final composition = _phraseComposer.accept(bestPrediction.label);
+        if (composition != null) {
+          _detectedText = composition.text;
+          _confidence = bestPrediction.confidence;
+        }
       }
     } else {
       _predictionHistory.clear();
       if (hands.isEmpty) {
+        _phraseComposer.releaseCurrentSign();
         _detectedText = 'Sinalize em frente à câmera';
         _confidence = 0;
       }
@@ -216,6 +222,7 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _landmarkSubscription?.cancel();
+    _phraseComposer.reset();
     _camera?.stopImageStream();
     _camera?.dispose();
     _landmarker?.dispose();

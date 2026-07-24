@@ -8,6 +8,7 @@ import '../state/landmark_buffer.dart';
 import '../../platform/mock_interpreter.dart';
 import '../../platform/tts_service.dart';
 import '../../platform/local_translator.dart';
+import '../../domain/sign_phrase_composer.dart';
 
 class TranslationScreen extends StatefulWidget {
   const TranslationScreen({super.key});
@@ -22,6 +23,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
   final TtsService _ttsService = TtsService();
   final MockSignInterpreter _interpreter = MockSignInterpreter();
   final LocalLibrasTranslator _translator = LocalLibrasTranslator();
+  final SignPhraseComposer _phraseComposer = SignPhraseComposer();
   Timer? _processingTimer;
   final List<String> _spellingBuffer = [];
   Timer? _spellingEndTimer;
@@ -172,17 +174,31 @@ class _TranslationScreenState extends State<TranslationScreen> {
                 _spellingBuffer.clear();
               }
 
-              // Processamento de palavra/sinal completo
-              final translation = await _translator.translate([votedLabel], sessionId: "session_live");
-              
+              final composition = _phraseComposer.accept(votedLabel);
+              if (composition == null) return;
+
+              if (!composition.isFinal) {
+                setState(() {
+                  _partialText = "Continue a expressão";
+                  _finalText = composition.text;
+                  _confidence = prediction.confidence;
+                });
+                return;
+              }
+
+              final translation = await _translator.translate(
+                composition.glosses,
+                sessionId: "session_live",
+              );
+
               if (translation.isNotEmpty && translation != _finalText) {
                 setState(() {
-                  _partialText = "Sinal detectado: $votedLabel";
+                  _partialText =
+                      "Sinais detectados: ${composition.glosses.join(' + ')}";
                   _finalText = translation;
                   _confidence = prediction.confidence;
                 });
-                
-                // Falar a tradução via TTS
+
                 await _ttsService.speak(translation);
               }
             }
@@ -195,6 +211,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
       }
     } else if (framing == VisionState.waitingPerson) {
       _predictionHistory.clear();
+      _phraseComposer.releaseCurrentSign();
       
       // Se estava no meio de uma soletragem, finaliza imediatamente ao retirar a mão
       if (_spellingBuffer.isNotEmpty) {
@@ -220,6 +237,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
     _processingTimer?.cancel();
     _spellingEndTimer?.cancel();
     _predictionHistory.clear();
+    _phraseComposer.reset();
     _visionService.stop();
     _frameBuffer.clear();
     super.dispose();

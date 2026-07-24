@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
 import '../../platform/mediapipe_interop.dart';
 import '../../platform/tts_service.dart';
+import '../../domain/sign_phrase_composer.dart';
 
 class TrainerScreen extends StatefulWidget {
   const TrainerScreen({super.key});
@@ -80,6 +81,15 @@ class _TrainerScreenState extends State<TrainerScreen> {
       return;
     }
 
+    if (SignPhraseComposer.trainingComponentsFor(text) != null) {
+      _debounceTimer?.cancel();
+      setState(() {
+        _existingSamplesCount = 0;
+        _isLoadingCount = false;
+      });
+      return;
+    }
+
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
       if (!mounted) return;
@@ -119,6 +129,17 @@ class _TrainerScreenState extends State<TrainerScreen> {
     final signName = _signNameController.text.trim().toUpperCase();
     if (signName.isEmpty) {
       _showSnackBar("Por favor, digite o nome do sinal (ex: OBRIGADO)", Colors.redAccent);
+      return;
+    }
+
+    final requiredSigns =
+        SignPhraseComposer.trainingComponentsFor(signName);
+    if (requiredSigns != null) {
+      _showSnackBar(
+        "Grave separadamente: ${requiredSigns.join(' e ')}. "
+        "O tradutor montará a expressão automaticamente.",
+        Colors.orange,
+      );
       return;
     }
 
@@ -416,11 +437,15 @@ class _TrainerScreenState extends State<TrainerScreen> {
                   prefixIcon: const Icon(Icons.label),
                   helperText: _isLoadingCount
                       ? 'Verificando banco de dados...'
+                      : (SignPhraseComposer.trainingComponentsFor(
+                                  _signNameController.text) !=
+                              null
+                          ? 'Expressão com dois sinais: grave cada palavra separadamente.'
                       : (_signNameController.text.trim().isNotEmpty
                           ? (_existingSamplesCount >= 30
                               ? 'Meta atingida! $_existingSamplesCount/30 amostras gravadas (Excelente!).'
                               : 'Amostras gravadas: $_existingSamplesCount/30 (Grave mais para maior precisão).')
-                          : 'Digite o nome do sinal para ver o progresso do treino.'),
+                          : 'Digite o nome do sinal para ver o progresso do treino.')),
                   helperStyle: TextStyle(
                     color: _existingSamplesCount >= 30 ? Colors.green : theme.colorScheme.primary,
                     fontWeight: FontWeight.w500,
