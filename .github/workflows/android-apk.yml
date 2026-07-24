@@ -51,7 +51,7 @@ jobs:
 
       - name: Apply Librai launcher icon
         working-directory: apps/mobile
-        run: dart run flutter_launcher_icons
+        run: dart run flutter_launcher_icons -f flutter_launcher_icons-android.yaml
 
       - name: Build installable release APK
         working-directory: apps/mobile
