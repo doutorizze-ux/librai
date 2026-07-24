@@ -134,3 +134,15 @@ class TrainingSampleResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class TrainingFeature(BaseModel):
+    label: str
+    angles: List[float]
+
+
+class TrainingModelResponse(BaseModel):
+    version: str
+    feature_schema: str = "hand_angles_v1"
+    threshold: float
+    features: List[TrainingFeature]

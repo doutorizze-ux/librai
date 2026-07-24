@@ -179,3 +179,37 @@ def test_predict_sign():
     )
     assert resp.status_code == 200
     assert resp.json()["label"] == "SINAL_DESCONHECIDO"
+
+
+
+def test_export_training_model_for_local_inference():
+    headers = {"X-Trainer-Secret": "librAI_trainer_secret_2026"}
+    landmarks = [
+        {"x": index / 100, "y": (index % 5) / 10, "z": index / 1000}
+        for index in range(21)
+    ]
+
+    create_resp = client.post(
+        "/v1/training/samples",
+        json={"sign_name": "TESTE_LOCAL", "landmarks": landmarks},
+        headers=headers,
+    )
+    assert create_resp.status_code == 201
+
+    model_resp = client.get("/v1/training/model/current")
+    assert model_resp.status_code == 200
+    payload = model_resp.json()
+    assert payload["feature_schema"] == "hand_angles_v1"
+    assert payload["threshold"] == 30.0
+    assert len(payload["version"]) == 16
+    assert any(
+        feature["label"] == "TESTE_LOCAL" and len(feature["angles"]) == 8
+        for feature in payload["features"]
+    )
+
+    delete_resp = client.delete(
+        "/v1/training/samples",
+        params={"sign_name": "TESTE_LOCAL"},
+        headers=headers,
+    )
+    assert delete_resp.status_code == 200

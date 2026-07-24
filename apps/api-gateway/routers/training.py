@@ -1,3 +1,4 @@
+import hashlib
 import os
 from fastapi import APIRouter, Depends, HTTPException, Header, status
 from sqlalchemy.orm import Session
@@ -5,10 +6,45 @@ from sqlalchemy import func
 from database import get_db
 import models
 import schemas
+from routers.translation import extract_hand_angles
 
 router = APIRouter(prefix="/v1", tags=["training"])
 
 TRAINER_SECRET = os.getenv("TRAINER_SECRET", "librAI_trainer_secret_2026")
+
+
+@router.get("/training/model/current", response_model=schemas.TrainingModelResponse)
+def get_current_training_model(db: Session = Depends(get_db)):
+    """Entrega somente características geométricas para inferência local."""
+    samples = db.query(
+        models.TrainingSample.id,
+        models.TrainingSample.sign_name,
+        models.TrainingSample.landmarks,
+        models.TrainingSample.created_at,
+    ).order_by(models.TrainingSample.created_at, models.TrainingSample.id).all()
+
+    features = []
+    version_parts = []
+
+    for sample_id, sign_name, landmarks, created_at in samples:
+        version_parts.append(f"{sample_id}:{created_at.isoformat()}")
+        if not landmarks or len(landmarks) < 21:
+            continue
+
+        for offset in range(0, len(landmarks) - 20, 21):
+            angles = extract_hand_angles(landmarks[offset:offset + 21])
+            if angles:
+                features.append({"label": sign_name, "angles": angles})
+
+    version_source = "|".join(version_parts).encode("utf-8")
+    version = hashlib.sha256(version_source).hexdigest()[:16]
+
+    return {
+        "version": version,
+        "feature_schema": "hand_angles_v1",
+        "threshold": 30.0,
+        "features": features,
+    }
 
 @router.post("/training/samples", response_model=schemas.TrainingSampleResponse, status_code=status.HTTP_201_CREATED)
 def create_training_sample(

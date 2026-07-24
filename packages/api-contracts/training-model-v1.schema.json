@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://librai.app/contracts/training-model-v1.schema.json",
+  "title": "Librai Training Model v1",
+  "type": "object",
+  "required": ["version", "feature_schema", "threshold", "features"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "feature_schema": {
+      "const": "hand_angles_v1"
+    },
+    "threshold": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["label", "angles"],
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "angles": {
+            "type": "array",
+            "minItems": 8,
+            "maxItems": 8,
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

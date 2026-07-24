@@ -43,20 +43,15 @@ jobs:
         run: |
           sed -i 's/android:label="sinaliza_ai"/android:label="Librai"/' android/app/src/main/AndroidManifest.xml
           sed -i '/<manifest/a\    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.CAMERA" />' android/app/src/main/AndroidManifest.xml
+          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/' android/app/build.gradle.kts
 
       - name: Install dependencies
         working-directory: apps/mobile
         run: flutter pub get
 
-      - name: Apply Android Gradle compatibility fix
-        run: |
-          plugin_gradle="$(find "$PUB_CACHE/hosted/pub.dev" -path '*/flutter_inappwebview_android-*/android/build.gradle' -print -quit)"
-          test -n "$plugin_gradle"
-          sed -i "s/proguard-android.txt/proguard-android-optimize.txt/g" "$plugin_gradle"
-
       - name: Build installable release APK
         working-directory: apps/mobile
-        run: flutter build apk --release --target lib/main_android.dart
+        run: flutter build apk --release --target lib/main_native.dart
 
       - name: Name APK
         run: mv apps/mobile/build/app/outputs/flutter-apk/app-release.apk Librai.apk
