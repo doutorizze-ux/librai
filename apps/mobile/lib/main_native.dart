@@ -242,6 +242,16 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              ClipRRect(
+                borderRadius: BorderRadius.all(Radius.circular(24)),
+                child: Image(
+                  image: AssetImage('assets/branding/librai-icon.png'),
+                  width: 112,
+                  height: 112,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              SizedBox(height: 24),
               CircularProgressIndicator(),
               SizedBox(height: 16),
               Text('Preparando câmera e modelo nativos…'),
@@ -280,6 +290,17 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
                 children: [
                   Row(
                     children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.asset(
+                          'assets/branding/librai-icon.png',
+                          width: 42,
+                          height: 42,
+                          fit: BoxFit.cover,
+                          semanticLabel: 'Logo do Librai',
+                        ),
+                      ),
+                      const SizedBox(width: 12),
                       const Expanded(
                         child: Text(
                           'Librai • Nativo',
