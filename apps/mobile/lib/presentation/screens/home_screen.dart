@@ -220,24 +220,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Semantics(
-                      button: true,
-                      label: 'Aprender Sinais Dicionário',
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 70),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16.0),
-                          ),
-                        ),
-                        icon: const Icon(Icons.menu_book),
-                        label: const Text('Aprender'),
-                        onPressed: () => context.push('/dictionary'),
-                      ),
-                    ),
-                  ),
                 ],
               ),
               const SizedBox(height: 48),

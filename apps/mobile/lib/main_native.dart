@@ -11,7 +11,6 @@ import 'data/native_training_model.dart';
 import 'domain/interfaces/sign_interpreter.dart';
 import 'domain/sign_phrase_composer.dart';
 import 'presentation/screens/conversation_screen.dart';
-import 'presentation/screens/dictionary_screen.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/trainer_screen.dart';
 
@@ -42,10 +41,6 @@ class LibraiNativeApp extends StatelessWidget {
         GoRoute(
           path: '/translate',
           builder: (context, state) => const NativeTranslationScreen(),
-        ),
-        GoRoute(
-          path: '/dictionary',
-          builder: (context, state) => const DictionaryScreen(),
         ),
         GoRoute(
           path: '/conversation',
