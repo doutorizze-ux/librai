@@ -1,10 +1,12 @@
 import pytest
+from concurrent.futures import ThreadPoolExecutor
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from database import Base, get_db
 from main import app
 import models
+from routers import training
 
 # Configuração de banco de dados SQLite temporário para testes
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
@@ -28,9 +30,37 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def setup_db():
+    training.TRAINER_ACCESS_CODE = "codigo-professores-seguro"
+    training.TRAINER_DELETE_SECRET = "segredo-admin-exclusao"
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
+
+
+def trainer_headers(name="Professora Teste"):
+    response = client.post(
+        "/v1/training/auth",
+        json={
+            "trainer_name": name,
+            "access_code": "codigo-professores-seguro",
+        },
+    )
+    assert response.status_code == 200
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+def valid_training_landmarks():
+    frames = []
+    for frame in range(10):
+        frames.extend([
+            {
+                "x": index / 100 + frame / 10000,
+                "y": (index % 5) / 10,
+                "z": index / 1000,
+            }
+            for index in range(21)
+        ])
+    return frames
 
 def test_health():
     response = client.get("/health")
@@ -101,51 +131,117 @@ def test_privacy_consents_flow():
 
 
 def test_create_training_sample():
-    # 1. Enviar sem o cabeçalho secreto
+    landmarks = valid_training_landmarks()
+
+    # 1. Recusar envio sem sessão autenticada
     response = client.post(
         "/v1/training/samples",
-        json={"sign_name": "obrigado", "landmarks": [{"x": 0.1, "y": 0.2, "z": 0.3}]}
+        json={"sign_name": "obrigado", "landmarks": landmarks},
     )
-    assert response.status_code == 422
+    assert response.status_code == 401
     
-    # 2. Enviar com cabeçalho secreto incorreto
+    # 2. Recusar código de professor incorreto
     response = client.post(
-        "/v1/training/samples",
-        json={"sign_name": "obrigado", "landmarks": [{"x": 0.1, "y": 0.2, "z": 0.3}]},
-        headers={"X-Trainer-Secret": "errado"}
+        "/v1/training/auth",
+        json={"trainer_name": "Teste", "access_code": "codigo-incorreto"},
     )
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Chave secreta de treinamento inválida ou ausente."
+    assert response.status_code == 401
     
-    # 3. Enviar com cabeçalho secreto correto
+    # 3. Enviar com sessão correta
+    headers = trainer_headers()
     response = client.post(
         "/v1/training/samples",
-        json={"sign_name": "obrigado", "landmarks": [{"x": 0.1, "y": 0.2, "z": 0.3}]},
-        headers={"X-Trainer-Secret": "librAI_trainer_secret_2026"}
+        json={"sign_name": "obrigado", "landmarks": landmarks},
+        headers=headers,
     )
     assert response.status_code == 201
     data = response.json()
     assert data["sign_name"] == "OBRIGADO"
-    assert data["landmarks"] == [{"x": 0.1, "y": 0.2, "z": 0.3}]
+    assert len(data["landmarks"]) == 210
     assert "id" in data
 
     # 4. Consultar contagem de amostras
     count_resp = client.get(
         "/v1/training/samples/count?sign_name=obrigado",
-        headers={"X-Trainer-Secret": "librAI_trainer_secret_2026"}
+        headers=headers,
     )
     assert count_resp.status_code == 200
     assert count_resp.json()["sign_name"] == "OBRIGADO"
     assert count_resp.json()["count"] == 1
 
+    with TestingSessionLocal() as db:
+        audit = db.query(models.AuditLog).filter(
+            models.AuditLog.action == "TRAINING_SAMPLE_CREATE"
+        ).one()
+        assert audit.user_id == "Professora Teste"
+
+
+def test_training_rejects_incomplete_or_invalid_landmarks():
+    headers = trainer_headers()
+    incomplete = [{"x": 0.1, "y": 0.2, "z": 0.3}] * 21
+    response = client.post(
+        "/v1/training/samples",
+        json={"sign_name": "TESTE", "landmarks": incomplete},
+        headers=headers,
+    )
+    assert response.status_code == 422
+
+
+def test_five_professors_can_submit_without_losing_samples():
+    landmarks = valid_training_landmarks()
+
+    def submit(index):
+        headers = trainer_headers(f"Professor {index}")
+        return client.post(
+            "/v1/training/samples",
+            json={"sign_name": "CONCORRENCIA", "landmarks": landmarks},
+            headers=headers,
+        ).status_code
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        statuses = list(executor.map(submit, range(1, 6)))
+
+    assert statuses == [201, 201, 201, 201, 201]
+    headers = trainer_headers()
+    count_resp = client.get(
+        "/v1/training/samples/count?sign_name=CONCORRENCIA",
+        headers=headers,
+    )
+    assert count_resp.status_code == 200
+    assert count_resp.json()["count"] == 5
+
+    with TestingSessionLocal() as db:
+        audit_count = db.query(models.AuditLog).filter(
+            models.AuditLog.action == "TRAINING_SAMPLE_CREATE",
+            models.AuditLog.target.contains(":CONCORRENCIA:"),
+        ).count()
+        assert audit_count == 5
+
+    invalid = valid_training_landmarks()
+    invalid[0]["x"] = 99
+    response = client.post(
+        "/v1/training/samples",
+        json={"sign_name": "TESTE", "landmarks": invalid},
+        headers=headers,
+    )
+    assert response.status_code == 422
+
+    repeated_hand = valid_training_landmarks()[:21] * 10
+    response = client.post(
+        "/v1/training/samples",
+        json={"sign_name": "TESTE", "landmarks": repeated_hand},
+        headers=headers,
+    )
+    assert response.status_code == 422
+
 
 def test_delete_training_samples_with_url_punctuation():
-    headers = {"X-Trainer-Secret": "librAI_trainer_secret_2026"}
+    headers = trainer_headers()
     sign_name = "OI, TUDO BEM? BOA TARDE"
 
     create_resp = client.post(
         "/v1/training/samples",
-        json={"sign_name": sign_name, "landmarks": [{"x": 0.1, "y": 0.2, "z": 0.3}]},
+        json={"sign_name": sign_name, "landmarks": valid_training_landmarks()},
         headers=headers,
     )
     assert create_resp.status_code == 201
@@ -153,7 +249,7 @@ def test_delete_training_samples_with_url_punctuation():
     delete_resp = client.delete(
         "/v1/training/samples",
         params={"sign_name": sign_name},
-        headers=headers,
+        headers={"X-Trainer-Delete-Secret": "segredo-admin-exclusao"},
     )
     assert delete_resp.status_code == 200
     assert delete_resp.json() == {"sign_name": sign_name, "deleted_count": 1}
@@ -161,7 +257,7 @@ def test_delete_training_samples_with_url_punctuation():
     missing_resp = client.delete(
         "/v1/training/samples",
         params={"sign_name": sign_name},
-        headers=headers,
+        headers={"X-Trainer-Delete-Secret": "segredo-admin-exclusao"},
     )
     assert missing_resp.status_code == 404
 
@@ -183,11 +279,8 @@ def test_predict_sign():
 
 
 def test_export_training_model_for_local_inference():
-    headers = {"X-Trainer-Secret": "librAI_trainer_secret_2026"}
-    landmarks = [
-        {"x": index / 100, "y": (index % 5) / 10, "z": index / 1000}
-        for index in range(21)
-    ]
+    headers = trainer_headers()
+    landmarks = valid_training_landmarks()
 
     create_resp = client.post(
         "/v1/training/samples",
@@ -210,17 +303,14 @@ def test_export_training_model_for_local_inference():
     delete_resp = client.delete(
         "/v1/training/samples",
         params={"sign_name": "TESTE_LOCAL"},
-        headers=headers,
+        headers={"X-Trainer-Delete-Secret": "segredo-admin-exclusao"},
     )
     assert delete_resp.status_code == 200
 
 
 def test_boa_is_canonicalized_as_bom_visual_class():
-    headers = {"X-Trainer-Secret": "librAI_trainer_secret_2026"}
-    landmarks = [
-        {"x": index / 100, "y": (index % 5) / 10, "z": index / 1000}
-        for index in range(21)
-    ]
+    headers = trainer_headers()
+    landmarks = valid_training_landmarks()
 
     create_resp = client.post(
         "/v1/training/samples",
@@ -239,6 +329,6 @@ def test_boa_is_canonicalized_as_bom_visual_class():
     delete_resp = client.delete(
         "/v1/training/samples",
         params={"sign_name": "BOM"},
-        headers=headers,
+        headers={"X-Trainer-Delete-Secret": "segredo-admin-exclusao"},
     )
     assert delete_resp.status_code == 200

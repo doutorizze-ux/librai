@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://librai.app/contracts/training-session-v1.schema.json",
+  "title": "Librai Training Session v1",
+  "type": "object",
+  "required": ["sign_name", "landmarks"],
+  "properties": {
+    "sign_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "landmarks": {
+      "type": "array",
+      "minItems": 210,
+      "maxItems": 5040,
+      "description": "Entre 10 e 240 quadros/mãos completos, sempre em blocos de 21 pontos.",
+      "items": {
+        "type": "object",
+        "required": ["x", "y", "z"],
+        "additionalProperties": false,
+        "properties": {
+          "x": {"type": "number", "minimum": -0.5, "maximum": 1.5},
+          "y": {"type": "number", "minimum": -0.5, "maximum": 1.5},
+          "z": {"type": "number", "minimum": -3.0, "maximum": 3.0}
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

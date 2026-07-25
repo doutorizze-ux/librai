@@ -45,6 +45,9 @@ services:
       - DATABASE_URL=postgresql://sinaliza_user:sinaliza_secure_pass123@postgres:5432/sinaliza_db
       - REDIS_URL=redis://redis:6379/0
       - ENVIRONMENT=development
+      - SECRET_KEY=${SECRET_KEY}
+      - TRAINER_ACCESS_CODE=${TRAINER_ACCESS_CODE}
+      - TRAINER_DELETE_SECRET=${TRAINER_DELETE_SECRET}
     depends_on:
       postgres:
         condition: service_healthy

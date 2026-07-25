@@ -1,17 +1,69 @@
 import hashlib
 import os
+import secrets
+from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from database import get_db
 import models
 import schemas
+import security
 from routers.translation import extract_hand_angles
 from sign_labels import canonical_visual_label
 
 router = APIRouter(prefix="/v1", tags=["training"])
 
-TRAINER_SECRET = os.getenv("TRAINER_SECRET", "librAI_trainer_secret_2026")
+TRAINER_ACCESS_CODE = os.getenv("TRAINER_ACCESS_CODE", "")
+TRAINER_DELETE_SECRET = os.getenv("TRAINER_DELETE_SECRET", "")
+trainer_bearer = HTTPBearer(auto_error=False)
+
+
+def get_current_trainer(
+    credentials: HTTPAuthorizationCredentials = Depends(trainer_bearer),
+) -> str:
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sessão de treinamento ausente.",
+        )
+    payload = security.decode_token(credentials.credentials)
+    if not payload or payload.get("scope") != "training" or not payload.get("trainer"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sessão de treinamento inválida ou expirada.",
+        )
+    return str(payload["trainer"])
+
+
+@router.post(
+    "/training/auth",
+    response_model=schemas.TrainerTokenResponse,
+)
+def authenticate_trainer(request: schemas.TrainerLoginRequest):
+    if not TRAINER_ACCESS_CODE:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Acesso de professores ainda não configurado.",
+        )
+    if not secrets.compare_digest(request.access_code, TRAINER_ACCESS_CODE):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Código de acesso incorreto.",
+        )
+    access_token = security.create_access_token(
+        {
+            "scope": "training",
+            "trainer": request.trainer_name,
+        },
+        expires_delta=timedelta(hours=8),
+    )
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in_seconds": 28800,
+    }
 
 
 @router.get("/training/model/current", response_model=schemas.TrainingModelResponse)
@@ -54,19 +106,19 @@ def get_current_training_model(db: Session = Depends(get_db)):
 def create_training_sample(
     sample: schemas.TrainingSampleCreate,
     db: Session = Depends(get_db),
-    x_trainer_secret: str = Header(..., alias="X-Trainer-Secret")
+    trainer_name: str = Depends(get_current_trainer),
 ):
-    if x_trainer_secret != TRAINER_SECRET:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Chave secreta de treinamento inválida ou ausente."
-        )
-    
     db_sample = models.TrainingSample(
         sign_name=canonical_visual_label(sample.sign_name),
-        landmarks=sample.landmarks
+        landmarks=[point.model_dump() for point in sample.landmarks],
     )
     db.add(db_sample)
+    db.flush()
+    db.add(models.AuditLog(
+        user_id=trainer_name,
+        action="TRAINING_SAMPLE_CREATE",
+        target=f"{db_sample.id}:{db_sample.sign_name}:{len(sample.landmarks) // 21}_frames",
+    ))
     db.commit()
     db.refresh(db_sample)
     return db_sample
@@ -76,20 +128,16 @@ def create_training_sample(
 def get_sample_count(
     sign_name: str,
     db: Session = Depends(get_db),
-    x_trainer_secret: str = Header(..., alias="X-Trainer-Secret")
+    trainer_name: str = Depends(get_current_trainer),
 ):
-    if x_trainer_secret != TRAINER_SECRET:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Chave secreta de treinamento inválida ou ausente."
-        )
-    
+    name = canonical_visual_label(sign_name)
+    aliases = ["BOM", "BOA"] if name == "BOM" else [name]
     count = db.query(models.TrainingSample).filter(
-        models.TrainingSample.sign_name == sign_name.upper().strip()
+        models.TrainingSample.sign_name.in_(aliases)
     ).count()
     
     return {
-        "sign_name": sign_name.upper().strip(),
+        "sign_name": name,
         "count": count
     }
 
@@ -97,22 +145,22 @@ def get_sample_count(
 @router.get("/training/samples/summary")
 def get_samples_summary(
     db: Session = Depends(get_db),
-    x_trainer_secret: str = Header(..., alias="X-Trainer-Secret")
+    trainer_name: str = Depends(get_current_trainer),
 ):
-    if x_trainer_secret != TRAINER_SECRET:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Chave secreta de treinamento inválida ou ausente."
-        )
-    
     results = db.query(
         models.TrainingSample.sign_name,
         func.count(models.TrainingSample.id).label("count")
     ).group_by(models.TrainingSample.sign_name).all()
     
+    canonical_counts = {}
+    for sign_name, count in results:
+        canonical_name = canonical_visual_label(sign_name)
+        canonical_counts[canonical_name] = (
+            canonical_counts.get(canonical_name, 0) + count
+        )
     return [
-        {"sign_name": row[0], "count": row[1]}
-        for row in results
+        {"sign_name": name, "count": canonical_counts[name]}
+        for name in sorted(canonical_counts)
     ]
 
 
@@ -120,9 +168,12 @@ def get_samples_summary(
 def delete_training_samples(
     sign_name: str,
     db: Session = Depends(get_db),
-    x_trainer_secret: str = Header(..., alias="X-Trainer-Secret")
+    x_trainer_secret: str = Header(..., alias="X-Trainer-Delete-Secret")
 ):
-    if x_trainer_secret != TRAINER_SECRET:
+    if not TRAINER_DELETE_SECRET or not secrets.compare_digest(
+        x_trainer_secret,
+        TRAINER_DELETE_SECRET,
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Chave secreta de treinamento inválida ou ausente."
@@ -141,10 +192,13 @@ def delete_training_samples(
 def delete_training_samples_by_query(
     sign_name: str,
     db: Session = Depends(get_db),
-    x_trainer_secret: str = Header(..., alias="X-Trainer-Secret")
+    x_trainer_secret: str = Header(..., alias="X-Trainer-Delete-Secret")
 ):
     """Exclui amostras sem colocar o nome do sinal no caminho da URL."""
-    if x_trainer_secret != TRAINER_SECRET:
+    if not TRAINER_DELETE_SECRET or not secrets.compare_digest(
+        x_trainer_secret,
+        TRAINER_DELETE_SECRET,
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Chave secreta de treinamento inválida ou ausente."

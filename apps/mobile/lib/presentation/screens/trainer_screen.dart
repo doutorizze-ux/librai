@@ -40,23 +40,135 @@ class _TrainerScreenState extends State<TrainerScreen> {
   bool _isLoadingCount = false;
   List<Map<String, dynamic>> _trainedSignsSummary = [];
   bool _isLoadingSummary = false;
+  String? _trainerToken;
+  String? _trainerName;
+  bool _trainerServicesStarted = false;
+  int _validCapturedFrames = 0;
+  int _attemptedCapturedFrames = 0;
+  int _lastCapturedRevision = -1;
+
+  Options get _authorizedOptions => Options(
+        headers: {'Authorization': 'Bearer $_trainerToken'},
+      );
 
   @override
   void initState() {
     super.initState();
+    _signNameController.addListener(_onSignNameChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _requestTrainerAccess());
+  }
+
+  Future<void> _requestTrainerAccess() async {
+    final nameController = TextEditingController();
+    final codeController = TextEditingController();
+    String? errorMessage;
+
+    final authenticated = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Acesso do professor'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Identifique-se antes de contribuir. Cada envio ficará '
+                'registrado para controle de qualidade.',
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: nameController,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                  labelText: 'Nome completo',
+                  prefixIcon: Icon(Icons.person_outline),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: codeController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Código de acesso',
+                  prefixIcon: Icon(Icons.lock_outline),
+                ),
+                onSubmitted: (_) {},
+              ),
+              if (errorMessage != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  errorMessage!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final name = nameController.text.trim();
+                final code = codeController.text;
+                if (name.length < 2 || code.length < 8) {
+                  setDialogState(() {
+                    errorMessage = 'Informe seu nome e o código recebido.';
+                  });
+                  return;
+                }
+                try {
+                  final response = await _dio.post(
+                    '/v1/training/auth',
+                    data: {'trainer_name': name, 'access_code': code},
+                  );
+                  _trainerToken = response.data['access_token'] as String?;
+                  _trainerName = name;
+                  if (_trainerToken == null) throw StateError('Token ausente');
+                  if (dialogContext.mounted) {
+                    Navigator.pop(dialogContext, true);
+                  }
+                } on DioException catch (error) {
+                  setDialogState(() {
+                    errorMessage = error.response?.data?['detail']?.toString() ??
+                        'Não foi possível autenticar.';
+                  });
+                }
+              },
+              child: const Text('Entrar'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    nameController.dispose();
+    codeController.dispose();
+    if (!mounted) return;
+    if (authenticated != true) {
+      context.pop();
+      return;
+    }
+    _startTrainerServices();
+  }
+
+  void _startTrainerServices() {
+    if (_trainerServicesStarted) return;
+    _trainerServicesStarted = true;
     _visionService.registerVideoView();
     _visionService.start();
-
-    _signNameController.addListener(_onSignNameChanged);
     _fetchSummary();
-
-    // Loop de monitoramento de mão (apenas para feedback visual do frame)
     _frameTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
       if (!mounted) return;
       final handsOk = _visionService.isHandsDetected();
-      setState(() {
-        _handsDetected = handsOk;
-      });
+      if (_handsDetected != handsOk) {
+        setState(() => _handsDetected = handsOk);
+      }
+    });
+    setState(() {
+      _statusMessage = 'Professor: $_trainerName • Posicione a mão na câmera';
     });
   }
 
@@ -72,6 +184,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
   }
 
   void _onSignNameChanged() {
+    if (_trainerToken == null) return;
     final text = _signNameController.text.trim().toUpperCase();
     if (text.isEmpty) {
       setState(() {
@@ -110,11 +223,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
         final response = await _dio.get(
           '/v1/training/samples/count',
           queryParameters: {'sign_name': text},
-          options: Options(
-            headers: {
-              'X-Trainer-Secret': 'librAI_trainer_secret_2026',
-            },
-          ),
+          options: _authorizedOptions,
         );
         if (mounted && response.statusCode == 200) {
           setState(() {
@@ -186,6 +295,9 @@ class _TrainerScreenState extends State<TrainerScreen> {
     setState(() {
       _isRecording = true;
       _recordedLandmarks.clear();
+      _validCapturedFrames = 0;
+      _attemptedCapturedFrames = 0;
+      _lastCapturedRevision = _visionService.getLandmarkRevision();
       _statusMessage = "Gravando sinal: $signName";
     });
 
@@ -196,10 +308,23 @@ class _TrainerScreenState extends State<TrainerScreen> {
         return;
       }
 
+      _attemptedCapturedFrames++;
+      final revision = _visionService.getLandmarkRevision();
+      if (revision == _lastCapturedRevision) {
+        frameCount++;
+        if (frameCount >= 60) {
+          timer.cancel();
+          _stopAndUploadCapture(signName);
+        }
+        return;
+      }
+      _lastCapturedRevision = revision;
       final latest = _visionService.getLatestLandmarks();
-      if (latest != null && latest.isNotEmpty) {
-        // Acumular todos os pontos no dataset do sinal
+      if (latest != null &&
+          latest.length >= 21 &&
+          latest.length % 21 == 0) {
         _recordedLandmarks.addAll(latest);
+        _validCapturedFrames += latest.length ~/ 21;
       }
 
       frameCount++;
@@ -218,23 +343,24 @@ class _TrainerScreenState extends State<TrainerScreen> {
       _statusMessage = "Enviando dados para o servidor...";
     });
 
-    if (_recordedLandmarks.isEmpty) {
+    if (_validCapturedFrames < 10) {
       setState(() {
         _isUploading = false;
-        _statusMessage = "Nenhum movimento capturado. Tente novamente.";
+        _statusMessage =
+            "Captura insuficiente: mantenha a mão visível durante a gravação.";
       });
-      _showSnackBar("Erro: Nenhum landmark capturado na câmera.", Colors.redAccent);
+      _showSnackBar(
+        "Gravação recusada: somente $_validCapturedFrames quadro(s) útil(eis). "
+        "São necessários pelo menos 10.",
+        Colors.redAccent,
+      );
       return;
     }
 
     try {
       final response = await _dio.post(
         '/v1/training/samples',
-        options: Options(
-          headers: {
-            'X-Trainer-Secret': 'librAI_trainer_secret_2026',
-          },
-        ),
+        options: _authorizedOptions,
         data: {
           'sign_name': signName,
           'landmarks': _recordedLandmarks,
@@ -243,7 +369,9 @@ class _TrainerScreenState extends State<TrainerScreen> {
 
       if (response.statusCode == 201) {
         setState(() {
-          _statusMessage = "Sinal '$signName' enviado com sucesso!";
+          _statusMessage =
+              "Sinal '$signName' enviado: $_validCapturedFrames quadros novos "
+              "em $_attemptedCapturedFrames leituras.";
           _signNameController.clear();
           _existingSamplesCount = 0;
           _isLoadingCount = false;
@@ -252,16 +380,15 @@ class _TrainerScreenState extends State<TrainerScreen> {
         _showSnackBar("Sinal enviado com sucesso para a base da IA!", Colors.green);
         _fetchSummary();
       }
-    } catch (e) {
-      debugPrint("Erro ao enviar dados de treino: $e");
+    } on DioException catch (error) {
+      debugPrint("Erro ao enviar dados de treino: $error");
       setState(() {
-        _statusMessage = "Falha ao enviar sinal. Verifique a conexão.";
+        _statusMessage = error.response?.data?['detail']?.toString() ??
+            "Falha ao enviar sinal. Verifique a conexão.";
       });
-      _showSnackBar("Falha de conexão com o servidor Coolify.", Colors.redAccent);
+      _showSnackBar(_statusMessage, Colors.redAccent);
     } finally {
-      setState(() {
-        _isUploading = false;
-      });
+      if (mounted) setState(() => _isUploading = false);
     }
   }
 
@@ -270,9 +397,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
     try {
       final response = await _dio.get(
         '/v1/training/samples/summary',
-        options: Options(
-          headers: {'X-Trainer-Secret': 'librAI_trainer_secret_2026'},
-        ),
+        options: _authorizedOptions,
       );
       if (mounted && response.statusCode == 200) {
         final data = response.data as List<dynamic>? ?? [];
@@ -293,53 +418,6 @@ class _TrainerScreenState extends State<TrainerScreen> {
       debugPrint("Erro ao buscar resumo de sinais: $e");
     } finally {
       if (mounted) setState(() => _isLoadingSummary = false);
-    }
-  }
-
-  Future<void> _deleteSignSamples(String signName) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text("Refazer Sinal '$signName'?"),
-        content: Text("Isso apagará todas as amostras gravadas de '$signName' para que você possa regravar do zero."),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancelar")),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text("Apagar e Refazer"),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    try {
-      final response = await _dio.delete(
-        '/v1/training/samples',
-        queryParameters: {'sign_name': signName},
-        options: Options(
-          headers: {'X-Trainer-Secret': 'librAI_trainer_secret_2026'},
-        ),
-      );
-      if (mounted && response.statusCode == 200) {
-        final deletedCount = response.data['deleted_count'] as int? ?? 0;
-        _showSnackBar(
-          "$deletedCount amostra(s) de '$signName' apagada(s).",
-          Colors.orange,
-        );
-        _signNameController.text = signName;
-        await _fetchSummary();
-      }
-    } on DioException catch (e) {
-      final detail = e.response?.data is Map
-          ? e.response?.data['detail']?.toString()
-          : null;
-      _showSnackBar(
-        detail ?? "Erro ao apagar as amostras. Tente novamente.",
-        Colors.redAccent,
-      );
     }
   }
 
@@ -465,8 +543,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
                           ? 'BOA usa o mesmo gesto de BOM: treine somente BOM.'
                       : (_signNameController.text.trim().isNotEmpty
                           ? (_existingSamplesCount >= 30
-                              ? 'Meta atingida! $_existingSamplesCount/30 amostras gravadas (Excelente!).'
-                              : 'Amostras gravadas: $_existingSamplesCount/30 (Grave mais para maior precisão).')
+                              ? 'Meta atingida! $_existingSamplesCount/30 sessões gravadas.'
+                              : 'Sessões gravadas: $_existingSamplesCount/30. Com 5 professores, faça 6 por pessoa.')
                           : 'Digite o nome do sinal para ver o progresso do treino.'))),
                   helperStyle: TextStyle(
                     color: _existingSamplesCount >= 30 ? Colors.green : theme.colorScheme.primary,
@@ -479,6 +557,41 @@ class _TrainerScreenState extends State<TrainerScreen> {
                   fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
                 ),
                 textCapitalization: TextCapitalization.characters,
+              ),
+              const SizedBox(height: 20),
+
+              Semantics(
+                container: true,
+                label: 'Orientações obrigatórias para treinamento',
+                child: Card(
+                  elevation: 0,
+                  color: theme.colorScheme.primaryContainer.withOpacity(0.35),
+                  child: const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Antes de gravar',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          '• Grave um único sinal por vez.\n'
+                          '• BOM DIA, BOA TARDE e BOA NOITE são combinações: '
+                          'grave BOM, DIA, TARDE e NOITE separadamente.\n'
+                          '• Cada professor deve fazer 6 sessões por sinal, '
+                          'variando levemente distância e posição.\n'
+                          '• Mantenha mãos inteiras visíveis, boa iluminação '
+                          'e fundo sem movimento.',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(height: 20),
 
@@ -568,7 +681,9 @@ class _TrainerScreenState extends State<TrainerScreen> {
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                               ),
                               subtitle: Text(
-                                isComplete ? "$count/30 amostras (Excelente!)" : "$count/30 amostras",
+                                isComplete
+                                    ? "$count/30 sessões (meta atingida)"
+                                    : "$count/30 sessões",
                                 style: TextStyle(
                                   color: isComplete ? Colors.green : Colors.orange,
                                   fontWeight: FontWeight.w500,
@@ -593,12 +708,6 @@ class _TrainerScreenState extends State<TrainerScreen> {
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                                    tooltip: "Refazer / Apagar",
-                                    onPressed: () => _deleteSignSamples(name),
                                   ),
                                 ],
                               ),

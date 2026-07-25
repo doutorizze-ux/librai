@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import List, Optional
 from datetime import datetime
 
@@ -122,9 +122,49 @@ class AuditLogResponse(BaseModel):
 
 
 # --- TRAINING SCHEMAS ---
+class TrainerLoginRequest(BaseModel):
+    trainer_name: str = Field(min_length=2, max_length=80)
+    access_code: str = Field(min_length=8, max_length=128)
+
+    @field_validator("trainer_name")
+    @classmethod
+    def normalize_trainer_name(cls, value: str) -> str:
+        return " ".join(value.strip().split())
+
+
+class TrainerTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in_seconds: int = 28800
+
+
+class TrainingLandmark(BaseModel):
+    x: float = Field(ge=-0.5, le=1.5, allow_inf_nan=False)
+    y: float = Field(ge=-0.5, le=1.5, allow_inf_nan=False)
+    z: float = Field(ge=-3.0, le=3.0, allow_inf_nan=False)
+
+
 class TrainingSampleCreate(BaseModel):
-    sign_name: str
-    landmarks: List[dict]
+    sign_name: str = Field(min_length=1, max_length=64)
+    landmarks: List[TrainingLandmark] = Field(min_length=210, max_length=5040)
+
+    @field_validator("landmarks")
+    @classmethod
+    def validate_complete_hands(cls, value):
+        if len(value) % 21 != 0:
+            raise ValueError("landmarks deve conter blocos completos de 21 pontos")
+        signatures = set()
+        for offset in range(0, len(value), 21):
+            hand = value[offset:offset + 21]
+            signatures.add(tuple(
+                (round(point.x, 5), round(point.y, 5), round(point.z, 5))
+                for point in hand
+            ))
+        if len(signatures) < 3:
+            raise ValueError(
+                "captura sem variação suficiente; grave quadros novos da câmera"
+            )
+        return value
 
 class TrainingSampleResponse(BaseModel):
     id: str
