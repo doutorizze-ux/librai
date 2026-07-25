@@ -9,6 +9,9 @@ import '../../platform/local_translator.dart';
 import '../state/glosses_buffer.dart';
 import '../../platform/mediapipe_interop.dart';
 import '../../platform/mock_interpreter.dart';
+import '../../domain/interfaces/speech_recognizer.dart';
+import '../../platform/device_speech_recognizer.dart';
+import 'reference_sequence_screen.dart';
 
 class ConversationScreen extends StatefulWidget {
   const ConversationScreen({super.key});
@@ -22,6 +25,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
   final LocalLibrasTranslator _translator = LocalLibrasTranslator();
   final LocalHistoryStorage _historyStorage = LocalHistoryStorage();
   final GlossesBuffer _glossesBuffer = GlossesBuffer();
+  final SpeechRecognizer _speechRecognizer = DeviceSpeechRecognizer();
 
   final List<String> _chatTranscript = [];
   final TextEditingController _textController = TextEditingController();
@@ -37,6 +41,8 @@ class _ConversationScreenState extends State<ConversationScreen> {
   final List<String> _predictionHistory = [];
   bool _handsDetected = false;
   bool _isProcessing = false;
+  bool _speechAvailable = false;
+  bool _isListening = false;
 
   @override
   void initState() {
@@ -44,6 +50,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
     _visionService.registerVideoView();
     _visionService.start();
     _interpreter.loadModel("weights.json");
+    _initializeSpeech();
 
     _processingTimer = Timer.periodic(const Duration(milliseconds: 33), (timer) {
       if (!mounted) return;
@@ -60,6 +67,30 @@ class _ConversationScreenState extends State<ConversationScreen> {
         _processFrame(landmarks);
       }
     });
+  }
+
+  Future<void> _initializeSpeech() async {
+    final available = await _speechRecognizer.initialize();
+    if (mounted) setState(() => _speechAvailable = available);
+  }
+
+  Future<void> _toggleListening() async {
+    if (!_speechAvailable) return;
+    if (_speechRecognizer.isListening) {
+      await _speechRecognizer.stop();
+      if (mounted) setState(() => _isListening = false);
+      return;
+    }
+    await _speechRecognizer.start((text) {
+      if (!mounted) return;
+      setState(() {
+        _textController.text = text;
+        _textController.selection = TextSelection.collapsed(
+          offset: text.length,
+        );
+      });
+    });
+    if (mounted) setState(() => _isListening = true);
   }
 
   Future<void> _processFrame(List<Map<String, double>> landmarks) async {
@@ -83,7 +114,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
                              _predictionHistory[0] == _predictionHistory[1];
         
         if (isConsistent) {
-          await _simulateDeafSign(prediction.label);
+          await _handleDetectedSign(prediction.label);
         }
       }
     } catch (e) {
@@ -98,12 +129,13 @@ class _ConversationScreenState extends State<ConversationScreen> {
     _textController.dispose();
     _scrollController.dispose();
     _processingTimer?.cancel();
+    _speechRecognizer.stop();
     _visionService.stop();
     super.dispose();
   }
 
   // Ouvinte envia uma mensagem de texto (que pode ser reproduzida via TTS)
-  void _sendHearingMessage() {
+  Future<void> _sendHearingMessage() async {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
 
@@ -112,10 +144,15 @@ class _ConversationScreenState extends State<ConversationScreen> {
       _textController.clear();
     });
     _scrollToBottom();
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ReferenceSequenceScreen(text: text),
+      ),
+    );
   }
 
   // Simula a detecção de um sinal de Libras pela câmera do surdo
-  Future<void> _simulateDeafSign(String gloss) async {
+  Future<void> _handleDetectedSign(String gloss) async {
     // Adiciona ao buffer de glosses com deduplicação
     _glossesBuffer.addGloss(gloss);
 
@@ -251,33 +288,11 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
                     Positioned(
                       bottom: 8,
-                      left: 8,
                       right: 8,
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            _buildSimulateButton('BOM_DIA'),
-                            const SizedBox(width: 8),
-                            _buildSimulateButton('AJUDA'),
-                            const SizedBox(width: 8),
-                            _buildSimulateButton('SAÚDE'),
-                            const SizedBox(width: 8),
-                            _buildSimulateButton('EMERGÊNCIA'),
-                            const SizedBox(width: 8),
-                            _buildSimulateButton('EU'),
-                            const SizedBox(width: 8),
-                            _buildSimulateButton('IR'),
-                            const SizedBox(width: 8),
-                            _buildSimulateButton('HOSPITAL'),
-                            const SizedBox(width: 8),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                              onPressed: _finalizeDeafSentence,
-                              child: const Text('Falar Frase (TTS)'),
-                            ),
-                          ],
-                        ),
+                      child: FilledButton.icon(
+                        onPressed: _finalizeDeafSentence,
+                        icon: const Icon(Icons.volume_up),
+                        label: const Text('Falar tradução'),
                       ),
                     ),
                   ],
@@ -370,6 +385,14 @@ class _ConversationScreenState extends State<ConversationScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  onPressed: _speechAvailable ? _toggleListening : null,
+                  tooltip: _isListening
+                      ? 'Parar reconhecimento de voz'
+                      : 'Falar mensagem em português',
+                  icon: Icon(_isListening ? Icons.mic : Icons.mic_none),
+                ),
+                const SizedBox(width: 8),
                 FloatingActionButton(
                   onPressed: _sendHearingMessage,
                   tooltip: 'Enviar mensagem para conversação',
@@ -383,15 +406,4 @@ class _ConversationScreenState extends State<ConversationScreen> {
     );
   }
 
-  Widget _buildSimulateButton(String label) {
-    return ElevatedButton(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.blueGrey,
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      ),
-      onPressed: () => _simulateDeafSign(label),
-      child: Text(label),
-    );
-  }
 }

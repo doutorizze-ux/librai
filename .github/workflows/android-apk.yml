@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - "apps/mobile/**"
+      - "data/vlibras/**"
       - ".github/workflows/android-apk.yml"
 
 jobs:
@@ -42,7 +43,7 @@ jobs:
         working-directory: apps/mobile
         run: |
           sed -i 's/android:label="sinaliza_ai"/android:label="Librai"/' android/app/src/main/AndroidManifest.xml
-          sed -i '/<manifest/a\    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.CAMERA" />' android/app/src/main/AndroidManifest.xml
+          sed -i '/<manifest/a\    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />' android/app/src/main/AndroidManifest.xml
           sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/' android/app/build.gradle.kts
 
       - name: Install dependencies

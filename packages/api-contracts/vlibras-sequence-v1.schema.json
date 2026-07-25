@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://librai.app/contracts/vlibras-sequence-v1.schema.json",
+  "title": "Portuguese text to available Libras reference sequence",
+  "type": "object",
+  "required": ["schema_version", "source_text", "signs", "unresolved"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "source_text": { "type": "string", "minLength": 1 },
+    "signs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["label", "motion_ready"],
+        "properties": {
+          "label": { "type": "string", "minLength": 1 },
+          "motion_ready": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "unresolved": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "additionalProperties": false
+}

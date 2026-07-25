@@ -1,0 +1,9 @@
+# Local source archives and generated development environments
+/vlibras/
+/tmp/vlibras-tools-venv/
+
+# Runtime artifacts
+__pycache__/
+*.py[cod]
+*.db
+.pytest_cache/

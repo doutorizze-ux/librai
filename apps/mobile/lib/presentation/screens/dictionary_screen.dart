@@ -1,200 +1,161 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class DictionaryEntry {
-  final String title;
-  final String category;
-  final String description;
-  final String steps;
+import '../../domain/entities/reference_sign.dart';
+import '../state/reference_catalog_providers.dart';
+import 'reference_motion_screen.dart';
 
-  DictionaryEntry({
-    required this.title,
-    required this.category,
-    required this.description,
-    required this.steps,
-  });
-}
-
-class DictionaryScreen extends StatefulWidget {
+class DictionaryScreen extends ConsumerStatefulWidget {
   const DictionaryScreen({super.key});
 
   @override
-  State<DictionaryScreen> createState() => _DictionaryScreenState();
+  ConsumerState<DictionaryScreen> createState() => _DictionaryScreenState();
 }
 
-class _DictionaryScreenState extends State<DictionaryScreen> {
-  final List<DictionaryEntry> _allEntries = [
-    DictionaryEntry(
-      title: "AJUDA",
-      category: "Emergência",
-      description: "Sinal solicitando auxílio ou assistência imediata.",
-      steps: "Mão esquerda espalmada, virada para cima. Mão direita fechada com polegar estendido para cima bate levemente sobre a palma da mão esquerda.",
-    ),
-    DictionaryEntry(
-      title: "EMERGÊNCIA",
-      category: "Emergência",
-      description: "Indicação de perigo imediato ou necessidade médica crítica.",
-      steps: "Mão em formato de garra faz movimentos rápidos circulares na altura do peito, expressando urgência no semblante.",
-    ),
-    DictionaryEntry(
-      title: "SAÚDE",
-      category: "Saúde",
-      description: "Referência a bem-estar físico, medicina ou consulta médica.",
-      steps: "Dedos médio e anelar curvados tocam de leve os lados esquerdo e direito do peito alternadamente.",
-    ),
-    DictionaryEntry(
-      title: "BOM_DIA",
-      category: "Cumprimentos",
-      description: "Saudação matinal padrão.",
-      steps: "Mão direita fechada próxima à boca abre-se em formato de 'copo' (sinal de BOM). Em seguida, com a mão direita em formato de semi-círculo, eleva-se simulando o nascer do sol (sinal de DIA).",
-    ),
-    DictionaryEntry(
-      title: "HOSPITAL",
-      category: "Saúde",
-      description: "Referência à instituição de saúde ou internação.",
-      steps: "Dedo indicador da mão direita traça o sinal de uma cruz na testa ou no braço esquerdo.",
-    ),
-  ];
+class _DictionaryScreenState extends ConsumerState<DictionaryScreen> {
+  Timer? _searchDebounce;
+  String _query = '';
 
-  String _searchQuery = "";
-  String _selectedCategory = "Todos";
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) setState(() => _query = value.trim());
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    // Filtragem dos sinais
-    final filteredEntries = _allEntries.where((entry) {
-      final matchesSearch = entry.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                            entry.description.toLowerCase().contains(_searchQuery.toLowerCase());
-      final matchesCategory = _selectedCategory == "Todos" || entry.category == _selectedCategory;
-      return matchesSearch && matchesCategory;
-    }).toList();
-
-    final categories = ["Todos", "Emergência", "Saúde", "Cumprimentos"];
+    final catalog = ref.watch(referenceCatalogProvider(_query));
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Dicionário de Libras'),
-      ),
+      appBar: AppBar(title: const Text('Dicionário de Libras')),
       body: Column(
         children: [
-          // Barra de Busca
           Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Pesquise por termos...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+            padding: const EdgeInsets.all(16),
+            child: Semantics(
+              textField: true,
+              label: 'Pesquisar no catálogo de sinais de Libras',
+              child: TextField(
+                onChanged: _onSearchChanged,
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  hintText: 'Pesquise entre mais de 13 mil sinais',
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                 ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
               ),
-              onChanged: (val) {
-                setState(() {
-                  _searchQuery = val;
-                });
-              },
             ),
           ),
-
-          // Chips de Categoria
-          SizedBox(
-            height: 48,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              itemCount: categories.length,
-              itemBuilder: (context, index) {
-                final cat = categories[index];
-                final isSelected = _selectedCategory == cat;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: FilterChip(
-                    label: Text(cat),
-                    selected: isSelected,
-                    onSelected: (val) {
-                      setState(() {
-                        _selectedCategory = cat;
-                      });
-                    },
-                    selectedColor: theme.colorScheme.primaryContainer,
-                  ),
-                );
-              },
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          // Lista de Termos Filtrados
           Expanded(
-            child: filteredEntries.isEmpty
-                ? const Center(child: Text('Nenhum sinal encontrado para esta pesquisa.'))
-                : ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: filteredEntries.length,
-                    itemBuilder: (context, index) {
-                      final entry = filteredEntries[index];
-
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: ExpansionTile(
-                          leading: Icon(
-                            entry.category == "Emergência" 
-                              ? Icons.warning_amber_rounded 
-                              : entry.category == "Saúde" 
-                                ? Icons.local_hospital 
-                                : Icons.handshake,
-                            color: entry.category == "Emergência" ? Colors.redAccent : theme.colorScheme.primary,
-                          ),
-                          title: Text(
-                            entry.title,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Text(entry.category),
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    entry.description,
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  const Text(
-                                    'Como fazer o sinal:',
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  // Semântica detalhada para TalkBack/VoiceOver
-                                  Semantics(
-                                    label: 'Passo a passo do sinal: ${entry.steps}',
-                                    child: Text(
-                                      entry.steps,
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        fontStyle: FontStyle.italic,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                ],
-                              ),
-                            )
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+            child: catalog.when(
+              loading: () => const Center(
+                child: CircularProgressIndicator(
+                  semanticsLabel: 'Carregando catálogo de Libras',
+                ),
+              ),
+              error: (error, stackTrace) => _CatalogError(
+                onRetry: () =>
+                    ref.invalidate(referenceCatalogProvider(_query)),
+              ),
+              data: (signs) => signs.isEmpty
+                  ? const Center(
+                      child: Text('Nenhum sinal encontrado.'),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                      itemCount: signs.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) =>
+                          _ReferenceSignCard(sign: signs[index]),
+                    ),
+            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ReferenceSignCard extends StatelessWidget {
+  const _ReferenceSignCard({required this.sign});
+
+  final ReferenceSign sign;
+
+  @override
+  Widget build(BuildContext context) {
+    final displayName = sign.label.replaceAll('_', ' ');
+    return Semantics(
+      button: true,
+      label: sign.isCompound
+          ? '$displayName, expressão composta'
+          : '$displayName, sinal de Libras',
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: ListTile(
+          minTileHeight: 64,
+          leading: const Icon(Icons.sign_language_outlined),
+          title: Text(
+            displayName,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          subtitle: Text(
+            sign.isCompound ? 'Expressão composta' : 'Sinal individual',
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => ReferenceMotionScreen(label: sign.label),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _CatalogError extends StatelessWidget {
+  const _CatalogError({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_off_outlined, size: 48),
+            const SizedBox(height: 12),
+            const Text(
+              'Não foi possível carregar o catálogo agora.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Tentar novamente'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(48, 48),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

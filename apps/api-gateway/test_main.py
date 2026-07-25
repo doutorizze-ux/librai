@@ -67,6 +67,65 @@ def test_health():
     assert response.status_code == 200
     assert response.json() == {"status": "healthy"}
 
+
+def test_vlibras_reference_catalog_search():
+    response = client.get("/v1/vlibras-reference/catalog?query=boa%20noite&limit=10")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["schema_version"] == "1.0"
+    assert data["source"] == "VLibras"
+    assert data["total"] >= 1
+    assert any(sign["label"] == "BOA_NOITE" for sign in data["signs"])
+    assert len(data["signs"]) <= 10
+
+
+def test_vlibras_reference_catalog_is_paginated():
+    response = client.get("/v1/vlibras-reference/catalog?limit=2")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 13597
+    assert len(data["signs"]) == 2
+
+
+def test_vlibras_reference_motion_contains_full_hands_and_body():
+    response = client.get("/v1/vlibras-reference/motions/BOM")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["label"] == "BOM"
+    assert data["fps"] == 15
+    assert len(data["frames"]) > 20
+    assert len(data["frames"][0]["left_hand"]) == 21
+    assert len(data["frames"][0]["right_hand"]) == 21
+    assert "BnCabeca" in data["frames"][0]["body"]
+
+
+def test_vlibras_reference_motion_rejects_path_traversal():
+    response = client.get("/v1/vlibras-reference/motions/..%2FLICENSE")
+    assert response.status_code in (400, 404)
+
+
+def test_vlibras_reference_composes_hearing_message():
+    response = client.post(
+        "/v1/vlibras-reference/compose",
+        json={"text": "Boa tarde!"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert [sign["label"] for sign in data["signs"]] == ["BOM", "TARDE"]
+    assert all(sign["motion_ready"] for sign in data["signs"])
+    assert data["unresolved"] == []
+
+
+def test_vlibras_reference_composition_reports_unknown_words():
+    response = client.post(
+        "/v1/vlibras-reference/compose",
+        json={"text": "palavraqueinexiste bom"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["unresolved"] == ["PALAVRAQUEINEXISTE"]
+    assert [sign["label"] for sign in data["signs"]] == ["BOM"]
+
 def test_auth_register_and_login():
     # Registrar novo usuário
     reg_response = client.post(

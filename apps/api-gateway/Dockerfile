@@ -21,6 +21,12 @@ COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY apps/api-gateway/ /app/
+COPY data/vlibras/catalog-v1.json /data/vlibras/catalog-v1.json
+COPY data/vlibras/LICENSE-GPL-3.0.txt /data/vlibras/LICENSE-GPL-3.0.txt
+COPY data/vlibras/reference-motions/ /data/vlibras/reference-motions/
+
+ENV VLIBRAS_CATALOG_PATH=/data/vlibras/catalog-v1.json
+ENV VLIBRAS_MOTION_PATH=/data/vlibras/reference-motions
 
 EXPOSE 8000
 

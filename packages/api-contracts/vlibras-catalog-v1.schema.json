@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://librai.app/contracts/vlibras-catalog-v1.schema.json",
+  "title": "Librai VLibras reference catalog",
+  "type": "object",
+  "required": ["schema_version", "source", "license", "generated_at", "total", "signs"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "source": { "const": "VLibras" },
+    "license": { "type": "string", "minLength": 1 },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "total": { "type": "integer", "minimum": 0 },
+    "signs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "search_key", "size_bytes", "platforms", "is_compound"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-f0-9]{16}$" },
+          "label": { "type": "string", "minLength": 1 },
+          "search_key": { "type": "string", "minLength": 1 },
+          "size_bytes": { "type": "integer", "minimum": 1 },
+          "platforms": {
+            "type": "array",
+            "items": { "enum": ["android", "ios", "linux"] },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "is_compound": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
