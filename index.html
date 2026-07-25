@@ -4,18 +4,18 @@
   <base href="/librai/">
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="Sinaliza AI - Reconhecimento de Libras em tempo real.">
+  <meta name="description" content="Librai - Reconhecimento de Libras em tempo real.">
 
   <!-- iOS meta tags & icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="sinaliza_ai">
+  <meta name="apple-mobile-web-app-title" content="Librai">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>Sinaliza AI</title>
+  <title>Librai</title>
   <link rel="manifest" href="manifest.json">
 
   <!-- CDN scripts do MediaPipe para Visão Computacional -->
@@ -45,6 +45,8 @@
       poseDetected: true, // Forçar verdadeiro no Web para simplificar enquadramento e evitar crash de RAM
       latestLandmarks: null,
       landmarkRevision: 0,
+      trackingQuality: 'waiting',
+      handsCount: 0,
       isActive: false,
 
       // Inicia a câmera e o loop de landmarks
@@ -55,6 +57,7 @@
         let currentHands = [];
         let activeStream = null;
         let animationFrameId = null;
+        const motionTrails = [[], []];
 
         const updateLatestLandmarks = () => {
           // Combina todas as coordenadas em uma lista plana (1D) para o Dart
@@ -72,15 +75,26 @@
           minTrackingConfidence: 0.5
         });
 
-        const drawSkeletonCanvas = (multiHandLandmarks) => {
+        const drawSkeletonCanvas = (multiHandLandmarks, quality) => {
           const canvas = document.getElementById('mediapipe-overlay-canvas');
           if (!canvas) return;
           const ctx = canvas.getContext('2d');
           if (!ctx) return;
 
-          const width = canvas.width = videoElement ? (videoElement.videoWidth || 640) : 640;
-          const height = canvas.height = videoElement ? (videoElement.videoHeight || 480) : 480;
-          
+          const width = canvas.width = Math.max(1, canvas.clientWidth || 640);
+          const height = canvas.height = Math.max(1, canvas.clientHeight || 480);
+          const videoWidth = videoElement.videoWidth || 640;
+          const videoHeight = videoElement.videoHeight || 480;
+          const coverScale = Math.max(width / videoWidth, height / videoHeight);
+          const renderedWidth = videoWidth * coverScale;
+          const renderedHeight = videoHeight * coverScale;
+          const offsetX = (width - renderedWidth) / 2;
+          const offsetY = (height - renderedHeight) / 2;
+          const mapPoint = (point) => ({
+            x: width - (offsetX + point.x * renderedWidth),
+            y: offsetY + point.y * renderedHeight
+          });
+
           ctx.clearRect(0, 0, width, height);
 
           const connections = [
@@ -92,31 +106,72 @@
             [5,9],[9,13],[13,17]
           ];
 
-          for (const landmarks of multiHandLandmarks) {
-            ctx.strokeStyle = '#00FFCC';
-            ctx.lineWidth = 3;
-            ctx.shadowColor = '#00FFCC';
-            ctx.shadowBlur = 6;
+          const neonColor = quality === 'good'
+            ? '#00FFD1'
+            : quality === 'edge'
+              ? '#FFD740'
+              : '#FF4664';
+
+          multiHandLandmarks.forEach((landmarks, handIndex) => {
+            const wrist = mapPoint(landmarks[0]);
+            const trail = motionTrails[handIndex] || motionTrails[0];
+            trail.push({ ...wrist, createdAt: performance.now() });
+            while (trail.length > 18 ||
+                   (trail[0] && performance.now() - trail[0].createdAt > 550)) {
+              trail.shift();
+            }
+
+            if (trail.length > 1) {
+              ctx.save();
+              ctx.lineCap = 'round';
+              for (let i = 1; i < trail.length; i++) {
+                ctx.beginPath();
+                ctx.strokeStyle = neonColor;
+                ctx.globalAlpha = i / trail.length * 0.42;
+                ctx.lineWidth = 2 + (i / trail.length) * 5;
+                ctx.moveTo(trail[i - 1].x, trail[i - 1].y);
+                ctx.lineTo(trail[i].x, trail[i].y);
+                ctx.stroke();
+              }
+              ctx.restore();
+            }
+
+            ctx.strokeStyle = neonColor;
+            ctx.lineWidth = Math.max(3, width / 240);
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.shadowColor = neonColor;
+            ctx.shadowBlur = 14;
 
             for (const [start, end] of connections) {
               const p1 = landmarks[start];
               const p2 = landmarks[end];
               if (p1 && p2) {
+                const a = mapPoint(p1);
+                const b = mapPoint(p2);
                 ctx.beginPath();
-                ctx.moveTo(p1.x * width, p1.y * height);
-                ctx.lineTo(p2.x * width, p2.y * height);
+                ctx.moveTo(a.x, a.y);
+                ctx.lineTo(b.x, b.y);
                 ctx.stroke();
               }
             }
 
-            ctx.shadowBlur = 0;
-            ctx.fillStyle = '#FFFFFF';
+            ctx.shadowBlur = 10;
+            ctx.fillStyle = '#F7FFFF';
             for (const pt of landmarks) {
+              const mapped = mapPoint(pt);
               ctx.beginPath();
-              ctx.arc(pt.x * width, pt.y * height, 4, 0, 2 * Math.PI);
+              ctx.arc(
+                mapped.x,
+                mapped.y,
+                Math.max(3.5, width / 300),
+                0,
+                2 * Math.PI
+              );
               ctx.fill();
             }
-          }
+            ctx.shadowBlur = 0;
+          });
         };
 
         const clearSkeletonCanvas = () => {
@@ -125,15 +180,27 @@
             const ctx = canvas.getContext('2d');
             if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
           }
+          motionTrails.forEach(trail => trail.length = 0);
         };
 
         hands.onResults((results) => {
           if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
             self.handsDetected = true;
+            self.handsCount = results.multiHandLandmarks.length;
             currentHands = results.multiHandLandmarks.flat();
-            drawSkeletonCanvas(results.multiHandLandmarks);
+            const closeToEdge = currentHands.some(
+              point => point.x < 0.055 || point.x > 0.945 ||
+                       point.y < 0.055 || point.y > 0.945
+            );
+            self.trackingQuality = closeToEdge ? 'edge' : 'good';
+            drawSkeletonCanvas(
+              results.multiHandLandmarks,
+              self.trackingQuality
+            );
           } else {
             self.handsDetected = false;
+            self.handsCount = 0;
+            self.trackingQuality = 'waiting';
             currentHands = [];
             clearSkeletonCanvas();
           }
@@ -207,6 +274,11 @@
 
         self.stop = function() {
           self.isActive = false;
+          self.handsDetected = false;
+          self.handsCount = 0;
+          self.trackingQuality = 'waiting';
+          currentHands = [];
+          clearSkeletonCanvas();
           
           // Parar loop
           if (animationFrameId) {
