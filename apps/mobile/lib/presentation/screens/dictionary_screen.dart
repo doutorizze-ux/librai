@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/reference_sign.dart';
 import '../../platform/vlibras_avatar_bridge.dart';
 import '../state/reference_catalog_providers.dart';
+import 'official_vlibras_screen.dart';
 import 'reference_motion_screen.dart';
 
 class DictionaryScreen extends ConsumerStatefulWidget {
@@ -118,12 +119,9 @@ class _ReferenceSignCard extends StatelessWidget {
               : const Icon(Icons.hourglass_bottom),
           onTap: sign.motionReady ? () {
             if (hasOfficialVlibrasAvatar) {
-              playOfficialVlibrasSign(sign.label);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Reproduzindo $displayName no avatar oficial VLibras',
-                  ),
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => OfficialVlibrasScreen(label: sign.label),
                 ),
               );
               return;
