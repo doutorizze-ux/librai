@@ -394,6 +394,10 @@
       display: none !important;
     }
 
+    body.librai-vlibras-dismissed [vw-plugin-wrapper] {
+      display: none !important;
+    }
+
     body.librai-vlibras-stage [vw-plugin-wrapper] {
       position: fixed !important;
       display: block !important;
@@ -432,6 +436,7 @@
 
     window.libraiSetVlibrasStage = function(visible) {
       document.body.classList.toggle('librai-vlibras-stage', Boolean(visible));
+      document.body.classList.toggle('librai-vlibras-dismissed', !visible);
 
       if (!visible) {
         const closeButton = Array.from(document.querySelectorAll('button'))
@@ -445,15 +450,18 @@
           });
         if (closeButton) {
           closeButton.click();
-        } else {
-          const wrapper = document.querySelector('[vw-plugin-wrapper]');
-          const accessButton = document.querySelector('[vw-access-button]');
-          if (wrapper && wrapper.classList.contains('active') && accessButton) {
-            accessButton.click();
-          }
         }
       }
     };
+
+    const vlibrasAccessButton = document.querySelector('[vw-access-button]');
+    if (vlibrasAccessButton) {
+      vlibrasAccessButton.addEventListener('click', function() {
+        if (!document.body.classList.contains('librai-vlibras-stage')) {
+          document.body.classList.remove('librai-vlibras-dismissed');
+        }
+      });
+    }
 
     window.libraiPlayVlibras = function(gloss) {
       const accessButton = document.querySelector('[vw-access-button]');
