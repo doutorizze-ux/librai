@@ -433,6 +433,18 @@
       pointer-events: none;
     }
 
+    body.librai-vlibras-stage [vw-plugin-wrapper]::before {
+      content: '';
+      position: absolute;
+      z-index: 2147483646;
+      top: 40px;
+      left: 0;
+      width: 52px;
+      height: 150px;
+      background: #f4f3f6;
+      pointer-events: none;
+    }
+
     @media (max-width: 480px) {
       body.librai-vlibras-stage [vw-plugin-wrapper] {
         top: 49% !important;
