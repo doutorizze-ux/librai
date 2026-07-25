@@ -29,6 +29,10 @@ class MediaPipeService {
     return DateTime.now().millisecondsSinceEpoch ~/ 33;
   }
 
+  String getTrackingQuality() => 'waiting';
+
+  int getHandsCount() => 0;
+
   List<Map<String, double>>? getLatestLandmarks() {
     // Retorna landmarks de teste dinâmicos
     final int now = DateTime.now().millisecondsSinceEpoch;

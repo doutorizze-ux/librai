@@ -14,25 +14,45 @@ class MediaPipeService {
         (int viewId) {
           final video = html.document.getElementById('mediapipe-video-source') as html.VideoElement?;
           if (video != null) {
+            final container = html.DivElement()
+              ..style.width = '100%'
+              ..style.height = '100%'
+              ..style.position = 'relative'
+              ..style.overflow = 'hidden'
+              ..style.backgroundColor = '#111318';
+
             video.style.display = 'block';
             video.style.width = '100%';
             video.style.height = '100%';
-            // A interface usa a mesma proporção 16:9 solicitada à câmera.
-            // Assim "cover" preenche o quadro sem as grandes faixas pretas.
             video.style.objectFit = 'cover';
             video.style.backgroundColor = '#111318';
-            video.style.position = 'static';
+            video.style.position = 'absolute';
+            video.style.inset = '0';
             video.style.opacity = '1';
             video.style.transform = 'scaleX(-1)';
-            
-            // Forçar a reprodução após o elemento ser re-anexado no DOM do Flutter
+
+            final oldCanvas =
+                html.document.getElementById('mediapipe-overlay-canvas');
+            oldCanvas?.remove();
+            final canvas = html.CanvasElement()
+              ..id = 'mediapipe-overlay-canvas'
+              ..setAttribute('aria-hidden', 'true');
+            canvas.style
+              ..position = 'absolute'
+              ..inset = '0'
+              ..width = '100%'
+              ..height = '100%'
+              ..pointerEvents = 'none';
+
+            container.children.addAll([video, canvas]);
+
             Future.delayed(const Duration(milliseconds: 150), () {
               video.play().catchError((e) {
                 debugPrint("Erro ao forçar play pós-anexo no DOM: $e");
               });
             });
-            
-            return video;
+
+            return container;
           }
           return html.VideoElement();
         },
@@ -100,6 +120,26 @@ class MediaPipeService {
       final b = _bridge;
       if (b == null) return 0;
       return (js_util.getProperty(b, 'landmarkRevision') as num?)?.toInt() ?? 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  String getTrackingQuality() {
+    try {
+      final b = _bridge;
+      if (b == null) return 'waiting';
+      return js_util.getProperty(b, 'trackingQuality')?.toString() ?? 'waiting';
+    } catch (e) {
+      return 'waiting';
+    }
+  }
+
+  int getHandsCount() {
+    try {
+      final b = _bridge;
+      if (b == null) return 0;
+      return (js_util.getProperty(b, 'handsCount') as num?)?.toInt() ?? 0;
     } catch (e) {
       return 0;
     }

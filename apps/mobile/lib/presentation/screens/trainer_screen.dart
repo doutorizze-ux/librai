@@ -46,6 +46,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
   int _validCapturedFrames = 0;
   int _attemptedCapturedFrames = 0;
   int _lastCapturedRevision = -1;
+  String _trackingQuality = 'waiting';
+  int _handsCount = 0;
 
   Options get _authorizedOptions => Options(
         headers: {'Authorization': 'Bearer $_trainerToken'},
@@ -163,8 +165,16 @@ class _TrainerScreenState extends State<TrainerScreen> {
     _frameTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
       if (!mounted) return;
       final handsOk = _visionService.isHandsDetected();
-      if (_handsDetected != handsOk) {
-        setState(() => _handsDetected = handsOk);
+      final trackingQuality = _visionService.getTrackingQuality();
+      final handsCount = _visionService.getHandsCount();
+      if (_handsDetected != handsOk ||
+          _trackingQuality != trackingQuality ||
+          _handsCount != handsCount) {
+        setState(() {
+          _handsDetected = handsOk;
+          _trackingQuality = trackingQuality;
+          _handsCount = handsCount;
+        });
       }
     });
     setState(() {
@@ -322,7 +332,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
       final latest = _visionService.getLatestLandmarks();
       if (latest != null &&
           latest.length >= 21 &&
-          latest.length % 21 == 0) {
+          latest.length % 21 == 0 &&
+          _visionService.getTrackingQuality() == 'good') {
         _recordedLandmarks.addAll(latest);
         _validCapturedFrames += latest.length ~/ 21;
       }
@@ -480,6 +491,79 @@ class _TrainerScreenState extends State<TrainerScreen> {
                         )
                       else
                         const Center(child: Text("Câmera disponível no Web", style: TextStyle(color: Colors.white))),
+
+                      Positioned(
+                        top: 16,
+                        left: 16,
+                        child: Semantics(
+                          liveRegion: true,
+                          label: _trackingQuality == 'good'
+                              ? 'Captura válida. $_handsCount mão detectada.'
+                              : _trackingQuality == 'edge'
+                                  ? 'Mão próxima da borda. Centralize as mãos.'
+                                  : 'Aguardando detecção das mãos.',
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 9,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.72),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: _trackingQuality == 'good'
+                                    ? const Color(0xFF00FFD1)
+                                    : _trackingQuality == 'edge'
+                                        ? const Color(0xFFFFD740)
+                                        : Colors.white70,
+                                width: 2,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: (_trackingQuality == 'good'
+                                          ? const Color(0xFF00FFD1)
+                                          : _trackingQuality == 'edge'
+                                              ? const Color(0xFFFFD740)
+                                              : Colors.white)
+                                      .withOpacity(0.35),
+                                  blurRadius: 12,
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _trackingQuality == 'good'
+                                      ? Icons.check_circle
+                                      : _trackingQuality == 'edge'
+                                          ? Icons.warning_amber_rounded
+                                          : Icons.pan_tool_alt_outlined,
+                                  size: 20,
+                                  color: _trackingQuality == 'good'
+                                      ? const Color(0xFF00FFD1)
+                                      : _trackingQuality == 'edge'
+                                          ? const Color(0xFFFFD740)
+                                          : Colors.white,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _trackingQuality == 'good'
+                                      ? 'CAPTURA VÁLIDA • $_handsCount MÃO${_handsCount == 1 ? '' : 'S'}'
+                                      : _trackingQuality == 'edge'
+                                          ? 'CENTRALIZE AS MÃOS'
+                                          : 'MOSTRE AS MÃOS',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                       
                       // Indicador de Gravação / Contagem
                       if (_isCountingDown)
