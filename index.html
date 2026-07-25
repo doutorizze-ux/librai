@@ -436,9 +436,22 @@
       if (!visible) {
         const closeButton = Array.from(document.querySelectorAll('button'))
           .find(function(button) {
-            return (button.getAttribute('aria-label') || '').toLowerCase() === 'fechar';
+            const accessibleName = [
+              button.getAttribute('aria-label'),
+              button.getAttribute('title'),
+              button.textContent
+            ].filter(Boolean).join(' ').toLowerCase();
+            return accessibleName.includes('fechar');
           });
-        if (closeButton) closeButton.click();
+        if (closeButton) {
+          closeButton.click();
+        } else {
+          const wrapper = document.querySelector('[vw-plugin-wrapper]');
+          const accessButton = document.querySelector('[vw-access-button]');
+          if (wrapper && wrapper.classList.contains('active') && accessButton) {
+            accessButton.click();
+          }
+        }
       }
     };
 
