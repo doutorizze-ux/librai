@@ -10,6 +10,7 @@ import 'package:hand_landmarker/hand_landmarker.dart';
 import 'data/native_training_model.dart';
 import 'domain/interfaces/sign_interpreter.dart';
 import 'domain/sign_phrase_composer.dart';
+import 'domain/recognition_policy.dart';
 import 'presentation/screens/conversation_screen.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/trainer_screen.dart';
@@ -210,6 +211,20 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
         bestPrediction.confidence >= 0.70;
 
     if (validPrediction) {
+      if (RecognitionPolicy.isUnsupportedStaticAlphabetPrediction(
+        bestPrediction.label,
+      )) {
+        _predictionHistory.clear();
+        _detectedText =
+            'Sinal com movimento ainda não confirmado pelo modelo temporal';
+        _confidence = 0;
+        if (!mounted) return;
+        setState(() {
+          _hands = hands;
+          _latencyMilliseconds = _inferenceWatch.elapsedMilliseconds;
+        });
+        return;
+      }
       _predictionHistory.add(bestPrediction.label);
       if (_predictionHistory.length > 2) _predictionHistory.removeAt(0);
       if (_predictionHistory.length == 2 &&

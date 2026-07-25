@@ -9,6 +9,7 @@ import '../../platform/mock_interpreter.dart';
 import '../../platform/tts_service.dart';
 import '../../platform/local_translator.dart';
 import '../../domain/sign_phrase_composer.dart';
+import '../../domain/recognition_policy.dart';
 
 class TranslationScreen extends StatefulWidget {
   const TranslationScreen({super.key});
@@ -132,6 +133,18 @@ class _TranslationScreenState extends State<TranslationScreen> {
           
           if (isConsistent) {
             final votedLabel = prediction.label;
+
+            if (RecognitionPolicy.isUnsupportedStaticAlphabetPrediction(
+              votedLabel,
+            )) {
+              _predictionHistory.clear();
+              setState(() {
+                _partialText =
+                    'Sinal com movimento ainda não confirmado pelo modelo temporal';
+                _confidence = 0;
+              });
+              return;
+            }
             
             if (_isSpellingUnit(votedLabel)) {
               // Evitar duplicar a mesma sílaba se for detectada repetida muito rápido
