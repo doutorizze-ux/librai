@@ -215,65 +215,170 @@ class _MotionPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final allPoints = [
-      ...frame.body.values,
-      ...frame.leftHand,
-      ...frame.rightHand,
-    ];
-    if (allPoints.isEmpty) return;
-    final minX = allPoints.map((point) => point.x).reduce(math.min);
-    final maxX = allPoints.map((point) => point.x).reduce(math.max);
-    final minY = allPoints.map((point) => point.y).reduce(math.min);
-    final maxY = allPoints.map((point) => point.y).reduce(math.max);
-    final width = math.max(0.001, maxX - minX);
-    final height = math.max(0.001, maxY - minY);
-    final scale = math.min(size.width * 0.84 / width, size.height * 0.84 / height);
+    final shoulderLeft = frame.body['BnOmbro_L'];
+    final shoulderRight = frame.body['BnOmbro_R'];
+    final elbowLeft = frame.body['BnAntBraco_L'];
+    final elbowRight = frame.body['BnAntBraco_R'];
+    final wristLeft = frame.body['BnMao_L'];
+    final wristRight = frame.body['BnMao_R'];
+    if (shoulderLeft == null ||
+        shoulderRight == null ||
+        elbowLeft == null ||
+        elbowRight == null ||
+        wristLeft == null ||
+        wristRight == null) {
+      return;
+    }
 
-    Offset project(ReferencePoint point) => Offset(
-          size.width / 2 + (point.x - (minX + maxX) / 2) * scale,
-          size.height / 2 - (point.y - (minY + maxY) / 2) * scale,
-        );
+    Offset direction(ReferencePoint start, ReferencePoint end) {
+      final delta = Offset(end.x - start.x, start.y - end.y);
+      return delta.distance < 0.0001
+          ? const Offset(0, 1)
+          : delta / delta.distance;
+    }
+
+    // Unity's avatar uses bone lengths that are unsuitable for a flat
+    // landmark view. Preserve each joint's direction while reconstructing a
+    // stable, human-proportioned upper body.
+    const modelShoulderLeft = Offset(-1, 0);
+    const modelShoulderRight = Offset(1, 0);
+    final modelElbowLeft =
+        modelShoulderLeft + direction(shoulderLeft, elbowLeft) * 1.25;
+    final modelElbowRight =
+        modelShoulderRight + direction(shoulderRight, elbowRight) * 1.25;
+    final modelWristLeft =
+        modelElbowLeft + direction(elbowLeft, wristLeft) * 1.15;
+    final modelWristRight =
+        modelElbowRight + direction(elbowRight, wristRight) * 1.15;
+
+    final scale = math.min(size.width / 6.2, size.height / 5.2);
+    final center = Offset(size.width / 2, size.height * 0.4);
+    Offset projectModel(Offset point) => center + point * scale;
+
+    List<Offset> normalizeHand(
+      List<ReferencePoint> hand,
+      ReferencePoint rawWrist,
+      Offset modelWrist,
+    ) {
+      final relative = hand
+          .map(
+            (point) => Offset(
+              point.x - rawWrist.x,
+              rawWrist.y - point.y,
+            ),
+          )
+          .toList(growable: false);
+      final radius = relative.fold<double>(
+        0,
+        (largest, point) => math.max(largest, point.distance),
+      );
+      final handScale = 0.58 / math.max(radius, 0.001);
+      return relative
+          .map((point) => modelWrist + point * handScale)
+          .toList(growable: false);
+    }
+
+    final modelLeftHand = normalizeHand(
+      frame.leftHand,
+      wristLeft,
+      modelWristLeft,
+    );
+    final modelRightHand = normalizeHand(
+      frame.rightHand,
+      wristRight,
+      modelWristRight,
+    );
 
     final linePaint = Paint()
       ..color = color
-      ..strokeWidth = 3
+      ..strokeWidth = math.max(3, scale * 0.07)
       ..strokeCap = StrokeCap.round;
     final jointPaint = Paint()..color = Colors.white;
+    final torsoPaint = Paint()
+      ..color = color.withValues(alpha: 0.14)
+      ..style = PaintingStyle.fill;
+    final outlinePaint = Paint()
+      ..color = color.withValues(alpha: 0.65)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = math.max(2, scale * 0.035);
 
-    void bodyLine(String start, String end) {
-      final first = frame.body[start];
-      final second = frame.body[end];
-      if (first != null && second != null) {
-        canvas.drawLine(project(first), project(second), linePaint);
-      }
-    }
+    final torso = Path()
+      ..moveTo(
+        projectModel(modelShoulderLeft).dx,
+        projectModel(modelShoulderLeft).dy,
+      )
+      ..lineTo(
+        projectModel(modelShoulderRight).dx,
+        projectModel(modelShoulderRight).dy,
+      )
+      ..lineTo(projectModel(const Offset(0.72, 2.05)).dx,
+          projectModel(const Offset(0.72, 2.05)).dy)
+      ..lineTo(projectModel(const Offset(-0.72, 2.05)).dx,
+          projectModel(const Offset(-0.72, 2.05)).dy)
+      ..close();
+    canvas.drawPath(torso, torsoPaint);
+    canvas.drawPath(torso, outlinePaint);
 
-    bodyLine('BnOmbro_L', 'BnOmbro_R');
-    bodyLine('BnOmbro_L', 'BnAntBraco_L');
-    bodyLine('BnAntBraco_L', 'BnMao_L');
-    bodyLine('BnOmbro_R', 'BnAntBraco_R');
-    bodyLine('BnAntBraco_R', 'BnMao_R');
+    canvas.drawLine(
+      projectModel(modelShoulderLeft),
+      projectModel(modelShoulderRight),
+      linePaint,
+    );
+    canvas.drawLine(
+      projectModel(modelShoulderLeft),
+      projectModel(modelElbowLeft),
+      linePaint,
+    );
+    canvas.drawLine(
+      projectModel(modelElbowLeft),
+      projectModel(modelWristLeft),
+      linePaint,
+    );
+    canvas.drawLine(
+      projectModel(modelShoulderRight),
+      projectModel(modelElbowRight),
+      linePaint,
+    );
+    canvas.drawLine(
+      projectModel(modelElbowRight),
+      projectModel(modelWristRight),
+      linePaint,
+    );
+    canvas.drawLine(
+      projectModel(const Offset(0, -0.42)),
+      projectModel(const Offset(0, 0.16)),
+      outlinePaint,
+    );
+    canvas.drawCircle(
+      projectModel(const Offset(0, -0.92)),
+      scale * 0.48,
+      torsoPaint,
+    );
+    canvas.drawCircle(
+      projectModel(const Offset(0, -0.92)),
+      scale * 0.48,
+      outlinePaint,
+    );
 
-    final head = frame.body['BnCabeca'];
-    if (head != null) {
-      canvas.drawCircle(project(head), 12, linePaint);
-    }
-
-    void drawHand(List<ReferencePoint> hand) {
+    void drawHand(List<Offset> hand) {
       for (final connection in _handConnections) {
         canvas.drawLine(
-          project(hand[connection[0]]),
-          project(hand[connection[1]]),
+          projectModel(hand[connection[0]]),
+          projectModel(hand[connection[1]]),
           linePaint,
         );
       }
       for (final joint in hand) {
-        canvas.drawCircle(project(joint), 2.8, jointPaint);
+        canvas.drawCircle(
+          projectModel(joint),
+          math.max(2.2, scale * 0.035),
+          jointPaint,
+        );
       }
     }
 
-    drawHand(frame.leftHand);
-    drawHand(frame.rightHand);
+    drawHand(modelLeftHand);
+    drawHand(modelRightHand);
   }
 
   @override

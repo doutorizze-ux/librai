@@ -44,6 +44,10 @@ def subtract(left: Vector, right: Vector) -> Vector:
     return tuple(left[index] - right[index] for index in range(3))  # type: ignore[return-value]
 
 
+def multiply_vector(left: Vector, right: Vector) -> Vector:
+    return tuple(left[index] * right[index] for index in range(3))  # type: ignore[return-value]
+
+
 def multiply_quaternion(left: Quaternion, right: Quaternion) -> Quaternion:
     lx, ly, lz, lw = left
     rx, ry, rz, rw = right
@@ -120,6 +124,7 @@ def load_skeleton(scene_path: Path) -> dict[str, dict[str, Any]]:
             "parent": transform_names.get(parent_id),
             "position": vector(data["m_LocalPosition"]),
             "rotation": quaternion(data["m_LocalRotation"]),
+            "scale": vector(data["m_LocalScale"]),
         }
     return skeleton
 
@@ -149,10 +154,10 @@ def evaluate_frame(
     position_curves: dict[str, list],
     rotation_curves: dict[str, list],
     time: float,
-) -> dict[str, tuple[Vector, Quaternion]]:
-    world: dict[str, tuple[Vector, Quaternion]] = {}
+) -> dict[str, tuple[Vector, Quaternion, Vector]]:
+    world: dict[str, tuple[Vector, Quaternion, Vector]] = {}
 
-    def evaluate(name: str) -> tuple[Vector, Quaternion]:
+    def evaluate(name: str) -> tuple[Vector, Quaternion, Vector]:
         if name in world:
             return world[name]
         bone = skeleton[name]
@@ -162,16 +167,24 @@ def evaluate_frame(
         local_rotation = interpolate(
             rotation_curves.get(name, []), time, bone["rotation"]
         )
+        local_scale = bone["scale"]
         parent_name = bone["parent"]
         if parent_name is None or parent_name not in skeleton:
-            result = (local_position, local_rotation)
+            result = (local_position, local_rotation, local_scale)
         else:
-            parent_position, parent_rotation = evaluate(parent_name)
+            parent_position, parent_rotation, parent_scale = evaluate(parent_name)
             result = (
-                add(parent_position, rotate(local_position, parent_rotation)),
+                add(
+                    parent_position,
+                    rotate(
+                        multiply_vector(local_position, parent_scale),
+                        parent_rotation,
+                    ),
+                ),
                 normalize_quaternion(
                     multiply_quaternion(parent_rotation, local_rotation)
                 ),
+                multiply_vector(parent_scale, local_scale),
             )
         world[name] = result
         return result
