@@ -374,6 +374,40 @@
     });
   </script>
 
+  <!-- Avatar 3D oficial VLibras para o dicionário web. -->
+  <div vw class="enabled">
+    <div vw-access-button class="active"></div>
+    <div vw-plugin-wrapper>
+      <div class="vw-plugin-top-wrapper"></div>
+    </div>
+  </div>
+  <script src="https://vlibras.gov.br/app/vlibras-plugin.js"></script>
+  <script>
+    new window.VLibras.Widget('https://vlibras.gov.br/app');
+
+    window.libraiPlayVlibras = function(gloss) {
+      const accessButton = document.querySelector('[vw-access-button]');
+      const wrapper = document.querySelector('[vw-plugin-wrapper]');
+
+      if (wrapper && !wrapper.classList.contains('active') && accessButton) {
+        accessButton.click();
+      }
+
+      let attempts = 0;
+      const waitForAvatar = window.setInterval(function() {
+        attempts += 1;
+        const player = window.plugin && window.plugin.player;
+        if (player && player.loaded) {
+          window.clearInterval(waitForAvatar);
+          player.play(gloss, { fromTranslation: false });
+        } else if (attempts >= 60) {
+          window.clearInterval(waitForAvatar);
+          console.error('Avatar VLibras não ficou pronto para reproduzir', gloss);
+        }
+      }, 250);
+    };
+  </script>
+
   <!-- Script de Boot do Flutter -->
   <script src="flutter.js" defer></script>
   <script>
