@@ -201,6 +201,14 @@ def hand_landmarks(world: dict, side: str) -> list[list[float]]:
 
 def extract_motion(scene_path: Path, bundle_path: Path, fps: int = 15) -> dict:
     skeleton = load_skeleton(scene_path)
+    return extract_motion_with_skeleton(skeleton, bundle_path, fps)
+
+
+def extract_motion_with_skeleton(
+    skeleton: dict[str, dict[str, Any]],
+    bundle_path: Path,
+    fps: int = 15,
+) -> dict:
     clip, positions, rotations = load_clip(bundle_path)
     key_times = [
         key["time"]

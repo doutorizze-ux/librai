@@ -1,3 +1,4 @@
+import gzip
 import json
 import os
 import unicodedata
@@ -20,6 +21,7 @@ class ReferenceSign(BaseModel):
     size_bytes: int
     platforms: List[str]
     is_compound: bool
+    motion_ready: bool
 
 
 class ReferenceCatalog(BaseModel):
@@ -62,6 +64,23 @@ def _configured_path(variable: str, fallback: Path) -> Path:
     return Path(configured) if configured else fallback
 
 
+@lru_cache(maxsize=1)
+def _motion_index() -> dict[str, Path]:
+    directory = _configured_path("VLIBRAS_MOTION_PATH", _default_motion_path())
+    motions: dict[str, Path] = {}
+    if not directory.is_dir():
+        return motions
+    for path in directory.iterdir():
+        if path.name.endswith(".json.gz"):
+            label = path.name[: -len(".json.gz")]
+        elif path.suffix == ".json":
+            label = path.stem
+        else:
+            continue
+        motions.setdefault(_normalize_query(label), path)
+    return motions
+
+
 def _normalize_query(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value.strip())
     return "".join(
@@ -93,16 +112,24 @@ def get_reference_catalog(
         ) from error
 
     normalized_query = _normalize_query(query)
+    motions = _motion_index()
     signs = catalog["signs"]
     if normalized_query:
         signs = [
             sign for sign in signs if normalized_query in sign["search_key"]
         ]
 
+    paginated_signs = [
+        {
+            **sign,
+            "motion_ready": _normalize_query(sign["label"]) in motions,
+        }
+        for sign in signs[offset : offset + limit]
+    ]
     return {
         **{key: value for key, value in catalog.items() if key != "signs"},
         "total": len(signs),
-        "signs": signs[offset : offset + limit],
+        "signs": paginated_signs,
     }
 
 
@@ -119,7 +146,10 @@ def get_reference_sign(sign_id: str):
     sign = next((item for item in catalog["signs"] if item["id"] == sign_id), None)
     if sign is None:
         raise HTTPException(status_code=404, detail="Sinal de referência não encontrado")
-    return sign
+    return {
+        **sign,
+        "motion_ready": _normalize_query(sign["label"]) in _motion_index(),
+    }
 
 
 @router.get("/motions/{label}")
@@ -131,15 +161,15 @@ def get_reference_motion(label: str):
     ):
         raise HTTPException(status_code=400, detail="Nome de sinal inválido")
 
-    motion_directory = _configured_path("VLIBRAS_MOTION_PATH", _default_motion_path())
-    motion_path = motion_directory / f"{normalized_label}.json"
-    if not motion_path.is_file():
+    motion_path = _motion_index().get(normalized_label)
+    if motion_path is None:
         raise HTTPException(
             status_code=404,
             detail="Animação de referência ainda não preparada",
         )
     try:
-        with motion_path.open("r", encoding="utf-8") as motion_file:
+        opener = gzip.open if motion_path.name.endswith(".gz") else open
+        with opener(motion_path, "rt", encoding="utf-8") as motion_file:
             return json.load(motion_file)
     except (OSError, json.JSONDecodeError) as error:
         raise HTTPException(
@@ -165,7 +195,7 @@ def compose_reference_sequence(payload: ComposeRequest):
     aliases = {"BOA": "BOM", "BONS": "BOM", "BOAS": "BOM"}
     tokens = [aliases.get(token, token) for token in tokens]
     available = {sign["label"] for sign in catalog["signs"]}
-    motion_directory = _configured_path("VLIBRAS_MOTION_PATH", _default_motion_path())
+    motions = _motion_index()
 
     signs = []
     unresolved = []
@@ -186,7 +216,7 @@ def compose_reference_sequence(payload: ComposeRequest):
         signs.append(
             {
                 "label": match,
-                "motion_ready": (motion_directory / f"{match}.json").is_file(),
+                "motion_ready": _normalize_query(match) in motions,
             }
         )
         index += consumed

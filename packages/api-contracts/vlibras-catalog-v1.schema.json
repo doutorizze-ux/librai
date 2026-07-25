@@ -14,7 +14,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "label", "search_key", "size_bytes", "platforms", "is_compound"],
+        "required": ["id", "label", "search_key", "size_bytes", "platforms", "is_compound", "motion_ready"],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-f0-9]{16}$" },
           "label": { "type": "string", "minLength": 1 },
@@ -26,7 +26,8 @@
             "minItems": 1,
             "uniqueItems": true
           },
-          "is_compound": { "type": "boolean" }
+          "is_compound": { "type": "boolean" },
+          "motion_ready": { "type": "boolean" }
         },
         "additionalProperties": false
       }

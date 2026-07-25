@@ -24,6 +24,7 @@ class ReferenceSignRepositoryImpl implements ReferenceSignRepository {
                 .whereType<String>()
                 .toList(growable: false),
             isCompound: record['is_compound'] as bool? ?? false,
+            motionReady: record['motion_ready'] as bool? ?? false,
           ),
         )
         .toList(growable: false);

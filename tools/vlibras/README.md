@@ -8,6 +8,8 @@ its legacy binaries.
 - `export_archive.py` performs a resumable, parallel, compressed full export.
 - `extract_landmark_motion.py` combines the original avatar rest pose and an
   animation clip into lightweight body and 21-point hand sequences.
+- `export_landmark_archive.py` performs that landmark conversion for the full
+  bundle directory, writes compressed JSON, and can resume interrupted runs.
 
 Install dependencies in an isolated environment:
 

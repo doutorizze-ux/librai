@@ -1,6 +1,7 @@
 # Local source archives and generated development environments
 /vlibras/
 /tmp/vlibras-tools-venv/
+/data/vlibras/reference-motions/*.json.gz
 
 # Runtime artifacts
 __pycache__/

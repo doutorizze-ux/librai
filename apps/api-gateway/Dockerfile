@@ -23,6 +23,10 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY apps/api-gateway/ /app/
 COPY data/vlibras/catalog-v1.json /data/vlibras/catalog-v1.json
 COPY data/vlibras/LICENSE-GPL-3.0.txt /data/vlibras/LICENSE-GPL-3.0.txt
+ADD --checksum=sha256:14348391e42eac0fbc8036b9952d0fc1ff786d850029eab17af2a10cef7331d9 https://github.com/doutorizze-ux/librai/releases/download/vlibras-landmarks-v1/vlibras-landmarks-v1.tar /tmp/vlibras-landmarks-v1.tar
+RUN mkdir -p /data/vlibras/reference-motions \
+    && tar -xf /tmp/vlibras-landmarks-v1.tar -C /data/vlibras/reference-motions \
+    && rm /tmp/vlibras-landmarks-v1.tar
 COPY data/vlibras/reference-motions/ /data/vlibras/reference-motions/
 
 ENV VLIBRAS_CATALOG_PATH=/data/vlibras/catalog-v1.json
