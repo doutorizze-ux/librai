@@ -3,11 +3,17 @@ import 'dart:async';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hand_landmarker/hand_landmarker.dart';
 
 import 'data/native_training_model.dart';
 import 'domain/interfaces/sign_interpreter.dart';
 import 'domain/sign_phrase_composer.dart';
+import 'presentation/screens/conversation_screen.dart';
+import 'presentation/screens/dictionary_screen.dart';
+import 'presentation/screens/home_screen.dart';
+import 'presentation/screens/trainer_screen.dart';
 
 late final List<CameraDescription> _availableCameras;
 
@@ -15,7 +21,11 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   _availableCameras = await availableCameras();
-  runApp(const LibraiNativeApp());
+  runApp(
+    const ProviderScope(
+      child: LibraiNativeApp(),
+    ),
+  );
 }
 
 class LibraiNativeApp extends StatelessWidget {
@@ -23,7 +33,32 @@ class LibraiNativeApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (context, state) => const HomeScreen(),
+        ),
+        GoRoute(
+          path: '/translate',
+          builder: (context, state) => const NativeTranslationScreen(),
+        ),
+        GoRoute(
+          path: '/dictionary',
+          builder: (context, state) => const DictionaryScreen(),
+        ),
+        GoRoute(
+          path: '/conversation',
+          builder: (context, state) => const ConversationScreen(),
+        ),
+        GoRoute(
+          path: '/trainer',
+          builder: (context, state) => const TrainerScreen(),
+        ),
+      ],
+    );
+
+    return MaterialApp.router(
       title: 'Librai',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -34,7 +69,7 @@ class LibraiNativeApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
       ),
-      home: const NativeTranslationScreen(),
+      routerConfig: router,
     );
   }
 }
@@ -297,6 +332,12 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
                 children: [
                   Row(
                     children: [
+                      IconButton.filledTonal(
+                        tooltip: 'Voltar ao início',
+                        onPressed: () => context.go('/'),
+                        icon: const Icon(Icons.arrow_back),
+                      ),
+                      const SizedBox(width: 8),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(10),
                         child: Image.asset(
