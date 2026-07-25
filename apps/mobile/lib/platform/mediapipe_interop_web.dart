@@ -27,7 +27,11 @@ class MediaPipeService {
             video.style.objectFit = 'cover';
             video.style.backgroundColor = '#111318';
             video.style.position = 'absolute';
-            video.style.inset = '0';
+            video.style
+              ..top = '0'
+              ..right = '0'
+              ..bottom = '0'
+              ..left = '0';
             video.style.opacity = '1';
             video.style.transform = 'scaleX(-1)';
 
@@ -39,7 +43,10 @@ class MediaPipeService {
               ..setAttribute('aria-hidden', 'true');
             canvas.style
               ..position = 'absolute'
-              ..inset = '0'
+              ..top = '0'
+              ..right = '0'
+              ..bottom = '0'
+              ..left = '0'
               ..width = '100%'
               ..height = '100%'
               ..pointerEvents = 'none';
