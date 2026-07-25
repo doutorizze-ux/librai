@@ -8,6 +8,7 @@ from database import get_db
 import models
 import schemas
 from routers.auth import get_current_user, get_current_user_helper
+from sign_labels import canonical_visual_label
 
 router = APIRouter(prefix="/v1", tags=["translation"])
 
@@ -81,7 +82,10 @@ def get_training_feature_index(db: Session):
             for offset in range(0, len(db_points) - 20, 21):
                 angles = extract_hand_angles(db_points[offset:offset + 21])
                 if angles:
-                    rebuilt_index.append((sign_name, angles))
+                    rebuilt_index.append((
+                        canonical_visual_label(sign_name),
+                        angles,
+                    ))
 
         _feature_index = rebuilt_index
         _feature_index_fingerprint = fingerprint

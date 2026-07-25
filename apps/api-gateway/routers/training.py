@@ -7,6 +7,7 @@ from database import get_db
 import models
 import schemas
 from routers.translation import extract_hand_angles
+from sign_labels import canonical_visual_label
 
 router = APIRouter(prefix="/v1", tags=["training"])
 
@@ -24,7 +25,7 @@ def get_current_training_model(db: Session = Depends(get_db)):
     ).order_by(models.TrainingSample.created_at, models.TrainingSample.id).all()
 
     features = []
-    version_parts = []
+    version_parts = ["canonical-labels-v1"]
 
     for sample_id, sign_name, landmarks, created_at in samples:
         version_parts.append(f"{sample_id}:{created_at.isoformat()}")
@@ -34,7 +35,10 @@ def get_current_training_model(db: Session = Depends(get_db)):
         for offset in range(0, len(landmarks) - 20, 21):
             angles = extract_hand_angles(landmarks[offset:offset + 21])
             if angles:
-                features.append({"label": sign_name, "angles": angles})
+                features.append({
+                    "label": canonical_visual_label(sign_name),
+                    "angles": angles,
+                })
 
     version_source = "|".join(version_parts).encode("utf-8")
     version = hashlib.sha256(version_source).hexdigest()[:16]
@@ -59,7 +63,7 @@ def create_training_sample(
         )
     
     db_sample = models.TrainingSample(
-        sign_name=sample.sign_name.upper().strip(),
+        sign_name=canonical_visual_label(sample.sign_name),
         landmarks=sample.landmarks
     )
     db.add(db_sample)

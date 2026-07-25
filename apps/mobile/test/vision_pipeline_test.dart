@@ -262,6 +262,24 @@ void main() {
         SignPhraseComposer.trainingComponentsFor('OBRIGADO'),
         isNull,
       );
+      expect(
+        SignPhraseComposer.canonicalVisualLabel('boa'),
+        equals('BOM'),
+      );
+    });
+
+    test('Espera tempo suficiente pelo segundo sinal da saudação', () {
+      final composer = SignPhraseComposer();
+      final startedAt = DateTime(2026, 7, 25, 10);
+
+      composer.accept('BOM', timestamp: startedAt);
+      composer.releaseCurrentSign();
+      final result = composer.accept(
+        'TARDE',
+        timestamp: startedAt.add(const Duration(seconds: 8)),
+      );
+
+      expect(result?.text, equals('Boa tarde!'));
     });
   });
 

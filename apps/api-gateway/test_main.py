@@ -213,3 +213,32 @@ def test_export_training_model_for_local_inference():
         headers=headers,
     )
     assert delete_resp.status_code == 200
+
+
+def test_boa_is_canonicalized_as_bom_visual_class():
+    headers = {"X-Trainer-Secret": "librAI_trainer_secret_2026"}
+    landmarks = [
+        {"x": index / 100, "y": (index % 5) / 10, "z": index / 1000}
+        for index in range(21)
+    ]
+
+    create_resp = client.post(
+        "/v1/training/samples",
+        json={"sign_name": "boa", "landmarks": landmarks},
+        headers=headers,
+    )
+    assert create_resp.status_code == 201
+    assert create_resp.json()["sign_name"] == "BOM"
+
+    model_resp = client.get("/v1/training/model/current")
+    assert model_resp.status_code == 200
+    labels = [feature["label"] for feature in model_resp.json()["features"]]
+    assert "BOM" in labels
+    assert "BOA" not in labels
+
+    delete_resp = client.delete(
+        "/v1/training/samples",
+        params={"sign_name": "BOM"},
+        headers=headers,
+    )
+    assert delete_resp.status_code == 200

@@ -90,6 +90,15 @@ class _TrainerScreenState extends State<TrainerScreen> {
       return;
     }
 
+    if (SignPhraseComposer.normalizeLabel(text) == 'BOA') {
+      _debounceTimer?.cancel();
+      setState(() {
+        _existingSamplesCount = 0;
+        _isLoadingCount = false;
+      });
+      return;
+    }
+
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
       if (!mounted) return;
@@ -138,6 +147,15 @@ class _TrainerScreenState extends State<TrainerScreen> {
       _showSnackBar(
         "Grave separadamente: ${requiredSigns.join(' e ')}. "
         "O tradutor montará a expressão automaticamente.",
+        Colors.orange,
+      );
+      return;
+    }
+
+    if (SignPhraseComposer.normalizeLabel(signName) == 'BOA') {
+      _showSnackBar(
+        "Não grave BOA separadamente. Use apenas BOM; o tradutor escolherá "
+        "“boa” quando o próximo sinal for TARDE ou NOITE.",
         Colors.orange,
       );
       return;
@@ -441,11 +459,15 @@ class _TrainerScreenState extends State<TrainerScreen> {
                                   _signNameController.text) !=
                               null
                           ? 'Expressão com dois sinais: grave cada palavra separadamente.'
+                      : (SignPhraseComposer.normalizeLabel(
+                                  _signNameController.text) ==
+                              'BOA'
+                          ? 'BOA usa o mesmo gesto de BOM: treine somente BOM.'
                       : (_signNameController.text.trim().isNotEmpty
                           ? (_existingSamplesCount >= 30
                               ? 'Meta atingida! $_existingSamplesCount/30 amostras gravadas (Excelente!).'
                               : 'Amostras gravadas: $_existingSamplesCount/30 (Grave mais para maior precisão).')
-                          : 'Digite o nome do sinal para ver o progresso do treino.')),
+                          : 'Digite o nome do sinal para ver o progresso do treino.'))),
                   helperStyle: TextStyle(
                     color: _existingSamplesCount >= 30 ? Colors.green : theme.colorScheme.primary,
                     fontWeight: FontWeight.w500,

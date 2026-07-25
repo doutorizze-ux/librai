@@ -17,7 +17,7 @@ class PhraseComposition {
 /// linguística, não ao modelo de visão.
 class SignPhraseComposer {
   SignPhraseComposer({
-    this.compositionWindow = const Duration(seconds: 4),
+    this.compositionWindow = const Duration(seconds: 12),
   });
 
   final Duration compositionWindow;
@@ -31,7 +31,7 @@ class SignPhraseComposer {
     DateTime? timestamp,
   }) {
     final now = timestamp ?? DateTime.now();
-    final label = normalizeLabel(rawLabel);
+    final label = canonicalVisualLabel(rawLabel);
 
     if (label.isEmpty || _isNoise(label)) return null;
     if (_latchedLabel == label) return null;
@@ -89,6 +89,11 @@ class SignPhraseComposer {
         .replaceAll(RegExp(r'[!?,.;:]+'), '')
         .replaceAll(RegExp(r'[\s-]+'), '_')
         .replaceAll(RegExp(r'_+'), '_');
+  }
+
+  static String canonicalVisualLabel(String rawLabel) {
+    final normalized = normalizeLabel(rawLabel);
+    return normalized == 'BOA' ? 'BOM' : normalized;
   }
 
   /// Retorna os sinais que devem ser treinados separadamente quando o rótulo
