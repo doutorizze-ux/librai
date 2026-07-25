@@ -415,6 +415,24 @@
       overflow: hidden !important;
     }
 
+    body.librai-vlibras-stage [vw-plugin-wrapper]::after {
+      content: 'LIBRAI';
+      position: absolute;
+      z-index: 2147483647;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      background: #6d579b;
+      font: 800 14px/1 system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      letter-spacing: 0.08em;
+      pointer-events: none;
+    }
+
     @media (max-width: 480px) {
       body.librai-vlibras-stage [vw-plugin-wrapper] {
         top: 49% !important;

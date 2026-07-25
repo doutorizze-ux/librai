@@ -95091,7 +95091,7 @@ q=s.z
 if(q==null)q=m
 else{p=l.ax
 o=p.rx
-q=q.bD(o==null?p.k3:o)}q=A.c3("Avatar oficial VLibras",m,m,m,q,m,m)
+q=q.bD(o==null?p.k3:o)}q=A.c3("Experi\xeancia visual Librai",m,m,m,q,m,m)
 p=this.a.c
 p=A.cM(p,"_"," ")
 p=A.bi(!0,m,A.a9i(B.oQ,B.Yv,this.gakW(),A.a9j(m,m,B.So,m,m)),!1,m,m,!1,!1,m,m,m,m,m,m,m,m,"Repetir o sinal "+p,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m)
@@ -95099,7 +95099,7 @@ s=s.Q
 if(s==null)s=m
 else{o=l.ax
 n=o.rx
-s=s.bD(n==null?o.k3:n)}return A.ta(k,m,A.kZ(!0,new A.bI(B.H_,A.e8(A.b([r,B.m0,q,B.Hc,p,B.e8,A.c3("Na primeira utiliza\xe7\xe3o, pule a apresenta\xe7\xe3o do VLibras.",m,m,m,s,B.bq,m)],t.p),B.H,B.C,B.Y),m),B.ae,!0),!1)}}
+s=s.bD(n==null?o.k3:n)}return A.ta(k,m,A.kZ(!0,new A.bI(B.H_,A.e8(A.b([r,B.m0,q,B.Hc,p,B.e8,A.c3("Na primeira utiliza\xe7\xe3o, toque em Pular para iniciar.",m,m,m,s,B.bq,m)],t.p),B.H,B.C,B.Y),m),B.ae,!0),!1)}}
 A.avN.prototype={
 $1(a){var s=v.G
 s.libraiSetVlibrasStage(!0)
