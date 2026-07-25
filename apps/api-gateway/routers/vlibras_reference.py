@@ -36,11 +36,30 @@ class ComposeRequest(BaseModel):
 
 
 def _default_catalog_path() -> Path:
-    return Path(__file__).resolve().parents[3] / "data" / "vlibras" / "catalog-v1.json"
+    production_path = Path("/data/vlibras/catalog-v1.json")
+    if production_path.is_file():
+        return production_path
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "data" / "vlibras" / "catalog-v1.json"
+        if candidate.is_file():
+            return candidate
+    return production_path
 
 
 def _default_motion_path() -> Path:
-    return Path(__file__).resolve().parents[3] / "data" / "vlibras" / "reference-motions"
+    production_path = Path("/data/vlibras/reference-motions")
+    if production_path.is_dir():
+        return production_path
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "data" / "vlibras" / "reference-motions"
+        if candidate.is_dir():
+            return candidate
+    return production_path
+
+
+def _configured_path(variable: str, fallback: Path) -> Path:
+    configured = os.getenv(variable)
+    return Path(configured) if configured else fallback
 
 
 def _normalize_query(value: str) -> str:
@@ -52,7 +71,7 @@ def _normalize_query(value: str) -> str:
 
 @lru_cache(maxsize=1)
 def _load_catalog() -> dict:
-    path = Path(os.getenv("VLIBRAS_CATALOG_PATH", str(_default_catalog_path())))
+    path = _configured_path("VLIBRAS_CATALOG_PATH", _default_catalog_path())
     if not path.is_file():
         raise FileNotFoundError(path)
     with path.open("r", encoding="utf-8") as catalog_file:
@@ -112,9 +131,7 @@ def get_reference_motion(label: str):
     ):
         raise HTTPException(status_code=400, detail="Nome de sinal inválido")
 
-    motion_directory = Path(
-        os.getenv("VLIBRAS_MOTION_PATH", str(_default_motion_path()))
-    )
+    motion_directory = _configured_path("VLIBRAS_MOTION_PATH", _default_motion_path())
     motion_path = motion_directory / f"{normalized_label}.json"
     if not motion_path.is_file():
         raise HTTPException(
@@ -148,9 +165,7 @@ def compose_reference_sequence(payload: ComposeRequest):
     aliases = {"BOA": "BOM", "BONS": "BOM", "BOAS": "BOM"}
     tokens = [aliases.get(token, token) for token in tokens]
     available = {sign["label"] for sign in catalog["signs"]}
-    motion_directory = Path(
-        os.getenv("VLIBRAS_MOTION_PATH", str(_default_motion_path()))
-    )
+    motion_directory = _configured_path("VLIBRAS_MOTION_PATH", _default_motion_path())
 
     signs = []
     unresolved = []
