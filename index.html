@@ -375,6 +375,51 @@
   </script>
 
   <!-- Avatar 3D oficial VLibras para o dicionário web. -->
+  <style>
+    /*
+     * O widget oficial normalmente flutua sobre o conteúdo. No dicionário do
+     * Librai ele vira o palco central de uma rota dedicada.
+     */
+    body.librai-vlibras-stage [vw] {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      transform: none !important;
+      pointer-events: none !important;
+      z-index: 999999 !important;
+    }
+
+    body.librai-vlibras-stage [vw-access-button] {
+      display: none !important;
+    }
+
+    body.librai-vlibras-stage [vw-plugin-wrapper] {
+      position: fixed !important;
+      display: block !important;
+      left: 50% !important;
+      right: auto !important;
+      top: 50% !important;
+      bottom: auto !important;
+      width: 310px !important;
+      height: 450px !important;
+      transform: translate(-50%, -48%) !important;
+      pointer-events: auto !important;
+      opacity: 1 !important;
+      box-shadow: 0 18px 54px rgba(31, 23, 48, 0.24) !important;
+      border-radius: 14px !important;
+      overflow: hidden !important;
+    }
+
+    @media (max-width: 480px) {
+      body.librai-vlibras-stage [vw-plugin-wrapper] {
+        top: 49% !important;
+        width: min(310px, calc(100vw - 40px)) !important;
+        height: min(450px, calc(100vh - 250px)) !important;
+        min-height: 390px !important;
+      }
+    }
+  </style>
   <div vw class="enabled">
     <div vw-access-button class="active"></div>
     <div vw-plugin-wrapper>
@@ -384,6 +429,18 @@
   <script src="https://vlibras.gov.br/app/vlibras-plugin.js"></script>
   <script>
     new window.VLibras.Widget('https://vlibras.gov.br/app');
+
+    window.libraiSetVlibrasStage = function(visible) {
+      document.body.classList.toggle('librai-vlibras-stage', Boolean(visible));
+
+      if (!visible) {
+        const closeButton = Array.from(document.querySelectorAll('button'))
+          .find(function(button) {
+            return (button.getAttribute('aria-label') || '').toLowerCase() === 'fechar';
+          });
+        if (closeButton) closeButton.click();
+      }
+    };
 
     window.libraiPlayVlibras = function(gloss) {
       const accessButton = document.querySelector('[vw-access-button]');
