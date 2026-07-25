@@ -64,7 +64,7 @@ class _OfficialVlibrasScreenState extends State<OfficialVlibrasScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Avatar oficial VLibras',
+                'Experiência visual Librai',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -84,7 +84,7 @@ class _OfficialVlibrasScreenState extends State<OfficialVlibrasScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Na primeira utilização, pule a apresentação do VLibras.',
+                'Na primeira utilização, toque em Pular para iniciar.',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
