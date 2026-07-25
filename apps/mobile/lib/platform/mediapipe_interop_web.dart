@@ -152,6 +152,36 @@ class MediaPipeService {
     }
   }
 
+  double getInferenceFps() {
+    try {
+      final b = _bridge;
+      if (b == null) return 0;
+      return (js_util.getProperty(b, 'inferenceFps') as num?)?.toDouble() ?? 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  int getInferenceLatencyMs() {
+    try {
+      final b = _bridge;
+      if (b == null) return 0;
+      return (js_util.getProperty(b, 'inferenceLatencyMs') as num?)?.toInt() ?? 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  int getHandScreenRatio() {
+    try {
+      final b = _bridge;
+      if (b == null) return 0;
+      return (js_util.getProperty(b, 'handScreenRatio') as num?)?.toInt() ?? 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
   List<Map<String, double>>? getLatestLandmarks() {
     try {
       final b = _bridge;

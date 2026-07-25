@@ -33,6 +33,12 @@ class MediaPipeService {
 
   int getHandsCount() => 0;
 
+  double getInferenceFps() => 0;
+
+  int getInferenceLatencyMs() => 0;
+
+  int getHandScreenRatio() => 0;
+
   List<Map<String, double>>? getLatestLandmarks() {
     // Retorna landmarks de teste dinâmicos
     final int now = DateTime.now().millisecondsSinceEpoch;

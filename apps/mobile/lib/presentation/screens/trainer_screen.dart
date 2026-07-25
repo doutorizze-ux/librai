@@ -48,6 +48,9 @@ class _TrainerScreenState extends State<TrainerScreen> {
   int _lastCapturedRevision = -1;
   String _trackingQuality = 'waiting';
   int _handsCount = 0;
+  double _inferenceFps = 0;
+  int _inferenceLatencyMs = 0;
+  int _handScreenRatio = 0;
 
   Options get _authorizedOptions => Options(
         headers: {'Authorization': 'Bearer $_trainerToken'},
@@ -167,13 +170,22 @@ class _TrainerScreenState extends State<TrainerScreen> {
       final handsOk = _visionService.isHandsDetected();
       final trackingQuality = _visionService.getTrackingQuality();
       final handsCount = _visionService.getHandsCount();
+      final inferenceFps = _visionService.getInferenceFps();
+      final inferenceLatencyMs = _visionService.getInferenceLatencyMs();
+      final handScreenRatio = _visionService.getHandScreenRatio();
       if (_handsDetected != handsOk ||
           _trackingQuality != trackingQuality ||
-          _handsCount != handsCount) {
+          _handsCount != handsCount ||
+          (_inferenceFps - inferenceFps).abs() >= 0.5 ||
+          _inferenceLatencyMs != inferenceLatencyMs ||
+          _handScreenRatio != handScreenRatio) {
         setState(() {
           _handsDetected = handsOk;
           _trackingQuality = trackingQuality;
           _handsCount = handsCount;
+          _inferenceFps = inferenceFps;
+          _inferenceLatencyMs = inferenceLatencyMs;
+          _handScreenRatio = handScreenRatio;
         });
       }
     });
@@ -501,6 +513,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
                               ? 'Captura válida. $_handsCount mão detectada.'
                               : _trackingQuality == 'edge'
                                   ? 'Mão próxima da borda. Centralize as mãos.'
+                                  : _trackingQuality == 'far'
+                                      ? 'Mãos distantes. Aproxime-se da câmera.'
                                   : 'Aguardando detecção das mãos.',
                           child: Container(
                             padding: const EdgeInsets.symmetric(
@@ -515,6 +529,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
                                     ? const Color(0xFF00FFD1)
                                     : _trackingQuality == 'edge'
                                         ? const Color(0xFFFFD740)
+                                        : _trackingQuality == 'far'
+                                            ? const Color(0xFF40C4FF)
                                         : Colors.white70,
                                 width: 2,
                               ),
@@ -524,6 +540,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
                                           ? const Color(0xFF00FFD1)
                                           : _trackingQuality == 'edge'
                                               ? const Color(0xFFFFD740)
+                                              : _trackingQuality == 'far'
+                                                  ? const Color(0xFF40C4FF)
                                               : Colors.white)
                                       .withOpacity(0.35),
                                   blurRadius: 12,
@@ -538,12 +556,16 @@ class _TrainerScreenState extends State<TrainerScreen> {
                                       ? Icons.check_circle
                                       : _trackingQuality == 'edge'
                                           ? Icons.warning_amber_rounded
+                                          : _trackingQuality == 'far'
+                                              ? Icons.zoom_in
                                           : Icons.pan_tool_alt_outlined,
                                   size: 20,
                                   color: _trackingQuality == 'good'
                                       ? const Color(0xFF00FFD1)
                                       : _trackingQuality == 'edge'
                                           ? const Color(0xFFFFD740)
+                                          : _trackingQuality == 'far'
+                                              ? const Color(0xFF40C4FF)
                                           : Colors.white,
                                 ),
                                 const SizedBox(width: 8),
@@ -552,6 +574,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
                                       ? 'CAPTURA VÁLIDA • $_handsCount MÃO${_handsCount == 1 ? '' : 'S'}'
                                       : _trackingQuality == 'edge'
                                           ? 'CENTRALIZE AS MÃOS'
+                                          : _trackingQuality == 'far'
+                                              ? 'APROXIME AS MÃOS'
                                           : 'MOSTRE AS MÃOS',
                                   style: const TextStyle(
                                     color: Colors.white,
@@ -560,6 +584,36 @@ class _TrainerScreenState extends State<TrainerScreen> {
                                   ),
                                 ),
                               ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      Positioned(
+                        left: 16,
+                        bottom: 16,
+                        child: Semantics(
+                          label:
+                              'Desempenho da câmera: ${_inferenceFps.toStringAsFixed(1)} '
+                              'quadros por segundo, $_inferenceLatencyMs milissegundos.',
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 7,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.68),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '${_inferenceFps.toStringAsFixed(1)} FPS'
+                              '  •  $_inferenceLatencyMs ms'
+                              '${_handScreenRatio > 0 ? '  •  Mão $_handScreenRatio%' : ''}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                         ),
