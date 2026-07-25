@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/reference_sign.dart';
+import '../../platform/vlibras_avatar_bridge.dart';
 import '../state/reference_catalog_providers.dart';
 import 'reference_motion_screen.dart';
 
@@ -116,6 +117,17 @@ class _ReferenceSignCard extends StatelessWidget {
               ? const Icon(Icons.chevron_right)
               : const Icon(Icons.hourglass_bottom),
           onTap: sign.motionReady ? () {
+            if (hasOfficialVlibrasAvatar) {
+              playOfficialVlibrasSign(sign.label);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Reproduzindo $displayName no avatar oficial VLibras',
+                  ),
+                ),
+              );
+              return;
+            }
             Navigator.of(context).push(
               MaterialPageRoute<void>(
                 builder: (_) => ReferenceMotionScreen(label: sign.label),
