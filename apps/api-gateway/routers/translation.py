@@ -9,6 +9,11 @@ import models
 import schemas
 from routers.auth import get_current_user, get_current_user_helper
 from sign_labels import canonical_visual_label
+from temporal_recognition import (
+    extract_temporal_signature,
+    split_flat_landmarks,
+    temporal_distance,
+)
 
 router = APIRouter(prefix="/v1", tags=["translation"])
 
@@ -17,6 +22,8 @@ import math
 _feature_index_lock = threading.Lock()
 _feature_index_fingerprint = None
 _feature_index = []
+_temporal_index_fingerprint = None
+_temporal_index = []
 
 def extract_hand_angles(landmarks):
     """Extrai vetor de características de ângulos articulares das mãos (invariante a escala, posição e rotação)."""
@@ -64,6 +71,34 @@ def get_training_feature_index(db: Session):
 
     if fingerprint == _feature_index_fingerprint:
         return _feature_index
+
+
+def get_temporal_training_index(db: Session):
+    global _temporal_index_fingerprint, _temporal_index
+
+    sample_stats = db.query(
+        func.count(models.TrainingSample.id),
+        func.max(models.TrainingSample.created_at),
+    ).one()
+    fingerprint = (str(db.get_bind().url), sample_stats[0], sample_stats[1])
+    if fingerprint == _temporal_index_fingerprint:
+        return _temporal_index
+
+    samples = db.query(
+        models.TrainingSample.sign_name,
+        models.TrainingSample.landmarks,
+    ).all()
+    rebuilt = []
+    for sign_name, flat_landmarks in samples:
+        signature = extract_temporal_signature(
+            split_flat_landmarks(flat_landmarks)
+        )
+        if signature:
+            rebuilt.append((canonical_visual_label(sign_name), signature))
+
+    _temporal_index = rebuilt
+    _temporal_index_fingerprint = fingerprint
+    return _temporal_index
 
     with _feature_index_lock:
         if fingerprint == _feature_index_fingerprint:
@@ -129,6 +164,48 @@ def predict_sign(
         return {"label": best_label, "confidence": round(confidence, 2)}
         
     return {"label": "SINAL_DESCONHECIDO", "confidence": 0.0}
+
+
+@router.post("/translation/predict-sequence")
+def predict_sign_sequence(payload: dict, db: Session = Depends(get_db)):
+    frames = payload.get("frames")
+    signature = extract_temporal_signature(frames)
+    if signature is None:
+        return {"label": "DADOS_INSUFICIENTES", "confidence": 0.0}
+
+    temporal_index = get_temporal_training_index(db)
+    if not temporal_index:
+        return {"label": "SINAL_DESCONHECIDO", "confidence": 0.0}
+
+    ranked = sorted(
+        (
+            (temporal_distance(signature, trained_signature), label)
+            for label, trained_signature in temporal_index
+        ),
+        key=lambda candidate: candidate[0],
+    )
+    best_distance, best_label = ranked[0]
+    if best_distance > 0.35:
+        return {"label": "SINAL_DESCONHECIDO", "confidence": 0.0}
+
+    second_distance = next(
+        (
+            distance
+            for distance, label in ranked[1:]
+            if label != best_label
+        ),
+        1.0,
+    )
+    separation = max(0.0, second_distance - best_distance)
+    confidence = min(
+        0.99,
+        max(0.5, (1.0 - best_distance / 0.35) * 0.8 + separation * 0.2),
+    )
+    return {
+        "label": best_label,
+        "confidence": round(float(confidence), 2),
+        "model": "hand_sequence_v1",
+    }
 
 @router.post("/translation/sessions", response_model=schemas.SessionResponse)
 def create_session(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):

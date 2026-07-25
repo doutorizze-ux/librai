@@ -6,6 +6,7 @@ import 'app_config.dart';
 class MockSignInterpreter implements SignInterpreter {
   String? _loadedModelPath;
   final double confidenceThreshold = 0.75;
+  final List<List<Map<String, double>>> _sequenceFrames = [];
 
   final Dio _dio = Dio(BaseOptions(
     baseUrl: AppConfig.apiUrl,
@@ -19,6 +20,10 @@ class MockSignInterpreter implements SignInterpreter {
   @override
   Future<void> loadModel(String modelPath) async {
     _loadedModelPath = modelPath;
+  }
+
+  void resetSequence() {
+    _sequenceFrames.clear();
   }
 
   @override
@@ -47,11 +52,34 @@ class MockSignInterpreter implements SignInterpreter {
     final bool isTest = _loadedModelPath != null && _loadedModelPath!.contains("test_");
 
     if (!isTest) {
+      _sequenceFrames.add(
+        landmarks
+            .map((point) => Map<String, double>.from(point))
+            .toList(growable: false),
+      );
+      if (_sequenceFrames.length > 48) {
+        _sequenceFrames.removeAt(0);
+      }
+      if (_sequenceFrames.length < 12) {
+        return PredictionResult(
+          label: "DADOS_INSUFICIENTES",
+          confidence: 0,
+          isTestFixture: false,
+          modelVersion: "hand_sequence_v1",
+        );
+      }
+
+      final lastIndex = _sequenceFrames.length - 1;
+      final sampledFrames = List<List<Map<String, double>>>.generate(
+        20,
+        (index) => _sequenceFrames[(index * lastIndex / 19).round()],
+        growable: false,
+      );
       try {
-        // Tentar predição real no servidor (usando o dataset gravado em tempo real!)
+        // O servidor compara a trajetória completa, não poses isoladas.
         final response = await _dio.post(
-          '/v1/translation/predict',
-          data: {'landmarks': landmarks},
+          '/v1/translation/predict-sequence',
+          data: {'frames': sampledFrames},
         );
         
         if (response.statusCode == 200) {
@@ -62,12 +90,21 @@ class MockSignInterpreter implements SignInterpreter {
             label: label,
             confidence: confidence,
             isTestFixture: false,
-            modelVersion: "live-realtime",
+            modelVersion: response.data['model'] as String? ??
+                "hand_sequence_v1",
           );
         }
       } catch (e) {
-        debugPrint("[Remote Interpreter] Falha na predição online, usando modo de simulação local: $e");
+        debugPrint("[Remote Interpreter] Falha na predição temporal: $e");
       }
+
+      // Nunca inventar uma tradução de demonstração em uma sessão real.
+      return PredictionResult(
+        label: "SINAL_DESCONHECIDO",
+        confidence: 0,
+        isTestFixture: false,
+        modelVersion: "hand_sequence_v1",
+      );
     }
 
     // Simulação do cálculo de confiança e previsão (Fallback Local)

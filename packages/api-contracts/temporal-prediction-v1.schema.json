@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://librai.app/contracts/temporal-prediction-v1.schema.json",
+  "title": "Librai Temporal Prediction v1",
+  "type": "object",
+  "required": ["frames"],
+  "properties": {
+    "frames": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 24,
+      "items": {
+        "type": "array",
+        "minItems": 21,
+        "maxItems": 21,
+        "items": {
+          "type": "object",
+          "required": ["x", "y", "z"],
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" },
+            "z": { "type": "number" }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -224,6 +224,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
       }
     } else if (framing == VisionState.waitingPerson) {
       _predictionHistory.clear();
+      _interpreter.resetSequence();
       _phraseComposer.releaseCurrentSign();
       
       // Se estava no meio de uma soletragem, finaliza imediatamente ao retirar a mão
@@ -250,6 +251,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
     _processingTimer?.cancel();
     _spellingEndTimer?.cancel();
     _predictionHistory.clear();
+    _interpreter.resetSequence();
     _phraseComposer.reset();
     _visionService.stop();
     _frameBuffer.clear();

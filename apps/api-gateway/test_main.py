@@ -62,6 +62,21 @@ def valid_training_landmarks():
         ])
     return frames
 
+
+def temporal_landmark_frames(movement_per_frame=0.0, frame_count=16):
+    frames = []
+    for frame_index in range(frame_count):
+        offset = movement_per_frame * frame_index
+        frames.append([
+            {
+                "x": index / 100 + offset,
+                "y": (index % 5) / 10,
+                "z": index / 1000 + (frame_index * 0.00001 if index else 0),
+            }
+            for index in range(21)
+        ])
+    return frames
+
 def test_health():
     response = client.get("/health")
     assert response.status_code == 200
@@ -326,6 +341,48 @@ def test_predict_sign():
     resp = client.post("/v1/translation/predict", json={})
     assert resp.status_code == 200
     assert resp.json()["label"] == "SINAL_DESCONHECIDO"
+
+
+def test_temporal_prediction_distinguishes_static_d_from_moving_dia():
+    headers = trainer_headers()
+    static_frames = temporal_landmark_frames()
+    moving_frames = temporal_landmark_frames(movement_per_frame=0.006)
+
+    for label, frames in (("D", static_frames), ("DIA", moving_frames)):
+        response = client.post(
+            "/v1/training/samples",
+            json={
+                "sign_name": label,
+                "landmarks": [point for frame in frames for point in frame],
+            },
+            headers=headers,
+        )
+        assert response.status_code == 201
+
+    static_prediction = client.post(
+        "/v1/translation/predict-sequence",
+        json={"frames": static_frames},
+    )
+    moving_prediction = client.post(
+        "/v1/translation/predict-sequence",
+        json={"frames": moving_frames},
+    )
+
+    assert static_prediction.status_code == 200
+    assert static_prediction.json()["label"] == "D"
+    assert static_prediction.json()["model"] == "hand_sequence_v1"
+    assert moving_prediction.status_code == 200
+    assert moving_prediction.json()["label"] == "DIA"
+    assert moving_prediction.json()["model"] == "hand_sequence_v1"
+
+
+def test_temporal_prediction_requires_a_real_sequence():
+    response = client.post(
+        "/v1/translation/predict-sequence",
+        json={"frames": temporal_landmark_frames(frame_count=5)},
+    )
+    assert response.status_code == 200
+    assert response.json()["label"] == "DADOS_INSUFICIENTES"
 
     # 2. Enviar landmarks válidos (com banco de dados vazio)
     resp = client.post(
