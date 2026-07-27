@@ -558,7 +558,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
           ),
           FilledButton(
             onPressed: () =>
-                Navigator.pop(dialogContext, secretController.text),
+                Navigator.pop(dialogContext, secretController.text.trim()),
             child: const Text('Continuar'),
           ),
         ],
