@@ -1,78 +1,74 @@
-import os
+"""Exporta somente um candidato já validado para ONNX."""
+
+from __future__ import annotations
+
+import argparse
 import hashlib
 import json
+from pathlib import Path
+
 import torch
-from train import LibrasTemporalClassifier
 
-def calculate_sha256(filepath):
-    sha256_hash = hashlib.sha256()
-    with open(filepath, "rb") as f:
-        for byte_block in iter(lambda: f.read(4096), b""):
-            sha256_hash.update(byte_block)
-    return sha256_hash.hexdigest()
+from stgcn import LibrasSTGCN, TOTAL_NODES
 
-def export_model():
-    print("=== Iniciando Exportação para ONNX ===")
-    
-    # Instanciar modelo com a arquitetura do treinamento
-    model = LibrasTemporalClassifier()
-    
-    weights_path = "ml/models/libras_lstm_weights.pt"
-    if os.path.exists(weights_path):
-        model.load_state_dict(torch.load(weights_path, map_location=torch.device('cpu')))
-        print(f"Pesos do modelo carregados com sucesso de: {weights_path}")
-    else:
-        print("[Aviso] Pesos de treino não encontrados. Exportando modelo com pesos inicializados aleatoriamente para fins de teste.")
-        
+
+def export(candidate_dir: Path, output: Path):
+    manifest_path = candidate_dir / "model_manifest.json"
+    weights_path = candidate_dir / "librai_stgcn.pt"
+    if not manifest_path.exists() or not weights_path.exists():
+        raise FileNotFoundError("Candidato validado incompleto.")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("status") != "validated_not_deployed":
+        raise ValueError("O manifesto não representa um candidato validado.")
+    actual_hash = hashlib.sha256(weights_path.read_bytes()).hexdigest()
+    if actual_hash != manifest.get("weights_sha256"):
+        raise ValueError("Hash dos pesos não corresponde ao manifesto.")
+
+    labels = manifest.get("labels")
+    if not isinstance(labels, dict) or len(labels) < 2:
+        raise ValueError("Mapa de classes inválido.")
+    model = LibrasSTGCN(num_classes=len(labels))
+    model.load_state_dict(torch.load(weights_path, map_location="cpu", weights_only=True))
     model.eval()
-    
-    # Criar um input dummy representando (batch_size=1, sequence_length=30, input_dim=63)
-    dummy_input = torch.randn(1, 30, 63)
-    
-    onnx_path = "ml/models/sinaliza_lstm.onnx"
-    os.makedirs("ml/models", exist_ok=True)
-    
-    # Exportar para ONNX
+    dummy = torch.zeros(
+        1, 4, int(manifest["sequence_length"]), TOTAL_NODES
+    )
+    output.parent.mkdir(parents=True, exist_ok=True)
     torch.onnx.export(
         model,
-        dummy_input,
-        onnx_path,
-        export_params=True,
-        opset_version=14,
-        do_constant_folding=True,
-        input_names=['input_landmarks'],
-        output_names=['output_probabilities'],
-        dynamic_axes={
-            'input_landmarks': {0: 'batch_size'},
-            'output_probabilities': {0: 'batch_size'}
-        }
+        dummy,
+        output,
+        input_names=["landmarks"],
+        output_names=["logits"],
+        dynamic_axes={"landmarks": {0: "batch"}, "logits": {0: "batch"}},
+        opset_version=17,
+        dynamo=False,
     )
-    print(f"Modelo exportado para ONNX com sucesso em: {onnx_path}")
-    
-    # Calcular Hash SHA-256 do arquivo ONNX gerado
-    model_hash = calculate_sha256(onnx_path)
-    print(f"Hash SHA-256 do Modelo: {model_hash}")
-    
-    # Gerar Manifesto do Registro de Modelos
-    manifest = {
-        "model_id": "sinaliza_lstm_v1",
-        "name": "Sinaliza AI LSTM Baseline",
-        "version": "1.0.0-lstm",
-        "hash_sha256": model_hash,
-        "is_active": True,
-        "architecture": "LSTM_Temporal",
-        "parameters": {
-            "input_dim": 63,
-            "sequence_length": 30,
-            "hidden_dim": 128
-        }
+    model_hash = hashlib.sha256(output.read_bytes()).hexdigest()
+    deploy_manifest = {
+        **manifest,
+        "onnx_sha256": model_hash,
+        "onnx_file": output.name,
+        "status": "validated_ready_for_review",
     }
-    
-    manifest_path = "ml/models/model_manifest.json"
-    with open(manifest_path, "w") as f:
-        json.dump(manifest, f, indent=2)
-        
-    print(f"Manifesto do modelo salvo em: {manifest_path}")
+    output.with_suffix(".manifest.json").write_text(
+        json.dumps(deploy_manifest, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    print(f"ONNX gerado: {output} ({model_hash[:12]})")
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "candidate_dir", type=Path, help="Diretório criado por train.py"
+    )
+    parser.add_argument(
+        "--output", type=Path, default=Path("ml/models/review/librai_stgcn.onnx")
+    )
+    return parser.parse_args()
+
 
 if __name__ == "__main__":
-    export_model()
+    arguments = parse_args()
+    export(arguments.candidate_dir, arguments.output)

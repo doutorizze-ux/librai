@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://librai.local/contracts/holistic-sequence-v3.schema.json",
+  "title": "Librai Holistic Temporal Sequence v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format_version", "frames"],
+  "properties": {
+    "format_version": { "const": 3 },
+    "frames": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 240,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["timestamp_ms", "hands", "pose", "expression"],
+        "properties": {
+          "timestamp_ms": { "type": "integer", "minimum": 0 },
+          "hands": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 2,
+            "items": { "$ref": "#/$defs/hand" }
+          },
+          "pose": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["landmarks"],
+            "properties": {
+              "landmarks": {
+                "type": "array",
+                "minItems": 13,
+                "maxItems": 13,
+                "items": { "$ref": "#/$defs/landmark" }
+              }
+            }
+          },
+          "expression": {
+            "type": "object",
+            "description": "Somente medidas dinâmicas não identificadoras; nunca malha facial bruta.",
+            "additionalProperties": false,
+            "required": ["mouth_open", "mouth_width", "left_brow", "right_brow"],
+            "properties": {
+              "mouth_open": { "type": "number", "minimum": 0, "maximum": 2 },
+              "mouth_width": { "type": "number", "minimum": 0, "maximum": 2 },
+              "left_brow": { "type": "number", "minimum": -1, "maximum": 1 },
+              "right_brow": { "type": "number", "minimum": -1, "maximum": 1 }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "landmark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": "number", "minimum": -0.5, "maximum": 1.5 },
+        "y": { "type": "number", "minimum": -0.5, "maximum": 1.5 },
+        "z": { "type": "number", "minimum": -3, "maximum": 3 }
+      }
+    },
+    "hand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["handedness", "score", "landmarks"],
+      "properties": {
+        "handedness": { "enum": ["Left", "Right", "Unknown"] },
+        "score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "landmarks": {
+          "type": "array",
+          "minItems": 21,
+          "maxItems": 21,
+          "items": { "$ref": "#/$defs/landmark" }
+        }
+      }
+    }
+  }
+}

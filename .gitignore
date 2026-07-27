@@ -8,3 +8,12 @@ __pycache__/
 *.py[cod]
 *.db
 .pytest_cache/
+ml/dataset/private/
+ml/models/candidate/
+ml/models/review/
+ml/models/mediapipe/
+ml/models/pilot-v1*/
+!ml/models/pilot-v1-core-hands/
+ml/models/pilot-v1-core-hands/*.pt
+ml/models/pilot-v1-core-hands/export_manifest.json
+ml/models/pilot-v1-core-hands/librai_stgcn.manifest.json
