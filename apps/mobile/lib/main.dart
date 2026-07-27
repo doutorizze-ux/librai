@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/translation_screen.dart';
-import 'presentation/screens/conversation_screen.dart';
 import 'presentation/screens/trainer_screen.dart';
 
 void main() {
@@ -29,10 +28,6 @@ class SinalizaAiApp extends StatelessWidget {
         GoRoute(
           path: '/translate',
           builder: (context, state) => const TranslationScreen(),
-        ),
-        GoRoute(
-          path: '/conversation',
-          builder: (context, state) => const ConversationScreen(),
         ),
         GoRoute(
           path: '/trainer',

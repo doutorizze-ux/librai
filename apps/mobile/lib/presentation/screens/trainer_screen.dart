@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import '../../platform/mediapipe_interop.dart';
 import '../../platform/tts_service.dart';
 import '../../domain/sign_phrase_composer.dart';
+import '../../data/trainer_session_store.dart';
 
 class TrainerScreen extends StatefulWidget {
   const TrainerScreen({super.key});
@@ -17,6 +18,7 @@ class TrainerScreen extends StatefulWidget {
 class _TrainerScreenState extends State<TrainerScreen> {
   final MediaPipeService _visionService = MediaPipeService();
   final TtsService _ttsService = TtsService();
+  final TrainerSessionStore _sessionStore = TrainerSessionStore();
   final Dio _dio = Dio(BaseOptions(
     baseUrl: const String.fromEnvironment('API_URL', defaultValue: 'https://api.tvcatolica.site'),
     connectTimeout: const Duration(seconds: 5),
@@ -68,7 +70,36 @@ class _TrainerScreenState extends State<TrainerScreen> {
     // visualização criada sem factory como uma superfície preta.
     _visionService.registerVideoView();
     _signNameController.addListener(_onSignNameChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _requestTrainerAccess());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreTrainerAccess());
+  }
+
+  Future<void> _restoreTrainerAccess() async {
+    final session = await _sessionStore.restore();
+    if (!mounted) return;
+    if (session != null) {
+      _trainerToken = session.token;
+      _trainerName = session.trainerName;
+      try {
+        await _dio.get(
+          '/v1/training/my-samples',
+          queryParameters: const {'limit': 1},
+          options: _authorizedOptions,
+        );
+        if (!mounted) return;
+        _startTrainerServices();
+        return;
+      } on DioException catch (error) {
+        if (error.response?.statusCode != 401) {
+          if (!mounted) return;
+          _startTrainerServices();
+          return;
+        }
+        await _sessionStore.clear();
+        _trainerToken = null;
+        _trainerName = null;
+      }
+    }
+    await _requestTrainerAccess();
   }
 
   Future<void> _requestTrainerAccess() async {
@@ -140,6 +171,18 @@ class _TrainerScreenState extends State<TrainerScreen> {
                   _trainerToken = response.data['access_token'] as String?;
                   _trainerName = name;
                   if (_trainerToken == null) throw StateError('Token ausente');
+                  final expiresInSeconds =
+                      (response.data['expires_in_seconds'] as num?)?.toInt() ??
+                          28800;
+                  await _sessionStore.save(
+                    TrainerSession(
+                      token: _trainerToken!,
+                      trainerName: name,
+                      expiresAt: DateTime.now().add(
+                        Duration(seconds: expiresInSeconds),
+                      ),
+                    ),
+                  );
                   if (dialogContext.mounted) {
                     Navigator.pop(dialogContext, true);
                   }
@@ -933,41 +976,6 @@ class _TrainerScreenState extends State<TrainerScreen> {
                   fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
                 ),
                 textCapitalization: TextCapitalization.sentences,
-              ),
-              const SizedBox(height: 20),
-
-              Semantics(
-                container: true,
-                label: 'Orientações obrigatórias para treinamento',
-                child: Card(
-                  elevation: 0,
-                  color: theme.colorScheme.primaryContainer.withOpacity(0.35),
-                  child: const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Antes de gravar',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          '• Grave um único sinal por vez.\n'
-                          '• BOM DIA, BOA TARDE e BOA NOITE são combinações: '
-                          'grave BOM, DIA, TARDE e NOITE separadamente.\n'
-                          '• Cada professor deve fazer 6 sessões por sinal, '
-                          'variando levemente distância e posição.\n'
-                          '• Mantenha mãos inteiras visíveis, boa iluminação '
-                          'e fundo sem movimento.',
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
               ),
               const SizedBox(height: 20),
 
