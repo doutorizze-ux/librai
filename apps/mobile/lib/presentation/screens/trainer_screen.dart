@@ -537,6 +537,111 @@ class _TrainerScreenState extends State<TrainerScreen> {
     }
   }
 
+  Future<void> _manageLegacySamples() async {
+    final secretController = TextEditingController();
+    final secret = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Registros antigos'),
+        content: TextField(
+          controller: secretController,
+          obscureText: true,
+          decoration: const InputDecoration(
+            labelText: 'Código administrativo',
+            prefixIcon: Icon(Icons.admin_panel_settings_outlined),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, secretController.text),
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
+    );
+    secretController.dispose();
+    if (!mounted || secret == null || secret.isEmpty) return;
+
+    final options = Options(
+      headers: {'X-Trainer-Delete-Secret': secret},
+    );
+    try {
+      final response = await _dio.get(
+        '/v1/training/legacy-samples',
+        options: options,
+      );
+      final samples = (response.data as List)
+          .cast<Map<String, dynamic>>()
+          .toList(growable: true);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Capturas sem professor'),
+            content: SizedBox(
+              width: 480,
+              child: samples.isEmpty
+                  ? const Text('Não existem registros antigos pendentes.')
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: samples.length,
+                      separatorBuilder: (_, __) => const Divider(),
+                      itemBuilder: (context, index) {
+                        final sample = samples[index];
+                        final name = SignPhraseComposer.displayLabel(
+                          sample['sign_name'] as String,
+                        );
+                        return ListTile(
+                          title: Text(name),
+                          subtitle:
+                              Text('${sample['frame_count']} quadros'),
+                          trailing: Semantics(
+                            button: true,
+                            label: 'Excluir captura antiga de $name',
+                            child: IconButton(
+                              tooltip: 'Excluir captura antiga',
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () async {
+                                await _dio.delete(
+                                  '/v1/training/legacy-samples/'
+                                  '${sample['id']}',
+                                  options: options,
+                                );
+                                if (!dialogContext.mounted) return;
+                                setDialogState(() => samples.removeAt(index));
+                                _fetchSummary();
+                              },
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Fechar'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } on DioException catch (error) {
+      if (!mounted) return;
+      _showSnackBar(
+        error.response?.data?['detail']?.toString() ??
+            'Não foi possível abrir os registros antigos.',
+        Colors.redAccent,
+      );
+    }
+  }
+
   String _formatCaptureDate(String rawDate) {
     final parsed = DateTime.tryParse(rawDate)?.toLocal();
     if (parsed == null) return 'Data indisponível';
@@ -1013,6 +1118,14 @@ class _TrainerScreenState extends State<TrainerScreen> {
                         'pela sua sessão de professor.',
                         style: TextStyle(
                           color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: _manageLegacySamples,
+                          icon: const Icon(Icons.history),
+                          label: const Text('Gerenciar registros antigos'),
                         ),
                       ),
                       const SizedBox(height: 12),

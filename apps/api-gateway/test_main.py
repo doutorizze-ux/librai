@@ -329,6 +329,37 @@ def test_professor_lists_and_soft_deletes_only_own_session():
         assert audit.user_id == "Professora Ana"
 
 
+def test_administrator_can_list_and_soft_delete_legacy_sample():
+    with TestingSessionLocal() as db:
+        legacy = models.TrainingSample(
+            sign_name="ANTIGO",
+            landmarks=valid_training_landmarks(),
+            frame_count=10,
+            trainer_name=None,
+        )
+        db.add(legacy)
+        db.commit()
+        legacy_id = legacy.id
+
+    admin_headers = {
+        "X-Trainer-Delete-Secret": "segredo-admin-exclusao",
+    }
+    listed = client.get("/v1/training/legacy-samples", headers=admin_headers)
+    assert listed.status_code == 200
+    assert [item["id"] for item in listed.json()] == [legacy_id]
+
+    deleted = client.delete(
+        f"/v1/training/legacy-samples/{legacy_id}",
+        headers=admin_headers,
+    )
+    assert deleted.status_code == 200
+
+    with TestingSessionLocal() as db:
+        stored = db.query(models.TrainingSample).filter_by(id=legacy_id).one()
+        assert stored.deleted_at is not None
+        assert stored.deleted_by == "administrator"
+
+
 def test_training_rejects_incomplete_or_invalid_landmarks():
     headers = trainer_headers()
     incomplete = [{"x": 0.1, "y": 0.2, "z": 0.3}] * 21

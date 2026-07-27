@@ -251,6 +251,70 @@ def delete_my_training_sample(
     }
 
 
+def _require_trainer_delete_secret(value: str) -> None:
+    if not TRAINER_DELETE_SECRET or not secrets.compare_digest(
+        value,
+        TRAINER_DELETE_SECRET,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chave administrativa inválida ou ausente.",
+        )
+
+
+@router.get(
+    "/training/legacy-samples",
+    response_model=list[schemas.TrainingSampleMetadataResponse],
+)
+def list_legacy_training_samples(
+    db: Session = Depends(get_db),
+    x_trainer_secret: str = Header(..., alias="X-Trainer-Delete-Secret"),
+):
+    """Lista capturas anteriores à identificação individual dos professores."""
+    _require_trainer_delete_secret(x_trainer_secret)
+    samples = db.query(models.TrainingSample).filter(
+        models.TrainingSample.trainer_name.is_(None),
+        models.TrainingSample.deleted_at.is_(None),
+    ).order_by(models.TrainingSample.created_at.desc()).limit(200).all()
+    return [
+        {
+            "id": sample.id,
+            "sign_name": sample.sign_name,
+            "frame_count": sample.frame_count
+            or len(sample.landmarks or []) // 21,
+            "created_at": sample.created_at,
+        }
+        for sample in samples
+    ]
+
+
+@router.delete("/training/legacy-samples/{sample_id}")
+def delete_legacy_training_sample(
+    sample_id: str,
+    db: Session = Depends(get_db),
+    x_trainer_secret: str = Header(..., alias="X-Trainer-Delete-Secret"),
+):
+    _require_trainer_delete_secret(x_trainer_secret)
+    sample = db.query(models.TrainingSample).filter(
+        models.TrainingSample.id == sample_id,
+        models.TrainingSample.trainer_name.is_(None),
+        models.TrainingSample.deleted_at.is_(None),
+    ).first()
+    if not sample:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Captura antiga não encontrada.",
+        )
+    sample.deleted_at = datetime.utcnow()
+    sample.deleted_by = "administrator"
+    db.add(models.AuditLog(
+        action="LEGACY_TRAINING_SAMPLE_SOFT_DELETE",
+        target=f"{sample.id}:{sample.sign_name}",
+    ))
+    db.commit()
+    return {"id": sample.id, "sign_name": sample.sign_name, "deleted": True}
+
+
 @router.delete("/training/samples/{sign_name}")
 def delete_training_samples(
     sign_name: str,
