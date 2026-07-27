@@ -88,8 +88,6 @@
               videoElement.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
               !videoElement.videoWidth ||
               !videoElement.videoHeight) {
-            ctx.fillStyle = '#111318';
-            ctx.fillRect(0, 0, width, height);
             return null;
           }
 
@@ -101,21 +99,6 @@
           const renderedHeight = videoElement.videoHeight * coverScale;
           const offsetX = (width - renderedWidth) / 2;
           const offsetY = (height - renderedHeight) / 2;
-
-          // Safari/iOS can keep processing a video element while rendering its
-          // platform-view layer as black. Painting the current frame into the
-          // visible canvas keeps preview and landmarks on the same surface.
-          ctx.save();
-          ctx.translate(width, 0);
-          ctx.scale(-1, 1);
-          ctx.drawImage(
-            videoElement,
-            width - offsetX - renderedWidth,
-            offsetY,
-            renderedWidth,
-            renderedHeight
-          );
-          ctx.restore();
 
           return { renderedWidth, renderedHeight, offsetX, offsetY };
         };
