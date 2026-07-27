@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from database import engine, Base
+from database import engine, Base, ensure_training_sample_columns
 from routers import (
     admin,
     auth,
@@ -14,6 +14,7 @@ from routers import (
 
 # Inicializar Tabelas do Banco de Dados local (SQLite)
 Base.metadata.create_all(bind=engine)
+ensure_training_sample_columns()
 
 app = FastAPI(
     title="Sinaliza AI API Gateway",

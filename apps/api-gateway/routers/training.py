@@ -1,7 +1,7 @@
 import hashlib
 import os
 import secrets
-from datetime import timedelta
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Header, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
@@ -74,6 +74,8 @@ def get_current_training_model(db: Session = Depends(get_db)):
         models.TrainingSample.sign_name,
         models.TrainingSample.landmarks,
         models.TrainingSample.created_at,
+    ).filter(
+        models.TrainingSample.deleted_at.is_(None)
     ).order_by(models.TrainingSample.created_at, models.TrainingSample.id).all()
 
     features = []
@@ -111,6 +113,8 @@ def create_training_sample(
     db_sample = models.TrainingSample(
         sign_name=canonical_visual_label(sample.sign_name),
         landmarks=[point.model_dump() for point in sample.landmarks],
+        trainer_name=trainer_name,
+        frame_count=len(sample.landmarks) // 21,
     )
     db.add(db_sample)
     db.flush()
@@ -133,7 +137,8 @@ def get_sample_count(
     name = canonical_visual_label(sign_name)
     aliases = ["BOM", "BOA"] if name == "BOM" else [name]
     count = db.query(models.TrainingSample).filter(
-        models.TrainingSample.sign_name.in_(aliases)
+        models.TrainingSample.sign_name.in_(aliases),
+        models.TrainingSample.deleted_at.is_(None),
     ).count()
     
     return {
@@ -150,6 +155,8 @@ def get_samples_summary(
     results = db.query(
         models.TrainingSample.sign_name,
         func.count(models.TrainingSample.id).label("count")
+    ).filter(
+        models.TrainingSample.deleted_at.is_(None)
     ).group_by(models.TrainingSample.sign_name).all()
     
     canonical_counts = {}
@@ -162,6 +169,76 @@ def get_samples_summary(
         {"sign_name": name, "count": canonical_counts[name]}
         for name in sorted(canonical_counts)
     ]
+
+
+@router.get(
+    "/training/my-samples",
+    response_model=list[schemas.TrainingSampleMetadataResponse],
+)
+def list_my_training_samples(
+    sign_name: str | None = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    trainer_name: str = Depends(get_current_trainer),
+):
+    query = db.query(models.TrainingSample).filter(
+        models.TrainingSample.trainer_name == trainer_name,
+        models.TrainingSample.deleted_at.is_(None),
+    )
+    if sign_name:
+        query = query.filter(
+            models.TrainingSample.sign_name
+            == canonical_visual_label(sign_name)
+        )
+    samples = query.order_by(
+        models.TrainingSample.created_at.desc()
+    ).limit(min(max(limit, 1), 100)).all()
+    return [
+        {
+            "id": sample.id,
+            "sign_name": sample.sign_name,
+            "frame_count": sample.frame_count
+            or len(sample.landmarks or []) // 21,
+            "created_at": sample.created_at,
+        }
+        for sample in samples
+    ]
+
+
+@router.delete("/training/my-samples/{sample_id}")
+def delete_my_training_sample(
+    sample_id: str,
+    db: Session = Depends(get_db),
+    trainer_name: str = Depends(get_current_trainer),
+):
+    sample = db.query(models.TrainingSample).filter(
+        models.TrainingSample.id == sample_id,
+        models.TrainingSample.deleted_at.is_(None),
+    ).first()
+    if not sample:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Sessão de treinamento não encontrada.",
+        )
+    if sample.trainer_name != trainer_name:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Você só pode excluir suas próprias sessões.",
+        )
+
+    sample.deleted_at = datetime.utcnow()
+    sample.deleted_by = trainer_name
+    db.add(models.AuditLog(
+        user_id=trainer_name,
+        action="TRAINING_SAMPLE_SOFT_DELETE",
+        target=f"{sample.id}:{sample.sign_name}",
+    ))
+    db.commit()
+    return {
+        "id": sample.id,
+        "sign_name": sample.sign_name,
+        "deleted": True,
+    }
 
 
 @router.delete("/training/samples/{sign_name}")

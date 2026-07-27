@@ -1,6 +1,16 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Table, Float, JSON
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+    Table,
+)
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -128,4 +138,8 @@ class TrainingSample(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     sign_name = Column(String, nullable=False)
     landmarks = Column(JSON, nullable=False)
+    trainer_name = Column(String, nullable=True, index=True)
+    frame_count = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    deleted_at = Column(DateTime, nullable=True, index=True)
+    deleted_by = Column(String, nullable=True)

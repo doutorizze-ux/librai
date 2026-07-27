@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://librai.app/contracts/training-sample-metadata-v1.schema.json",
+  "title": "Librai Training Sample Metadata v1",
+  "type": "object",
+  "required": ["id", "sign_name", "frame_count", "created_at"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "sign_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "frame_count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 240
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

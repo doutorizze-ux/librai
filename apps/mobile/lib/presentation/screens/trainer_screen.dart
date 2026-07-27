@@ -40,6 +40,9 @@ class _TrainerScreenState extends State<TrainerScreen> {
   bool _isLoadingCount = false;
   List<Map<String, dynamic>> _trainedSignsSummary = [];
   bool _isLoadingSummary = false;
+  List<Map<String, dynamic>> _mySamples = [];
+  bool _isLoadingMySamples = false;
+  final Set<String> _deletingSampleIds = {};
   String? _trainerToken;
   String? _trainerName;
   bool _trainerServicesStarted = false;
@@ -165,6 +168,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
     _visionService.registerVideoView();
     _visionService.start();
     _fetchSummary();
+    _fetchMySamples();
     _frameTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
       if (!mounted) return;
       final handsOk = _visionService.isHandsDetected();
@@ -402,6 +406,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
         _ttsService.speak("Sinal gravado com sucesso!");
         _showSnackBar("Sinal enviado com sucesso para a base da IA!", Colors.green);
         _fetchSummary();
+        _fetchMySamples();
       }
     } on DioException catch (error) {
       debugPrint("Erro ao enviar dados de treino: $error");
@@ -442,6 +447,101 @@ class _TrainerScreenState extends State<TrainerScreen> {
     } finally {
       if (mounted) setState(() => _isLoadingSummary = false);
     }
+  }
+
+  Future<void> _fetchMySamples() async {
+    if (_trainerToken == null || _isLoadingMySamples) return;
+    setState(() => _isLoadingMySamples = true);
+    try {
+      final response = await _dio.get(
+        '/v1/training/my-samples',
+        queryParameters: const {'limit': 50},
+        options: _authorizedOptions,
+      );
+      if (!mounted || response.statusCode != 200) return;
+      final data = response.data as List<dynamic>? ?? [];
+      setState(() {
+        _mySamples = data
+            .whereType<Map>()
+            .map(
+              (item) => <String, dynamic>{
+                'id': item['id']?.toString() ?? '',
+                'sign_name': item['sign_name']?.toString() ?? '',
+                'frame_count': (item['frame_count'] as num?)?.toInt() ?? 0,
+                'created_at': item['created_at']?.toString() ?? '',
+              },
+            )
+            .where((item) => (item['id'] as String).isNotEmpty)
+            .toList(growable: false);
+      });
+    } catch (error) {
+      debugPrint('Erro ao buscar sessões do professor: $error');
+    } finally {
+      if (mounted) setState(() => _isLoadingMySamples = false);
+    }
+  }
+
+  Future<void> _confirmDeleteMySample(Map<String, dynamic> sample) async {
+    final id = sample['id'] as String;
+    final signName = sample['sign_name'] as String;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Excluir esta captura?'),
+        content: Text(
+          'Somente esta sessão de $signName será removida. '
+          'As gravações dos outros professores serão preservadas.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('Excluir sessão'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deletingSampleIds.add(id));
+    try {
+      final response = await _dio.delete(
+        '/v1/training/my-samples/$id',
+        options: _authorizedOptions,
+      );
+      if (!mounted || response.statusCode != 200) return;
+      setState(() {
+        _mySamples.removeWhere((item) => item['id'] == id);
+      });
+      _showSnackBar(
+        'A sessão de $signName foi excluída. As demais foram preservadas.',
+        Colors.green,
+      );
+      _fetchSummary();
+      final currentSign = _signNameController.text.trim();
+      if (currentSign.isNotEmpty) _onSignNameChanged();
+    } on DioException catch (error) {
+      if (!mounted) return;
+      _showSnackBar(
+        error.response?.data?['detail']?.toString() ??
+            'Não foi possível excluir esta sessão.',
+        Colors.redAccent,
+      );
+    } finally {
+      if (mounted) setState(() => _deletingSampleIds.remove(id));
+    }
+  }
+
+  String _formatCaptureDate(String rawDate) {
+    final parsed = DateTime.tryParse(rawDate)?.toLocal();
+    if (parsed == null) return 'Data indisponível';
+    String twoDigits(int value) => value.toString().padLeft(2, '0');
+    return '${twoDigits(parsed.day)}/${twoDigits(parsed.month)} '
+        '${twoDigits(parsed.hour)}:${twoDigits(parsed.minute)}';
   }
 
   void _showSnackBar(String message, Color bgColor) {
@@ -848,6 +948,131 @@ class _TrainerScreenState extends State<TrainerScreen> {
                                     ),
                                   ),
                                 ],
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Card(
+                elevation: 0,
+                color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  side: BorderSide(
+                    color: theme.colorScheme.outline.withOpacity(0.2),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.person_pin_outlined,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'Minhas sessões',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          Semantics(
+                            button: true,
+                            label: 'Atualizar minhas sessões de treinamento',
+                            child: IconButton(
+                              onPressed:
+                                  _isLoadingMySamples ? null : _fetchMySamples,
+                              icon: _isLoadingMySamples
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.refresh),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Você pode excluir somente as capturas enviadas '
+                        'pela sua sessão de professor.',
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      if (_mySamples.isEmpty && !_isLoadingMySamples)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Text(
+                            'Você ainda não enviou nenhuma sessão nesta conta.',
+                          ),
+                        )
+                      else
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _mySamples.length,
+                          separatorBuilder: (_, __) =>
+                              const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final sample = _mySamples[index];
+                            final id = sample['id'] as String;
+                            final name = sample['sign_name'] as String;
+                            final frames = sample['frame_count'] as int;
+                            final deleting = _deletingSampleIds.contains(id);
+                            return ListTile(
+                              minTileHeight: 64,
+                              contentPadding:
+                                  const EdgeInsets.symmetric(horizontal: 4),
+                              title: Text(
+                                name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              subtitle: Text(
+                                '$frames quadros • '
+                                '${_formatCaptureDate(
+                                  sample['created_at'] as String,
+                                )}',
+                              ),
+                              trailing: Semantics(
+                                button: true,
+                                label:
+                                    'Excluir minha sessão de treinamento de $name',
+                                child: IconButton(
+                                  tooltip: 'Excluir esta sessão',
+                                  onPressed: deleting
+                                      ? null
+                                      : () => _confirmDeleteMySample(sample),
+                                  icon: deleting
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : Icon(
+                                          Icons.delete_outline,
+                                          color: theme.colorScheme.error,
+                                        ),
+                                ),
                               ),
                             );
                           },

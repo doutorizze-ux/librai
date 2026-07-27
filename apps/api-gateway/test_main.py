@@ -250,6 +250,73 @@ def test_create_training_sample():
         assert audit.user_id == "Professora Teste"
 
 
+def test_professor_lists_and_soft_deletes_only_own_session():
+    professor_a = trainer_headers("Professora Ana")
+    professor_b = trainer_headers("Professor Bruno")
+    landmarks = valid_training_landmarks()
+
+    created_a = client.post(
+        "/v1/training/samples",
+        json={"sign_name": "DIA", "landmarks": landmarks},
+        headers=professor_a,
+    )
+    created_b = client.post(
+        "/v1/training/samples",
+        json={"sign_name": "DIA", "landmarks": landmarks},
+        headers=professor_b,
+    )
+    assert created_a.status_code == 201
+    assert created_b.status_code == 201
+    sample_a_id = created_a.json()["id"]
+
+    mine_a = client.get(
+        "/v1/training/my-samples",
+        headers=professor_a,
+    )
+    assert mine_a.status_code == 200
+    assert [sample["id"] for sample in mine_a.json()] == [sample_a_id]
+    assert mine_a.json()[0]["frame_count"] == 10
+    assert "landmarks" not in mine_a.json()[0]
+
+    forbidden = client.delete(
+        f"/v1/training/my-samples/{sample_a_id}",
+        headers=professor_b,
+    )
+    assert forbidden.status_code == 403
+
+    deleted = client.delete(
+        f"/v1/training/my-samples/{sample_a_id}",
+        headers=professor_a,
+    )
+    assert deleted.status_code == 200
+    assert deleted.json()["deleted"] is True
+
+    count = client.get(
+        "/v1/training/samples/count",
+        params={"sign_name": "DIA"},
+        headers=professor_a,
+    )
+    assert count.status_code == 200
+    assert count.json()["count"] == 1
+
+    mine_after_delete = client.get(
+        "/v1/training/my-samples",
+        headers=professor_a,
+    )
+    assert mine_after_delete.json() == []
+
+    with TestingSessionLocal() as db:
+        stored = db.query(models.TrainingSample).filter(
+            models.TrainingSample.id == sample_a_id
+        ).one()
+        assert stored.deleted_at is not None
+        assert stored.deleted_by == "Professora Ana"
+        audit = db.query(models.AuditLog).filter(
+            models.AuditLog.action == "TRAINING_SAMPLE_SOFT_DELETE"
+        ).one()
+        assert audit.user_id == "Professora Ana"
+
+
 def test_training_rejects_incomplete_or_invalid_landmarks():
     headers = trainer_headers()
     incomplete = [{"x": 0.1, "y": 0.2, "z": 0.3}] * 21

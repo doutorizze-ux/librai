@@ -176,6 +176,16 @@ class TrainingSampleResponse(BaseModel):
         from_attributes = True
 
 
+class TrainingSampleMetadataResponse(BaseModel):
+    id: str
+    sign_name: str
+    frame_count: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class TrainingFeature(BaseModel):
     label: str
     angles: List[float]

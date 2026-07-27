@@ -66,39 +66,13 @@ def get_training_feature_index(db: Session):
     sample_stats = db.query(
         func.count(models.TrainingSample.id),
         func.max(models.TrainingSample.created_at),
+    ).filter(
+        models.TrainingSample.deleted_at.is_(None)
     ).one()
     fingerprint = (str(db.get_bind().url), sample_stats[0], sample_stats[1])
 
     if fingerprint == _feature_index_fingerprint:
         return _feature_index
-
-
-def get_temporal_training_index(db: Session):
-    global _temporal_index_fingerprint, _temporal_index
-
-    sample_stats = db.query(
-        func.count(models.TrainingSample.id),
-        func.max(models.TrainingSample.created_at),
-    ).one()
-    fingerprint = (str(db.get_bind().url), sample_stats[0], sample_stats[1])
-    if fingerprint == _temporal_index_fingerprint:
-        return _temporal_index
-
-    samples = db.query(
-        models.TrainingSample.sign_name,
-        models.TrainingSample.landmarks,
-    ).all()
-    rebuilt = []
-    for sign_name, flat_landmarks in samples:
-        signature = extract_temporal_signature(
-            split_flat_landmarks(flat_landmarks)
-        )
-        if signature:
-            rebuilt.append((canonical_visual_label(sign_name), signature))
-
-    _temporal_index = rebuilt
-    _temporal_index_fingerprint = fingerprint
-    return _temporal_index
 
     with _feature_index_lock:
         if fingerprint == _feature_index_fingerprint:
@@ -108,6 +82,8 @@ def get_temporal_training_index(db: Session):
         samples = db.query(
             models.TrainingSample.sign_name,
             models.TrainingSample.landmarks,
+        ).filter(
+            models.TrainingSample.deleted_at.is_(None)
         ).all()
 
         for sign_name, db_points in samples:
@@ -125,6 +101,38 @@ def get_temporal_training_index(db: Session):
         _feature_index = rebuilt_index
         _feature_index_fingerprint = fingerprint
         return _feature_index
+
+
+def get_temporal_training_index(db: Session):
+    global _temporal_index_fingerprint, _temporal_index
+
+    sample_stats = db.query(
+        func.count(models.TrainingSample.id),
+        func.max(models.TrainingSample.created_at),
+    ).filter(
+        models.TrainingSample.deleted_at.is_(None)
+    ).one()
+    fingerprint = (str(db.get_bind().url), sample_stats[0], sample_stats[1])
+    if fingerprint == _temporal_index_fingerprint:
+        return _temporal_index
+
+    samples = db.query(
+        models.TrainingSample.sign_name,
+        models.TrainingSample.landmarks,
+    ).filter(
+        models.TrainingSample.deleted_at.is_(None)
+    ).all()
+    rebuilt = []
+    for sign_name, flat_landmarks in samples:
+        signature = extract_temporal_signature(
+            split_flat_landmarks(flat_landmarks)
+        )
+        if signature:
+            rebuilt.append((canonical_visual_label(sign_name), signature))
+
+    _temporal_index = rebuilt
+    _temporal_index_fingerprint = fingerprint
+    return _temporal_index
 
 
 @router.post("/translation/predict")
