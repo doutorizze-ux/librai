@@ -62,6 +62,10 @@ class _TrainerScreenState extends State<TrainerScreen> {
   @override
   void initState() {
     super.initState();
+    // O PlatformView precisa existir antes do primeiro build. Se o registro
+    // ocorrer somente após o diálogo de autenticação, o Safari mantém a
+    // visualização criada sem factory como uma superfície preta.
+    _visionService.registerVideoView();
     _signNameController.addListener(_onSignNameChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _requestTrainerAccess());
   }
@@ -165,7 +169,6 @@ class _TrainerScreenState extends State<TrainerScreen> {
   void _startTrainerServices() {
     if (_trainerServicesStarted) return;
     _trainerServicesStarted = true;
-    _visionService.registerVideoView();
     _visionService.start();
     _fetchSummary();
     _fetchMySamples();
