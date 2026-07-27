@@ -115,10 +115,14 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         centerTitle: true,
         actions: [
-          IconButton(
-            semanticsLabel: 'Abrir configurações',
-            icon: const Icon(Icons.settings),
-            onPressed: _showSettingsDialog,
+          Semantics(
+            button: true,
+            label: 'Abrir configurações',
+            child: IconButton(
+              tooltip: 'Configurações',
+              icon: const Icon(Icons.settings),
+              onPressed: _showSettingsDialog,
+            ),
           ),
         ],
       ),
