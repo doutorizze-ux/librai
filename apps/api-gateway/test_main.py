@@ -499,9 +499,11 @@ def test_temporal_prediction_distinguishes_static_d_from_moving_dia():
     assert static_prediction.status_code == 200
     assert static_prediction.json()["label"] == "D"
     assert static_prediction.json()["model"] == "hand_sequence_v1"
+    assert static_prediction.json()["confidence"] >= 0.70
     assert moving_prediction.status_code == 200
     assert moving_prediction.json()["label"] == "DIA"
     assert moving_prediction.json()["model"] == "hand_sequence_v1"
+    assert moving_prediction.json()["confidence"] >= 0.70
 
 
 def test_temporal_prediction_requires_a_real_sequence():

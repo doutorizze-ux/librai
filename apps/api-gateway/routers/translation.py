@@ -205,9 +205,15 @@ def predict_sign_sequence(payload: dict, db: Session = Depends(get_db)):
         1.0,
     )
     separation = max(0.0, second_distance - best_distance)
+    # O endpoint já rejeitou distâncias fora do limiar. Portanto, toda
+    # sequência retornada com um rótulo precisa atingir o mesmo piso de 0,70
+    # exigido pelos clientes; antes o servidor devolvia rótulos entre
+    # 0,50–0,69 que eram descartados silenciosamente pela interface.
     confidence = min(
         0.99,
-        max(0.5, (1.0 - best_distance / 0.35) * 0.8 + separation * 0.2),
+        0.70
+        + max(0.0, 1.0 - best_distance / 0.35) * 0.24
+        + min(separation, 0.25) * 0.20,
     )
     return {
         "label": best_label,
