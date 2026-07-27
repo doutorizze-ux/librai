@@ -101,15 +101,25 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
+      backgroundColor: const Color(0xFFFAF8FD),
       appBar: AppBar(
+        toolbarHeight: 68,
         title: GestureDetector(
           onTap: _handleLogoTap,
           child: Semantics(
             label: 'Librai',
-            child: Image.asset(
-              'assets/branding/librai-icon.png',
-              height: 46,
-              fit: BoxFit.contain,
+            child: SizedBox(
+              width: 62,
+              height: 62,
+              child: ClipRect(
+                child: Transform.scale(
+                  scale: 1.55,
+                  child: Image.asset(
+                    'assets/branding/librai-icon.png',
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -127,51 +137,137 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Card(
-                color: theme.colorScheme.primaryContainer,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.wifi, color: theme.colorScheme.primary),
-                      const SizedBox(width: 8),
-                      const Text('Conexão: Online'),
-                    ],
-                  ),
-                ),
-              ),
-              const Spacer(),
-              Semantics(
-                button: true,
-                label: 'Traduzir Libras pela câmera',
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 80),
-                    backgroundColor: theme.colorScheme.primary,
-                    foregroundColor: theme.colorScheme.onPrimary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 18, 24, 28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Align(
+                      alignment: Alignment.center,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEDE5FA),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: const Color(0xFFDCCEF3),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 9,
+                              height: 9,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF29A866),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Online e pronto para traduzir',
+                              style: TextStyle(
+                                color: Color(0xFF513C78),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
-                  icon: const Icon(Icons.camera_alt, size: 32),
-                  label: const Text(
-                    'Traduzir Libras',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  onPressed: () {
-                    TtsService().unlock();
-                    context.push('/translate');
-                  },
+                    SizedBox(
+                      height: constraints.maxHeight < 650 ? 42 : 72,
+                    ),
+                    Center(
+                      child: SizedBox(
+                        width: constraints.maxWidth < 420 ? 170 : 205,
+                        height: constraints.maxWidth < 420 ? 170 : 205,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(48),
+                          child: Transform.scale(
+                            scale: 1.18,
+                            child: Image.asset(
+                              'assets/branding/librai-icon.png',
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+                    const Text(
+                      'Librai',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Color(0xFF251C32),
+                        fontSize: 38,
+                        height: 1,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'Libras em movimento.\nComunicação sem barreiras.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Color(0xFF655A70),
+                        fontSize: 18,
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    SizedBox(
+                      height: constraints.maxHeight < 650 ? 42 : 74,
+                    ),
+                    Semantics(
+                      button: true,
+                      label: 'Traduzir Libras pela câmera',
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          elevation: 0,
+                          minimumSize: const Size(double.infinity, 68),
+                          backgroundColor: const Color(0xFF6C5598),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(22),
+                          ),
+                        ),
+                        icon: const Icon(Icons.camera_alt_rounded, size: 29),
+                        label: const Text(
+                          'Abrir tradutor',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        onPressed: () {
+                          TtsService().unlock();
+                          context.push('/translate');
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      'A câmera processa os movimentos para reconhecer os sinais.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const Spacer(flex: 2),
-            ],
+            ),
           ),
         ),
       ),
