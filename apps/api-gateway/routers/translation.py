@@ -258,15 +258,34 @@ def predict_sign_sequence(payload: dict, db: Session = Depends(get_db)):
 def predict_sign_sequence_v2(payload: dict, db: Session = Depends(get_db)):
     if payload.get("format_version") != 2:
         return {"label": "DADOS_INSUFICIENTES", "confidence": 0.0}
-    signature = extract_two_hand_signature(payload.get("frames"))
-    if signature is None:
+    frames = payload.get("frames")
+    if not isinstance(frames, list):
+        return {"label": "DADOS_INSUFICIENTES", "confidence": 0.0}
+    candidate_frames = []
+    for window_size in (20, 28, 36, 48, 64):
+        if len(frames) >= window_size:
+            candidate_frames.append(frames[-window_size:])
+    if len(frames) >= 12:
+        candidate_frames.append(frames)
+    signatures = [
+        signature
+        for candidate in candidate_frames
+        if (signature := extract_two_hand_signature(candidate)) is not None
+    ]
+    if not signatures:
         return {"label": "DADOS_INSUFICIENTES", "confidence": 0.0}
     index = get_temporal_v2_training_index(db)
     if not index:
         return {"label": "SINAL_DESCONHECIDO", "confidence": 0.0}
     ranked = sorted(
         (
-            (two_hand_temporal_distance(signature, trained), label)
+            (
+                min(
+                    two_hand_temporal_distance(signature, trained)
+                    for signature in signatures
+                ),
+                label,
+            )
             for label, trained in index
         ),
         key=lambda item: item[0],

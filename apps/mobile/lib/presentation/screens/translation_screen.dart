@@ -67,6 +67,11 @@ class _TranslationScreenState extends State<TranslationScreen> {
 
       // Validação de enquadramento
       final framing = VisionValidator.validateFraming(landmarks, faceOk);
+      if (handFrame != null) {
+        // A captura não pode parar enquanto uma requisição de reconhecimento
+        // está em andamento. O movimento precisa permanecer contínuo.
+        _interpreter.addHandFrame(handFrame);
+      }
 
       if (_handsDetected != handsOk ||
           _faceDetected != faceOk ||
@@ -124,13 +129,14 @@ class _TranslationScreenState extends State<TranslationScreen> {
     bool bodyOk,
     VisionState framing,
   ) async {
-    if (framing == VisionState.ok && landmarks != null && landmarks.isNotEmpty) {
+    if (handsOk && landmarks != null && landmarks.isNotEmpty) {
       if (_frameBuffer.isProcessing) return;
+      if (handFrame != null && !_interpreter.hasEnoughHandFrames) return;
       _frameBuffer.setProcessing(true);
 
       try {
         final prediction = handFrame != null
-            ? await _interpreter.predictHandFrame(handFrame)
+            ? await _interpreter.predictBufferedSequence()
             : await _interpreter.predict(landmarks);
         if (!mounted || !_isTranslating) return;
         
@@ -144,9 +150,11 @@ class _TranslationScreenState extends State<TranslationScreen> {
             _predictionHistory.removeAt(0);
           }
           
-          // Exigir estritamente 2 ocorrências idênticas seguidas antes de aceitar o sinal
-          bool isConsistent = _predictionHistory.length >= 2 && 
-                              _predictionHistory[0] == _predictionHistory[1];
+          // Uma correspondência muito forte pode ser aceita imediatamente.
+          // Resultados limítrofes ainda precisam de confirmação consecutiva.
+          final bool isConsistent = prediction.confidence >= 0.86 ||
+              (_predictionHistory.length >= 2 &&
+                  _predictionHistory[0] == _predictionHistory[1]);
           
           if (isConsistent) {
             final votedLabel = prediction.label;

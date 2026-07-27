@@ -28,12 +28,22 @@ class MockSignInterpreter implements SignInterpreter {
     _structuredSequenceFrames.clear();
   }
 
-  Future<PredictionResult> predictHandFrame(Map<String, dynamic> frame) async {
+  void addHandFrame(Map<String, dynamic> frame) {
+    final hands = frame['hands'];
+    if (hands is! List || hands.isEmpty) return;
+    _structuredSequenceFrames.add(Map<String, dynamic>.from(frame));
+    if (_structuredSequenceFrames.length > 64) {
+      _structuredSequenceFrames.removeAt(0);
+    }
+  }
+
+  bool get hasEnoughHandFrames => _structuredSequenceFrames.length >= 20;
+
+  Future<PredictionResult> predictBufferedSequence() async {
     if (_loadedModelPath == null) {
       throw StateError("Modelo não carregado. Chame loadModel() primeiro.");
     }
-    final hands = frame['hands'];
-    if (hands is! List || hands.isEmpty) {
+    if (!hasEnoughHandFrames) {
       return PredictionResult(
         label: "DADOS_INSUFICIENTES",
         confidence: 0,
@@ -41,27 +51,13 @@ class MockSignInterpreter implements SignInterpreter {
         modelVersion: "two_hand_sequence_v2",
       );
     }
-    _structuredSequenceFrames.add(Map<String, dynamic>.from(frame));
-    if (_structuredSequenceFrames.length > 48) {
-      _structuredSequenceFrames.removeAt(0);
-    }
-    if (_structuredSequenceFrames.length < 12) {
-      return PredictionResult(
-        label: "DADOS_INSUFICIENTES",
-        confidence: 0,
-        isTestFixture: false,
-        modelVersion: "two_hand_sequence_v2",
-      );
-    }
-    final last = _structuredSequenceFrames.length - 1;
-    final sampled = List.generate(
-      20,
-      (index) => _structuredSequenceFrames[(index * last / 19).round()],
-    );
+    final snapshot = _structuredSequenceFrames
+        .map((frame) => Map<String, dynamic>.from(frame))
+        .toList(growable: false);
     try {
       final response = await _dio.post(
         '/v1/translation/predict-sequence-v2',
-        data: {'format_version': 2, 'frames': sampled},
+        data: {'format_version': 2, 'frames': snapshot},
       );
       return PredictionResult(
         label: response.data['label'] as String,
@@ -79,6 +75,11 @@ class MockSignInterpreter implements SignInterpreter {
         modelVersion: "two_hand_sequence_v2",
       );
     }
+  }
+
+  Future<PredictionResult> predictHandFrame(Map<String, dynamic> frame) {
+    addHandFrame(frame);
+    return predictBufferedSequence();
   }
 
   @override

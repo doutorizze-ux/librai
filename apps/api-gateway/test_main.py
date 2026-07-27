@@ -617,6 +617,39 @@ def test_two_hand_v2_rejects_short_or_unordered_sequence():
     )
     assert rejected.status_code == 422
 
+
+def test_two_hand_v2_finds_sign_inside_continuous_camera_buffer():
+    headers = trainer_headers()
+    trained = structured_hand_frames(
+        left_movement=0,
+        right_movement=0.006,
+        frame_count=28,
+    )
+    created = client.post(
+        "/v1/training/samples-v2",
+        json={"sign_name": "MOVIMENTO", "format_version": 2, "frames": trained},
+        headers=headers,
+    )
+    assert created.status_code == 201
+
+    neutral = structured_hand_frames(frame_count=20)
+    live_sign = structured_hand_frames(
+        left_movement=0,
+        right_movement=0.006,
+        frame_count=28,
+    )
+    for index, frame in enumerate(live_sign):
+        frame["timestamp_ms"] = neutral[-1]["timestamp_ms"] + (index + 1) * 33
+    continuous_buffer = neutral + live_sign
+
+    prediction = client.post(
+        "/v1/translation/predict-sequence-v2",
+        json={"format_version": 2, "frames": continuous_buffer},
+    )
+    assert prediction.status_code == 200
+    assert prediction.json()["label"] == "MOVIMENTO"
+    assert prediction.json()["confidence"] >= 0.72
+
     unordered = structured_hand_frames()
     unordered[5]["timestamp_ms"] = unordered[4]["timestamp_ms"]
     rejected = client.post(
