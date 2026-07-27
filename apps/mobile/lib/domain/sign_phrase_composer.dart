@@ -96,6 +96,20 @@ class SignPhraseComposer {
     return normalized == 'BOA' ? 'BOM' : normalized;
   }
 
+  /// Formata uma glosa técnica para apresentação ao usuário.
+  ///
+  /// O modelo continua usando rótulos canônicos em maiúsculas internamente,
+  /// enquanto a interface mostra português com capitalização natural.
+  static String displayLabel(String rawLabel) {
+    final normalized = normalizeLabel(rawLabel);
+    if (normalized.isEmpty) return '';
+    if (normalized.length == 1) return normalized;
+    const acronyms = {'CPF', 'RG', 'SUS', 'IA', 'LGPD'};
+    if (acronyms.contains(normalized)) return normalized;
+    final words = normalized.toLowerCase().replaceAll('_', ' ');
+    return '${words[0].toUpperCase()}${words.substring(1)}';
+  }
+
   /// Retorna os sinais que devem ser treinados separadamente quando o rótulo
   /// informado representa uma expressão composta conhecida.
   static List<String>? trainingComponentsFor(String rawLabel) {

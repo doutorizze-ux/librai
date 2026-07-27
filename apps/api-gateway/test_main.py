@@ -63,6 +63,18 @@ def valid_training_landmarks():
     return frames
 
 
+def test_changing_trainer_code_invalidates_existing_session():
+    headers = trainer_headers("Professora Ana")
+    training.TRAINER_ACCESS_CODE = "novo-codigo-professores"
+
+    response = client.get("/v1/training/my-samples", headers=headers)
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == (
+        "Sessão de treinamento inválida ou expirada."
+    )
+
+
 def temporal_landmark_frames(movement_per_frame=0.0, frame_count=16):
     frames = []
     for frame_index in range(frame_count):

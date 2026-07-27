@@ -484,12 +484,13 @@ class _TrainerScreenState extends State<TrainerScreen> {
   Future<void> _confirmDeleteMySample(Map<String, dynamic> sample) async {
     final id = sample['id'] as String;
     final signName = sample['sign_name'] as String;
+    final displayName = SignPhraseComposer.displayLabel(signName);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Excluir esta captura?'),
         content: Text(
-          'Somente esta sessão de $signName será removida. '
+          'Somente esta sessão de $displayName será removida. '
           'As gravações dos outros professores serão preservadas.',
         ),
         actions: [
@@ -518,7 +519,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
         _mySamples.removeWhere((item) => item['id'] == id);
       });
       _showSnackBar(
-        'A sessão de $signName foi excluída. As demais foram preservadas.',
+        'A sessão de $displayName foi excluída. As demais foram preservadas.',
         Colors.green,
       );
       _fetchSummary();
@@ -766,7 +767,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
                 controller: _signNameController,
                 enabled: !_isRecording && !_isUploading && !_isCountingDown,
                 decoration: InputDecoration(
-                  labelText: 'Nome do Sinal (ex: OBRIGADO)',
+                  labelText: 'Nome do sinal (ex.: Obrigado)',
                   hintText: 'Digite a palavra correspondente',
                   prefixIcon: const Icon(Icons.label),
                   helperText: _isLoadingCount
@@ -794,7 +795,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
                   filled: true,
                   fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
                 ),
-                textCapitalization: TextCapitalization.characters,
+                textCapitalization: TextCapitalization.sentences,
               ),
               const SizedBox(height: 20),
 
@@ -915,7 +916,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
                             return ListTile(
                               contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                               title: Text(
-                                name,
+                                SignPhraseComposer.displayLabel(name),
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                               ),
                               subtitle: Text(
@@ -1040,7 +1041,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
                               contentPadding:
                                   const EdgeInsets.symmetric(horizontal: 4),
                               title: Text(
-                                name,
+                                SignPhraseComposer.displayLabel(name),
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -1054,7 +1055,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
                               trailing: Semantics(
                                 button: true,
                                 label:
-                                    'Excluir minha sessão de treinamento de $name',
+                                    'Excluir minha sessão de treinamento de '
+                                    '${SignPhraseComposer.displayLabel(name)}',
                                 child: IconButton(
                                   tooltip: 'Excluir esta sessão',
                                   onPressed: deleting

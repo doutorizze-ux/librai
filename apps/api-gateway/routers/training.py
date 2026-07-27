@@ -20,6 +20,10 @@ TRAINER_DELETE_SECRET = os.getenv("TRAINER_DELETE_SECRET", "")
 trainer_bearer = HTTPBearer(auto_error=False)
 
 
+def _trainer_code_version() -> str:
+    return hashlib.sha256(TRAINER_ACCESS_CODE.encode("utf-8")).hexdigest()[:16]
+
+
 def get_current_trainer(
     credentials: HTTPAuthorizationCredentials = Depends(trainer_bearer),
 ) -> str:
@@ -29,7 +33,12 @@ def get_current_trainer(
             detail="Sessão de treinamento ausente.",
         )
     payload = security.decode_token(credentials.credentials)
-    if not payload or payload.get("scope") != "training" or not payload.get("trainer"):
+    if (
+        not payload
+        or payload.get("scope") != "training"
+        or not payload.get("trainer")
+        or payload.get("trainer_code_version") != _trainer_code_version()
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Sessão de treinamento inválida ou expirada.",
@@ -56,6 +65,7 @@ def authenticate_trainer(request: schemas.TrainerLoginRequest):
         {
             "scope": "training",
             "trainer": request.trainer_name,
+            "trainer_code_version": _trainer_code_version(),
         },
         expires_delta=timedelta(hours=8),
     )

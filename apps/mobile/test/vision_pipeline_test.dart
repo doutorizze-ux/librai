@@ -268,6 +268,13 @@ void main() {
       );
     });
 
+    test('Exibe os nomes dos sinais com capitalização natural', () {
+      expect(SignPhraseComposer.displayLabel('OBRIGADO'), equals('Obrigado'));
+      expect(SignPhraseComposer.displayLabel('BOM_DIA'), equals('Bom dia'));
+      expect(SignPhraseComposer.displayLabel('cpf'), equals('CPF'));
+      expect(SignPhraseComposer.displayLabel('d'), equals('D'));
+    });
+
     test('Espera tempo suficiente pelo segundo sinal da saudação', () {
       final composer = SignPhraseComposer();
       final startedAt = DateTime(2026, 7, 25, 10);
