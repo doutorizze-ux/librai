@@ -56,7 +56,22 @@ jobs:
 
       - name: Build installable release APK
         working-directory: apps/mobile
-        run: flutter build apk --release --target lib/main_native.dart
+        shell: bash
+        run: |
+          set +e
+          flutter build apk --release --target lib/main_native.dart 2>&1 | tee android-build.log
+          build_status=${PIPESTATUS[0]}
+          if [ "$build_status" -ne 0 ]; then
+            {
+              echo "### Android build failure"
+              echo '```text'
+              tail -n 80 android-build.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            error_message=$(tail -n 25 android-build.log | tr '\n' ' ' | sed 's/%/%25/g; s/\r/%0D/g; s/::/: :/g')
+            echo "::error title=Android APK build failed::$error_message"
+          fi
+          exit "$build_status"
 
       - name: Name APK
         run: mv apps/mobile/build/app/outputs/flutter-apk/app-release.apk Librai.apk
