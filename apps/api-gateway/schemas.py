@@ -213,6 +213,7 @@ class TrainingSampleMetadataResponse(BaseModel):
     id: str
     sign_name: str
     frame_count: int
+    trainer_name: Optional[str] = None
     created_at: datetime
 
     class Config:

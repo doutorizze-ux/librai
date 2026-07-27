@@ -255,6 +255,7 @@ def list_my_training_samples(
             "sign_name": sample.sign_name,
             "frame_count": sample.frame_count
             or len(sample.landmarks or []) // 21,
+            "trainer_name": sample.trainer_name,
             "created_at": sample.created_at,
         }
         for sample in samples
@@ -319,15 +320,15 @@ def list_legacy_training_samples(
     """Lista capturas anteriores à identificação individual dos professores."""
     _require_trainer_delete_secret(x_trainer_secret)
     samples = db.query(models.TrainingSample).filter(
-        models.TrainingSample.trainer_name.is_(None),
         models.TrainingSample.deleted_at.is_(None),
-    ).order_by(models.TrainingSample.created_at.desc()).limit(200).all()
+    ).order_by(models.TrainingSample.created_at.desc()).limit(500).all()
     return [
         {
             "id": sample.id,
             "sign_name": sample.sign_name,
             "frame_count": sample.frame_count
             or len(sample.landmarks or []) // 21,
+            "trainer_name": sample.trainer_name,
             "created_at": sample.created_at,
         }
         for sample in samples
@@ -343,7 +344,6 @@ def delete_legacy_training_sample(
     _require_trainer_delete_secret(x_trainer_secret)
     sample = db.query(models.TrainingSample).filter(
         models.TrainingSample.id == sample_id,
-        models.TrainingSample.trainer_name.is_(None),
         models.TrainingSample.deleted_at.is_(None),
     ).first()
     if not sample:

@@ -558,7 +558,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
     final secret = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Registros antigos'),
+        title: const Text('Gerenciamento administrativo'),
         content: TextField(
           controller: secretController,
           obscureText: true,
@@ -599,11 +599,11 @@ class _TrainerScreenState extends State<TrainerScreen> {
         context: context,
         builder: (dialogContext) => StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
-            title: const Text('Capturas sem professor'),
+            title: const Text('Todas as capturas'),
             content: SizedBox(
               width: 480,
               child: samples.isEmpty
-                  ? const Text('Não existem registros antigos pendentes.')
+                  ? const Text('Não existem capturas ativas.')
                   : ListView.separated(
                       shrinkWrap: true,
                       itemCount: samples.length,
@@ -613,10 +613,14 @@ class _TrainerScreenState extends State<TrainerScreen> {
                         final name = SignPhraseComposer.displayLabel(
                           sample['sign_name'] as String,
                         );
+                        final trainer =
+                            sample['trainer_name']?.toString().trim();
                         return ListTile(
                           title: Text(name),
-                          subtitle:
-                              Text('${sample['frame_count']} quadros'),
+                          subtitle: Text(
+                            '${sample['frame_count']} quadros • '
+                            '${trainer == null || trainer.isEmpty ? 'registro antigo' : trainer}',
+                          ),
                           trailing: Semantics(
                             button: true,
                             label: 'Excluir captura antiga de $name',
@@ -624,14 +628,26 @@ class _TrainerScreenState extends State<TrainerScreen> {
                               tooltip: 'Excluir captura antiga',
                               icon: const Icon(Icons.delete_outline),
                               onPressed: () async {
-                                await _dio.delete(
-                                  '/v1/training/legacy-samples/'
-                                  '${sample['id']}',
-                                  options: options,
-                                );
-                                if (!dialogContext.mounted) return;
-                                setDialogState(() => samples.removeAt(index));
-                                _fetchSummary();
+                                try {
+                                  await _dio.delete(
+                                    '/v1/training/legacy-samples/'
+                                    '${sample['id']}',
+                                    options: options,
+                                  );
+                                  if (!dialogContext.mounted) return;
+                                  setDialogState(
+                                    () => samples.removeAt(index),
+                                  );
+                                  _fetchSummary();
+                                  _fetchMySamples();
+                                } on DioException catch (error) {
+                                  if (!mounted) return;
+                                  _showSnackBar(
+                                    error.response?.data?['detail']?.toString() ??
+                                        'Não foi possível excluir a captura.',
+                                    Colors.redAccent,
+                                  );
+                                }
                               },
                             ),
                           ),
@@ -1141,7 +1157,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
                         child: TextButton.icon(
                           onPressed: _manageLegacySamples,
                           icon: const Icon(Icons.history),
-                          label: const Text('Gerenciar registros antigos'),
+                          label: const Text('Gerenciar todas as capturas'),
                         ),
                       ),
                       const SizedBox(height: 12),

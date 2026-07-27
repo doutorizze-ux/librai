@@ -411,6 +411,33 @@ def test_administrator_can_list_and_soft_delete_legacy_sample():
         assert stored.deleted_by == "administrator"
 
 
+def test_administrator_can_delete_sample_from_old_automatic_professor():
+    with TestingSessionLocal() as db:
+        old_sample = models.TrainingSample(
+            sign_name="PRESO",
+            landmarks=valid_training_landmarks(),
+            frame_count=10,
+            trainer_name="Prof1",
+        )
+        db.add(old_sample)
+        db.commit()
+        sample_id = old_sample.id
+
+    admin_headers = {
+        "X-Trainer-Delete-Secret": "segredo-admin-exclusao",
+    }
+    listed = client.get("/v1/training/legacy-samples", headers=admin_headers)
+    assert listed.status_code == 200
+    item = next(item for item in listed.json() if item["id"] == sample_id)
+    assert item["trainer_name"] == "Prof1"
+
+    deleted = client.delete(
+        f"/v1/training/legacy-samples/{sample_id}",
+        headers=admin_headers,
+    )
+    assert deleted.status_code == 200
+
+
 def test_training_rejects_incomplete_or_invalid_landmarks():
     headers = trainer_headers()
     incomplete = [{"x": 0.1, "y": 0.2, "z": 0.3}] * 21
