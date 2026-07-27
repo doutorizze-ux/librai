@@ -1,16 +1,25 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sinaliza_ai/data/trainer_session_store.dart';
 
+class MemoryPreferences implements TrainerSessionPreferences {
+  final Map<String, String> values = {};
+
+  @override
+  Future<String?> getString(String key) async => values[key];
+
+  @override
+  Future<void> remove(String key) async => values.remove(key);
+
+  @override
+  Future<void> setString(String key, String value) async {
+    values[key] = value;
+  }
+}
+
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
-
-  setUp(() {
-    SharedPreferences.setMockInitialValues({});
-  });
-
   test('restaura sessão válida do professor', () async {
-    final store = TrainerSessionStore();
+    final preferences = MemoryPreferences();
+    final store = TrainerSessionStore(preferences: preferences);
     await store.save(
       TrainerSession(
         token: 'token-seguro',
@@ -19,7 +28,8 @@ void main() {
       ),
     );
 
-    final restored = await TrainerSessionStore().restore();
+    final restored =
+        await TrainerSessionStore(preferences: preferences).restore();
 
     expect(restored?.token, 'token-seguro');
     expect(restored?.trainerName, 'Professora Ana');
@@ -27,7 +37,8 @@ void main() {
   });
 
   test('descarta sessão expirada', () async {
-    final store = TrainerSessionStore();
+    final preferences = MemoryPreferences();
+    final store = TrainerSessionStore(preferences: preferences);
     await store.save(
       TrainerSession(
         token: 'token-expirado',
@@ -36,6 +47,9 @@ void main() {
       ),
     );
 
-    expect(await TrainerSessionStore().restore(), isNull);
+    expect(
+      await TrainerSessionStore(preferences: preferences).restore(),
+      isNull,
+    );
   });
 }

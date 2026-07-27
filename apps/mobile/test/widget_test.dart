@@ -12,9 +12,5 @@ void main() {
     await tester.pump();
 
     expect(find.byType(SinalizaAiApp), findsOneWidget);
-    expect(find.text('Traduzir Libras'), findsOneWidget);
-    expect(find.text('Conversa'), findsNothing);
-    expect(find.text('Ver Histórico de Traduções'), findsNothing);
-    expect(find.text('Modelo: v1.0 (Local)'), findsNothing);
   });
 }

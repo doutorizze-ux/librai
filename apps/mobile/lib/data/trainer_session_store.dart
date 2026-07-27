@@ -14,12 +14,35 @@ class TrainerSession {
   bool get isValid => expiresAt.isAfter(DateTime.now());
 }
 
+abstract interface class TrainerSessionPreferences {
+  Future<String?> getString(String key);
+  Future<void> setString(String key, String value);
+  Future<void> remove(String key);
+}
+
+class SharedTrainerSessionPreferences implements TrainerSessionPreferences {
+  final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
+
+  @override
+  Future<String?> getString(String key) => _preferences.getString(key);
+
+  @override
+  Future<void> setString(String key, String value) =>
+      _preferences.setString(key, value);
+
+  @override
+  Future<void> remove(String key) => _preferences.remove(key);
+}
+
 class TrainerSessionStore {
+  TrainerSessionStore({TrainerSessionPreferences? preferences})
+      : _preferences = preferences ?? SharedTrainerSessionPreferences();
+
   static const _tokenKey = 'librai_trainer_token';
   static const _nameKey = 'librai_trainer_name';
   static const _expiresAtKey = 'librai_trainer_expires_at';
 
-  final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
+  final TrainerSessionPreferences _preferences;
 
   Future<TrainerSession?> restore() async {
     final token = await _preferences.getString(_tokenKey);
