@@ -1,8 +1,6 @@
 import json
-import os
 import threading
 from datetime import datetime
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -31,27 +29,6 @@ _temporal_index = []
 _temporal_v2_index_fingerprint = None
 _temporal_v2_index = []
 
-
-async def experimental_ml_prediction(payload: dict):
-    if os.getenv("EXPERIMENTAL_ML_ENABLED", "false").lower() != "true":
-        return None
-    service_url = os.getenv(
-        "ML_INFERENCE_URL", "http://ml-inference:8001"
-    ).rstrip("/")
-    try:
-        async with httpx.AsyncClient(timeout=1.5) as client:
-            response = await client.post(f"{service_url}/predict", json=payload)
-            response.raise_for_status()
-        prediction = response.json()
-        if (
-            prediction.get("experimental") is True
-            and isinstance(prediction.get("label"), str)
-            and isinstance(prediction.get("confidence"), (int, float))
-        ):
-            return prediction
-    except (httpx.HTTPError, ValueError, TypeError):
-        # O piloto nunca derruba o tradutor existente.
-        return None
 
 def extract_hand_angles(landmarks):
     """Extrai vetor de características de ângulos articulares das mãos (invariante a escala, posição e rotação)."""
@@ -279,7 +256,7 @@ def predict_sign_sequence(payload: dict, db: Session = Depends(get_db)):
 
 
 @router.post("/translation/predict-sequence-v2")
-async def predict_sign_sequence_v2(
+def predict_sign_sequence_v2(
     payload: dict, db: Session = Depends(get_db)
 ):
     if payload.get("format_version") != 2:
@@ -287,9 +264,6 @@ async def predict_sign_sequence_v2(
     frames = payload.get("frames")
     if not isinstance(frames, list):
         return {"label": "DADOS_INSUFICIENTES", "confidence": 0.0}
-    experimental = await experimental_ml_prediction(payload)
-    if experimental and experimental["label"] != "SINAL_DESCONHECIDO":
-        return experimental
     candidate_frames = []
     for window_size in (20, 28, 36, 48, 64):
         if len(frames) >= window_size:

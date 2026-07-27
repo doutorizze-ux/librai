@@ -199,6 +199,25 @@ class TrainingSampleCreateV2(BaseModel):
             raise ValueError("timestamps dos quadros devem ser únicos e crescentes")
         return value
 
+
+class TrainingRepetitionV2(BaseModel):
+    frames: List[TrainingFrame] = Field(min_length=12, max_length=180)
+
+    @field_validator("frames")
+    @classmethod
+    def validate_timestamps(cls, value):
+        timestamps = [frame.timestamp_ms for frame in value]
+        if timestamps != sorted(timestamps) or len(timestamps) != len(set(timestamps)):
+            raise ValueError("timestamps dos quadros devem ser únicos e crescentes")
+        return value
+
+
+class TrainingBatchCreateV2(BaseModel):
+    sign_name: str = Field(min_length=1, max_length=64)
+    format_version: int = Field(default=2, ge=2, le=2)
+    repetitions: List[TrainingRepetitionV2] = Field(min_length=5, max_length=5)
+
+
 class TrainingSampleResponse(BaseModel):
     id: str
     sign_name: str

@@ -184,6 +184,47 @@ def create_training_sample_v2(
     }
 
 
+@router.post("/training/batches-v2", status_code=status.HTTP_201_CREATED)
+def create_training_batch_v2(
+    batch: schemas.TrainingBatchCreateV2,
+    db: Session = Depends(get_db),
+    trainer_name: str = Depends(get_current_trainer),
+):
+    """Grava exatamente cinco repetições do mesmo sinal em uma transação."""
+    sign_name = canonical_visual_label(batch.sign_name)
+    created = []
+    for repetition_number, repetition in enumerate(batch.repetitions, start=1):
+        sequence = {
+            "format_version": 2,
+            "frames": [frame.model_dump() for frame in repetition.frames],
+        }
+        db_sample = models.TrainingSample(
+            sign_name=sign_name,
+            landmarks=sequence,
+            trainer_name=trainer_name,
+            frame_count=len(repetition.frames),
+        )
+        db.add(db_sample)
+        db.flush()
+        created.append({
+            "id": db_sample.id,
+            "frame_count": db_sample.frame_count,
+            "repetition": repetition_number,
+        })
+
+    db.add(models.AuditLog(
+        user_id=trainer_name,
+        action="TRAINING_BATCH_CREATE_V2",
+        target=f"{sign_name}:5_repetitions",
+    ))
+    db.commit()
+    return {
+        "sign_name": sign_name,
+        "repetitions_created": len(created),
+        "samples": created,
+    }
+
+
 @router.get("/training/samples/count")
 def get_sample_count(
     sign_name: str,

@@ -57,6 +57,9 @@ class _TrainerScreenState extends State<TrainerScreen> {
   double _inferenceFps = 0;
   int _inferenceLatencyMs = 0;
   int _handScreenRatio = 0;
+  static const int _requiredRepetitions = 5;
+  final List<List<Map<String, dynamic>>> _pendingRepetitions = [];
+  String? _activeTrainingSign;
 
   Options get _authorizedOptions => Options(
         headers: {'Authorization': 'Bearer $_trainerToken'},
@@ -257,6 +260,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
   }
 
   void _onSignNameChanged() {
+    if (_activeTrainingSign != null) return;
     if (_trainerToken == null) return;
     final text = _signNameController.text.trim().toUpperCase();
     if (text.isEmpty) {
@@ -343,6 +347,16 @@ class _TrainerScreenState extends State<TrainerScreen> {
       return;
     }
 
+    if (_activeTrainingSign != null && _activeTrainingSign != signName) {
+      _showSnackBar(
+        "Conclua as 5 repetições de $_activeTrainingSign antes de trocar o sinal.",
+        Colors.orange,
+      );
+      return;
+    }
+
+    _activeTrainingSign ??= signName;
+
     setState(() {
       _isCountingDown = true;
       _countdown = 3;
@@ -420,13 +434,11 @@ class _TrainerScreenState extends State<TrainerScreen> {
   Future<void> _stopAndUploadCapture(String signName) async {
     setState(() {
       _isRecording = false;
-      _isUploading = true;
-      _statusMessage = "Enviando dados para o servidor...";
+      _statusMessage = "Validando repetição...";
     });
 
     if (_validCapturedFrames < 10) {
       setState(() {
-        _isUploading = false;
         _statusMessage =
             "Captura insuficiente: mantenha a mão visível durante a gravação.";
       });
@@ -438,40 +450,86 @@ class _TrainerScreenState extends State<TrainerScreen> {
       return;
     }
 
+    if (_recordedHandFrames.isEmpty) {
+      setState(() {
+        _statusMessage =
+            "Captura recusada: atualize a página e mantenha as mãos visíveis.";
+      });
+      _showSnackBar(
+        "A câmera não entregou a sequência completa das mãos. Tente novamente.",
+        Colors.redAccent,
+      );
+      return;
+    }
+
+    _pendingRepetitions.add(
+      _recordedHandFrames
+          .map((frame) => Map<String, dynamic>.from(frame))
+          .toList(growable: false),
+    );
+    final completed = _pendingRepetitions.length;
+    if (completed < _requiredRepetitions) {
+      setState(() {
+        _statusMessage =
+            "Repetição $completed/$_requiredRepetitions válida. "
+            "Repita ${SignPhraseComposer.displayLabel(signName)}.";
+      });
+      _ttsService.speak(
+        "Repetição $completed de $_requiredRepetitions concluída.",
+      );
+      _showSnackBar(
+        "Repetição $completed/$_requiredRepetitions salva. Faça novamente.",
+        Colors.green,
+      );
+      return;
+    }
+
+    setState(() {
+      _isUploading = true;
+      _statusMessage = "Enviando as 5 repetições para o servidor...";
+    });
+
     try {
-      final usesV2 = _recordedHandFrames.isNotEmpty;
       final response = await _dio.post(
-        usesV2 ? '/v1/training/samples-v2' : '/v1/training/samples',
+        '/v1/training/batches-v2',
         options: _authorizedOptions,
         data: {
           'sign_name': signName,
-          if (usesV2) ...{
-            'format_version': 2,
-            'frames': _recordedHandFrames,
-          } else
-            'landmarks': _recordedLandmarks,
+          'format_version': 2,
+          'repetitions': _pendingRepetitions
+              .map((frames) => {'frames': frames})
+              .toList(growable: false),
         },
       );
 
       if (response.statusCode == 201) {
         setState(() {
           _statusMessage =
-              "Sinal '$signName' enviado: $_validCapturedFrames quadros novos "
-              "em $_attemptedCapturedFrames leituras.";
+              "Sinal '${SignPhraseComposer.displayLabel(signName)}' concluído "
+              "com 5 repetições.";
           _signNameController.clear();
           _existingSamplesCount = 0;
           _isLoadingCount = false;
+          _pendingRepetitions.clear();
+          _activeTrainingSign = null;
         });
-        _ttsService.speak("Sinal gravado com sucesso!");
-        _showSnackBar("Sinal enviado com sucesso para a base da IA!", Colors.green);
+        _ttsService.speak("Cinco repetições concluídas. Sinal gravado!");
+        _showSnackBar(
+          "Sinal concluído: 5 repetições enviadas com sucesso.",
+          Colors.green,
+        );
         _fetchSummary();
         _fetchMySamples();
       }
     } on DioException catch (error) {
       debugPrint("Erro ao enviar dados de treino: $error");
       setState(() {
+        if (_pendingRepetitions.length == _requiredRepetitions) {
+          _pendingRepetitions.removeLast();
+        }
         _statusMessage = error.response?.data?['detail']?.toString() ??
-            "Falha ao enviar sinal. Verifique a conexão.";
+            "Falha ao enviar. As 4 primeiras repetições foram mantidas; "
+                "grave a quinta novamente.";
       });
       _showSnackBar(_statusMessage, Colors.redAccent);
     } finally {
@@ -945,7 +1003,10 @@ class _TrainerScreenState extends State<TrainerScreen> {
               // Campo de Texto para nomear o Sinal
               TextField(
                 controller: _signNameController,
-                enabled: !_isRecording && !_isUploading && !_isCountingDown,
+                enabled: !_isRecording &&
+                    !_isUploading &&
+                    !_isCountingDown &&
+                    _activeTrainingSign == null,
                 decoration: InputDecoration(
                   labelText: 'Nome do sinal (ex.: Obrigado)',
                   hintText: 'Digite a palavra correspondente',
@@ -961,9 +1022,11 @@ class _TrainerScreenState extends State<TrainerScreen> {
                               'BOA'
                           ? 'BOA usa o mesmo gesto de BOM: treine somente BOM.'
                       : (_signNameController.text.trim().isNotEmpty
-                          ? (_existingSamplesCount >= 30
+                          ? (_activeTrainingSign != null
+                              ? 'Sessão em andamento: ${_pendingRepetitions.length}/$_requiredRepetitions repetições. O nome fica travado até concluir.'
+                              : (_existingSamplesCount >= 30
                               ? 'Meta atingida! $_existingSamplesCount/30 sessões gravadas.'
-                              : 'Sessões gravadas: $_existingSamplesCount/30. Com 5 professores, faça 6 por pessoa.')
+                              : 'Sessões gravadas: $_existingSamplesCount/30. Cada professor fará 5 repetições sem redigitar o nome.'))
                           : 'Digite o nome do sinal para ver o progresso do treino.'))),
                   helperStyle: TextStyle(
                     color: _existingSamplesCount >= 30 ? Colors.green : theme.colorScheme.primary,
@@ -994,7 +1057,11 @@ class _TrainerScreenState extends State<TrainerScreen> {
                   ),
                   icon: Icon(_isRecording ? Icons.stop : Icons.videocam),
                   label: Text(
-                    _isRecording ? "Parar Gravação" : "Começar Captura",
+                    _isRecording
+                        ? "Parar Gravação"
+                        : (_activeTrainingSign == null
+                            ? "Começar 5 repetições"
+                            : "Gravar repetição ${_pendingRepetitions.length + 1}/$_requiredRepetitions"),
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   onPressed: (_isCountingDown || _isUploading)

@@ -48,29 +48,11 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - TRAINER_ACCESS_CODE=${TRAINER_ACCESS_CODE}
       - TRAINER_DELETE_SECRET=${TRAINER_DELETE_SECRET}
-      - EXPERIMENTAL_ML_ENABLED=true
-      - ML_INFERENCE_URL=http://ml-inference:8001
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-      ml-inference:
-        condition: service_healthy
-
-  ml-inference:
-    build:
-      context: .
-      dockerfile: ml/inference/Dockerfile
-    container_name: librai_ml_inference
-    restart: always
-    expose:
-      - "8001"
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
 
   admin-web:
     build:

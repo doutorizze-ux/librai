@@ -618,6 +618,42 @@ def test_two_hand_v2_rejects_short_or_unordered_sequence():
     assert rejected.status_code == 422
 
 
+def test_training_batch_requires_and_creates_exactly_five_repetitions():
+    headers = trainer_headers("Professora Cinco")
+    frames = structured_hand_frames(frame_count=16)
+
+    incomplete = client.post(
+        "/v1/training/batches-v2",
+        json={
+            "sign_name": "OBRIGADO",
+            "format_version": 2,
+            "repetitions": [{"frames": frames} for _ in range(4)],
+        },
+        headers=headers,
+    )
+    assert incomplete.status_code == 422
+
+    complete = client.post(
+        "/v1/training/batches-v2",
+        json={
+            "sign_name": "Obrigado",
+            "format_version": 2,
+            "repetitions": [{"frames": frames} for _ in range(5)],
+        },
+        headers=headers,
+    )
+    assert complete.status_code == 201, complete.text
+    assert complete.json()["sign_name"] == "OBRIGADO"
+    assert complete.json()["repetitions_created"] == 5
+
+    with TestingSessionLocal() as db:
+        stored = db.query(models.TrainingSample).filter(
+            models.TrainingSample.sign_name == "OBRIGADO",
+            models.TrainingSample.trainer_name == "Professora Cinco",
+        ).all()
+        assert len(stored) == 5
+
+
 def test_two_hand_v2_finds_sign_inside_continuous_camera_buffer():
     headers = trainer_headers()
     trained = structured_hand_frames(
