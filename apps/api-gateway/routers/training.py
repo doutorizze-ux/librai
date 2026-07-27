@@ -20,8 +20,8 @@ TRAINER_DELETE_SECRET = os.getenv("TRAINER_DELETE_SECRET", "")
 trainer_bearer = HTTPBearer(auto_error=False)
 
 
-def _trainer_code_version() -> str:
-    return hashlib.sha256(TRAINER_ACCESS_CODE.encode("utf-8")).hexdigest()[:16]
+def _credential_version(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
 
 
 def get_current_trainer(
@@ -37,7 +37,11 @@ def get_current_trainer(
         not payload
         or payload.get("scope") != "training"
         or not payload.get("trainer")
-        or payload.get("trainer_code_version") != _trainer_code_version()
+        or payload.get("trainer_code_version")
+        not in {
+            _credential_version(TRAINER_ACCESS_CODE),
+            _credential_version(TRAINER_DELETE_SECRET),
+        }
     ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -56,7 +60,15 @@ def authenticate_trainer(request: schemas.TrainerLoginRequest):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Acesso de professores ainda não configurado.",
         )
-    if not secrets.compare_digest(request.access_code, TRAINER_ACCESS_CODE):
+    is_professor_code = secrets.compare_digest(
+        request.access_code,
+        TRAINER_ACCESS_CODE,
+    )
+    is_administrator_code = bool(TRAINER_DELETE_SECRET) and secrets.compare_digest(
+        request.access_code,
+        TRAINER_DELETE_SECRET,
+    )
+    if not is_professor_code and not is_administrator_code:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Código de acesso incorreto.",
@@ -65,7 +77,7 @@ def authenticate_trainer(request: schemas.TrainerLoginRequest):
         {
             "scope": "training",
             "trainer": request.trainer_name,
-            "trainer_code_version": _trainer_code_version(),
+            "trainer_code_version": _credential_version(request.access_code),
         },
         expires_delta=timedelta(hours=8),
     )

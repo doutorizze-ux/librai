@@ -98,7 +98,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
                 controller: codeController,
                 obscureText: true,
                 decoration: const InputDecoration(
-                  labelText: 'Código de acesso',
+                  labelText: 'Código de professor ou administrativo',
                   prefixIcon: Icon(Icons.lock_outline),
                 ),
                 onSubmitted: (_) {},

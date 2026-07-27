@@ -75,6 +75,24 @@ def test_changing_trainer_code_invalidates_existing_session():
     )
 
 
+def test_administrator_code_can_open_trainer_panel():
+    response = client.post(
+        "/v1/training/auth",
+        json={
+            "trainer_name": "Administrador",
+            "access_code": "segredo-admin-exclusao",
+        },
+    )
+
+    assert response.status_code == 200
+    token = response.json()["access_token"]
+    listed = client.get(
+        "/v1/training/my-samples",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert listed.status_code == 200
+
+
 def temporal_landmark_frames(movement_per_frame=0.0, frame_count=16):
     frames = []
     for frame_index in range(frame_count):
