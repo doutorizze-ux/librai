@@ -105,7 +105,7 @@ def get_current_training_model(db: Session = Depends(get_db)):
 
     for sample_id, sign_name, landmarks, created_at in samples:
         version_parts.append(f"{sample_id}:{created_at.isoformat()}")
-        if not landmarks or len(landmarks) < 21:
+        if not isinstance(landmarks, list) or len(landmarks) < 21:
             continue
 
         for offset in range(0, len(landmarks) - 20, 21):
@@ -148,6 +148,40 @@ def create_training_sample(
     db.commit()
     db.refresh(db_sample)
     return db_sample
+
+
+@router.post("/training/samples-v2", status_code=status.HTTP_201_CREATED)
+def create_training_sample_v2(
+    sample: schemas.TrainingSampleCreateV2,
+    db: Session = Depends(get_db),
+    trainer_name: str = Depends(get_current_trainer),
+):
+    """Armazena quadros sem misturar lateralidade das mãos nem ordem temporal."""
+    sequence = {
+        "format_version": 2,
+        "frames": [frame.model_dump() for frame in sample.frames],
+    }
+    db_sample = models.TrainingSample(
+        sign_name=canonical_visual_label(sample.sign_name),
+        landmarks=sequence,
+        trainer_name=trainer_name,
+        frame_count=len(sample.frames),
+    )
+    db.add(db_sample)
+    db.flush()
+    db.add(models.AuditLog(
+        user_id=trainer_name,
+        action="TRAINING_SAMPLE_CREATE_V2",
+        target=f"{db_sample.id}:{db_sample.sign_name}:{len(sample.frames)}_frames",
+    ))
+    db.commit()
+    return {
+        "id": db_sample.id,
+        "sign_name": db_sample.sign_name,
+        "format_version": 2,
+        "frame_count": db_sample.frame_count,
+        "created_at": db_sample.created_at,
+    }
 
 
 @router.get("/training/samples/count")

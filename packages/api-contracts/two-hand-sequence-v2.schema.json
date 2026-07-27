@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://librai.local/contracts/two-hand-sequence-v2.schema.json",
+  "title": "Librai Two-Hand Temporal Sequence v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format_version", "frames"],
+  "properties": {
+    "format_version": {
+      "const": 2
+    },
+    "frames": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 180,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["timestamp_ms", "hands"],
+        "properties": {
+          "timestamp_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hands": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["handedness", "score", "landmarks"],
+              "properties": {
+                "handedness": {
+                  "enum": ["Left", "Right", "Unknown"]
+                },
+                "score": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "landmarks": {
+                  "type": "array",
+                  "minItems": 21,
+                  "maxItems": 21,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["x", "y", "z"],
+                    "properties": {
+                      "x": { "type": "number", "minimum": -0.5, "maximum": 1.5 },
+                      "y": { "type": "number", "minimum": -0.5, "maximum": 1.5 },
+                      "z": { "type": "number", "minimum": -3, "maximum": 3 }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

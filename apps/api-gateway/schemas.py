@@ -166,6 +166,39 @@ class TrainingSampleCreate(BaseModel):
             )
         return value
 
+
+class TrainingHand(BaseModel):
+    handedness: str = Field(pattern="^(Left|Right|Unknown)$")
+    score: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
+    landmarks: List[TrainingLandmark] = Field(min_length=21, max_length=21)
+
+
+class TrainingFrame(BaseModel):
+    timestamp_ms: int = Field(ge=0)
+    hands: List[TrainingHand] = Field(min_length=1, max_length=2)
+
+    @field_validator("hands")
+    @classmethod
+    def validate_unique_handedness(cls, value):
+        known = [hand.handedness for hand in value if hand.handedness != "Unknown"]
+        if len(known) != len(set(known)):
+            raise ValueError("um quadro não pode conter duas mãos com a mesma lateralidade")
+        return value
+
+
+class TrainingSampleCreateV2(BaseModel):
+    sign_name: str = Field(min_length=1, max_length=64)
+    format_version: int = Field(default=2, ge=2, le=2)
+    frames: List[TrainingFrame] = Field(min_length=12, max_length=180)
+
+    @field_validator("frames")
+    @classmethod
+    def validate_timestamps(cls, value):
+        timestamps = [frame.timestamp_ms for frame in value]
+        if timestamps != sorted(timestamps) or len(timestamps) != len(set(timestamps)):
+            raise ValueError("timestamps dos quadros devem ser únicos e crescentes")
+        return value
+
 class TrainingSampleResponse(BaseModel):
     id: str
     sign_name: str

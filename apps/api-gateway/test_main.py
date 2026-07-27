@@ -107,6 +107,39 @@ def temporal_landmark_frames(movement_per_frame=0.0, frame_count=16):
         ])
     return frames
 
+
+def structured_hand_frames(
+    left_movement=0.0,
+    right_movement=0.0,
+    frame_count=16,
+    two_hands=True,
+):
+    frames = []
+    for frame_index in range(frame_count):
+        hands = []
+        sides = (("Left", left_movement), ("Right", right_movement))
+        for side, movement in sides[:2 if two_hands else 1]:
+            offset = movement * frame_index
+            hands.append({
+                "handedness": side,
+                "score": 0.99,
+                "landmarks": [
+                    {
+                        "x": index / 100 + offset + (
+                            0.35 if side == "Right" else 0.0
+                        ),
+                        "y": (index % 5) / 10,
+                        "z": index / 1000,
+                    }
+                    for index in range(21)
+                ],
+            })
+        frames.append({
+            "timestamp_ms": 1_000 + frame_index * 33,
+            "hands": hands,
+        })
+    return frames
+
 def test_health():
     response = client.get("/health")
     assert response.status_code == 200
@@ -521,6 +554,50 @@ def test_temporal_prediction_requires_a_real_sequence():
     )
     assert resp.status_code == 200
     assert resp.json()["label"] == "SINAL_DESCONHECIDO"
+
+
+def test_two_hand_v2_preserves_hands_and_distinguishes_motion():
+    headers = trainer_headers()
+    together = structured_hand_frames(left_movement=0.003, right_movement=0.003)
+    right_only = structured_hand_frames(left_movement=0, right_movement=0.008)
+
+    for label, frames in (("JUNTOS", together), ("DIREITA", right_only)):
+        created = client.post(
+            "/v1/training/samples-v2",
+            json={"sign_name": label, "format_version": 2, "frames": frames},
+            headers=headers,
+        )
+        assert created.status_code == 201, created.text
+        assert created.json()["frame_count"] == 16
+
+    prediction = client.post(
+        "/v1/translation/predict-sequence-v2",
+        json={"format_version": 2, "frames": right_only},
+    )
+    assert prediction.status_code == 200
+    assert prediction.json()["label"] == "DIREITA"
+    assert prediction.json()["model"] == "two_hand_sequence_v2"
+    assert prediction.json()["confidence"] >= 0.72
+
+
+def test_two_hand_v2_rejects_short_or_unordered_sequence():
+    headers = trainer_headers()
+    short = structured_hand_frames(frame_count=5)
+    rejected = client.post(
+        "/v1/training/samples-v2",
+        json={"sign_name": "CURTO", "format_version": 2, "frames": short},
+        headers=headers,
+    )
+    assert rejected.status_code == 422
+
+    unordered = structured_hand_frames()
+    unordered[5]["timestamp_ms"] = unordered[4]["timestamp_ms"]
+    rejected = client.post(
+        "/v1/training/samples-v2",
+        json={"sign_name": "FORA DE ORDEM", "format_version": 2, "frames": unordered},
+        headers=headers,
+    )
+    assert rejected.status_code == 422
 
 
 

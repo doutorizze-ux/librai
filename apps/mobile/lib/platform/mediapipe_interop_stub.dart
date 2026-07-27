@@ -48,4 +48,6 @@ class MediaPipeService {
       {'x': 0.52, 'y': 0.61 + 0.05 * offset, 'z': 0.0},
     ];
   }
+
+  Map<String, dynamic>? getLatestHandFrame() => null;
 }

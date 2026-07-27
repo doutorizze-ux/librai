@@ -82,6 +82,8 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
     with WidgetsBindingObserver {
   final NativeModelRepository _modelRepository = NativeModelRepository();
   final LocalKnnInterpreter _interpreter = LocalKnnInterpreter();
+  final NativeTemporalInterpreter _temporalInterpreter =
+      NativeTemporalInterpreter();
   final SignPhraseComposer _phraseComposer = SignPhraseComposer();
   final Stopwatch _inferenceWatch = Stopwatch();
   final List<String> _predictionHistory = [];
@@ -94,6 +96,7 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
   NativeTrainingModel? _model;
   bool _initialized = false;
   bool _processingFrame = false;
+  bool _predictionInFlight = false;
   bool _paused = false;
   String? _error;
   String _detectedText = 'Sinalize em frente à câmera';
@@ -173,7 +176,7 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
     }
   }
 
-  void _handleLandmarks(List<Hand> hands) {
+  Future<void> _handleLandmarks(List<Hand> hands) async {
     _inferenceWatch.stop();
     _processingFrame = false;
     _resultsInWindow++;
@@ -188,21 +191,32 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
     }
 
     PredictionResult? bestPrediction;
-    for (final hand in hands) {
-      final points = hand.landmarks
-          .map(
-            (point) => <String, double>{
-              'x': point.x,
-              'y': point.y,
-              'z': point.z,
+    if (hands.isNotEmpty && !_predictionInFlight) {
+      _predictionInFlight = true;
+      final orderedHands = [...hands]
+        ..sort((a, b) => a.landmarks.first.x.compareTo(b.landmarks.first.x));
+      final frame = <String, dynamic>{
+        'timestamp_ms': DateTime.now().millisecondsSinceEpoch,
+        'hands': [
+          for (var index = 0; index < orderedHands.length && index < 2; index++)
+            {
+              'handedness': index == 0 ? 'Left' : 'Right',
+              'score': 1.0,
+              'landmarks': orderedHands[index]
+                  .landmarks
+                  .map((point) => {
+                        'x': point.x,
+                        'y': point.y,
+                        'z': point.z,
+                      })
+                  .toList(growable: false),
             },
-          )
-          .toList(growable: false);
-      final prediction = _interpreter.predict(points);
-      if (bestPrediction == null ||
-          prediction.confidence > bestPrediction.confidence) {
-        bestPrediction = prediction;
-      }
+        ],
+      };
+      bestPrediction = await _temporalInterpreter.predict(frame);
+      _predictionInFlight = false;
+    } else if (hands.isEmpty) {
+      _temporalInterpreter.reset();
     }
 
     final validPrediction = bestPrediction != null &&
@@ -234,6 +248,7 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
           _detectedText = composition.text;
           _confidence = bestPrediction.confidence;
         }
+        _temporalInterpreter.reset();
       }
     } else {
       _predictionHistory.clear();

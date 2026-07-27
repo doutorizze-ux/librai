@@ -31,6 +31,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
   int _countdown = 3;
   bool _isCountingDown = false;
   List<Map<String, double>> _recordedLandmarks = [];
+  final List<Map<String, dynamic>> _recordedHandFrames = [];
   bool _handsDetected = false;
   String _statusMessage = "Posicione a mão em frente à câmera";
   bool _isUploading = false;
@@ -324,6 +325,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
     setState(() {
       _isRecording = true;
       _recordedLandmarks.clear();
+      _recordedHandFrames.clear();
       _validCapturedFrames = 0;
       _attemptedCapturedFrames = 0;
       _lastCapturedRevision = _visionService.getLandmarkRevision();
@@ -349,12 +351,18 @@ class _TrainerScreenState extends State<TrainerScreen> {
       }
       _lastCapturedRevision = revision;
       final latest = _visionService.getLatestLandmarks();
+      final handFrame = _visionService.getLatestHandFrame();
       if (latest != null &&
           latest.length >= 21 &&
           latest.length % 21 == 0 &&
           _visionService.getTrackingQuality() == 'good') {
-        _recordedLandmarks.addAll(latest);
-        _validCapturedFrames += latest.length ~/ 21;
+        if (handFrame != null) {
+          _recordedHandFrames.add(handFrame);
+          _validCapturedFrames++;
+        } else {
+          _recordedLandmarks.addAll(latest);
+          _validCapturedFrames++;
+        }
       }
 
       frameCount++;
@@ -388,12 +396,17 @@ class _TrainerScreenState extends State<TrainerScreen> {
     }
 
     try {
+      final usesV2 = _recordedHandFrames.isNotEmpty;
       final response = await _dio.post(
-        '/v1/training/samples',
+        usesV2 ? '/v1/training/samples-v2' : '/v1/training/samples',
         options: _authorizedOptions,
         data: {
           'sign_name': signName,
-          'landmarks': _recordedLandmarks,
+          if (usesV2) ...{
+            'format_version': 2,
+            'frames': _recordedHandFrames,
+          } else
+            'landmarks': _recordedLandmarks,
         },
       );
 

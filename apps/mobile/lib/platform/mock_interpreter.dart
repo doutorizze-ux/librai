@@ -7,6 +7,7 @@ class MockSignInterpreter implements SignInterpreter {
   String? _loadedModelPath;
   final double confidenceThreshold = 0.75;
   final List<List<Map<String, double>>> _sequenceFrames = [];
+  final List<Map<String, dynamic>> _structuredSequenceFrames = [];
 
   final Dio _dio = Dio(BaseOptions(
     baseUrl: AppConfig.apiUrl,
@@ -24,6 +25,60 @@ class MockSignInterpreter implements SignInterpreter {
 
   void resetSequence() {
     _sequenceFrames.clear();
+    _structuredSequenceFrames.clear();
+  }
+
+  Future<PredictionResult> predictHandFrame(Map<String, dynamic> frame) async {
+    if (_loadedModelPath == null) {
+      throw StateError("Modelo não carregado. Chame loadModel() primeiro.");
+    }
+    final hands = frame['hands'];
+    if (hands is! List || hands.isEmpty) {
+      return PredictionResult(
+        label: "DADOS_INSUFICIENTES",
+        confidence: 0,
+        isTestFixture: false,
+        modelVersion: "two_hand_sequence_v2",
+      );
+    }
+    _structuredSequenceFrames.add(Map<String, dynamic>.from(frame));
+    if (_structuredSequenceFrames.length > 48) {
+      _structuredSequenceFrames.removeAt(0);
+    }
+    if (_structuredSequenceFrames.length < 12) {
+      return PredictionResult(
+        label: "DADOS_INSUFICIENTES",
+        confidence: 0,
+        isTestFixture: false,
+        modelVersion: "two_hand_sequence_v2",
+      );
+    }
+    final last = _structuredSequenceFrames.length - 1;
+    final sampled = List.generate(
+      20,
+      (index) => _structuredSequenceFrames[(index * last / 19).round()],
+    );
+    try {
+      final response = await _dio.post(
+        '/v1/translation/predict-sequence-v2',
+        data: {'format_version': 2, 'frames': sampled},
+      );
+      return PredictionResult(
+        label: response.data['label'] as String,
+        confidence: (response.data['confidence'] as num).toDouble(),
+        isTestFixture: false,
+        modelVersion:
+            response.data['model'] as String? ?? "two_hand_sequence_v2",
+      );
+    } catch (e) {
+      debugPrint("[Remote Interpreter v2] Falha: $e");
+      return PredictionResult(
+        label: "SINAL_DESCONHECIDO",
+        confidence: 0,
+        isTestFixture: false,
+        modelVersion: "two_hand_sequence_v2",
+      );
+    }
   }
 
   @override

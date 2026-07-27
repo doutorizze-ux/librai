@@ -106,3 +106,83 @@ def temporal_distance(first, second):
     return 0.5 * (shape_total / frame_count) + 0.5 * (
         trajectory_total / frame_count
     )
+
+
+def _hand_slot(hand, fallback_index):
+    handedness = str(hand.get("handedness", "Unknown"))
+    if handedness in {"Left", "Right"}:
+        return handedness
+    # Compatibilidade defensiva: se o detector não classificar, mantém uma
+    # ordem estável sem fundir as duas mãos.
+    return "Left" if fallback_index == 0 else "Right"
+
+
+def extract_two_hand_signature(frames):
+    """Vetor temporal v2: presença, forma e trajetória de cada mão separada."""
+    if not isinstance(frames, list):
+        return None
+    source_timestamps = [
+        frame.get("timestamp_ms") for frame in frames if isinstance(frame, dict)
+    ]
+    if (
+        len(source_timestamps) != len(frames)
+        or any(not isinstance(value, int) for value in source_timestamps)
+        or source_timestamps != sorted(source_timestamps)
+        or len(source_timestamps) != len(set(source_timestamps))
+    ):
+        return None
+    sampled = _resample(frames)
+    if not sampled:
+        return None
+
+    normalized = []
+    origins = {}
+    scales = {}
+    for frame in sampled:
+        if not isinstance(frame, dict):
+            return None
+        timestamp = frame.get("timestamp_ms")
+        hands = frame.get("hands")
+        if not isinstance(timestamp, int) or not isinstance(hands, list):
+            return None
+        by_side = {}
+        for index, hand in enumerate(hands[:2]):
+            points = hand.get("landmarks") if isinstance(hand, dict) else None
+            if not isinstance(points, list) or len(points) != 21:
+                return None
+            by_side[_hand_slot(hand, index)] = points
+
+        frame_features = []
+        for side in ("Left", "Right"):
+            points = by_side.get(side)
+            if points is None:
+                frame_features.extend([0.0] * 12)
+                continue
+            if side not in origins:
+                origins[side] = points[0]
+                scales[side] = max(_magnitude(_vector(points, 0, 9)), 1e-6)
+            wrist = points[0]
+            origin = origins[side]
+            scale = scales[side]
+            frame_features.extend([
+                1.0,
+                *[angle / 180.0 for angle in _angles(points)],
+                (wrist.get("x", 0.0) - origin.get("x", 0.0)) / scale,
+                (wrist.get("y", 0.0) - origin.get("y", 0.0)) / scale,
+                (wrist.get("z", 0.0) - origin.get("z", 0.0)) / scale,
+            ])
+        normalized.append(frame_features)
+    return normalized
+
+
+def two_hand_temporal_distance(first, second):
+    if not first or not second or len(first) != len(second):
+        return math.inf
+    total = 0.0
+    for frame_a, frame_b in zip(first, second):
+        if len(frame_a) != 24 or len(frame_b) != 24:
+            return math.inf
+        total += math.sqrt(
+            sum((a - b) ** 2 for a, b in zip(frame_a, frame_b)) / 24
+        )
+    return total / len(first)

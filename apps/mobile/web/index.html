@@ -44,6 +44,7 @@
       faceDetected: true, // Forçar verdadeiro no Web para simplificar enquadramento e evitar crash de RAM
       poseDetected: true, // Forçar verdadeiro no Web para simplificar enquadramento e evitar crash de RAM
       latestLandmarks: null,
+      latestHandFrame: null,
       landmarkRevision: 0,
       trackingQuality: 'waiting',
       handsCount: 0,
@@ -58,6 +59,7 @@
         const videoElement = document.getElementById('mediapipe-video-source');
         
         let currentHands = [];
+        let currentHandFrame = null;
         let activeStream = null;
         let animationFrameId = null;
         let lastFrameStartedAt = 0;
@@ -66,8 +68,10 @@
         const motionTrails = [[], []];
 
         const updateLatestLandmarks = () => {
-          // Combina todas as coordenadas em uma lista plana (1D) para o Dart
+          // Mantido somente para telas legadas. O reconhecimento v2 consome
+          // latestHandFrame, que preserva cada mão e o instante do quadro.
           self.latestLandmarks = [...currentHands];
+          self.latestHandFrame = currentHandFrame;
         };
 
         // Inicializar Hands
@@ -78,9 +82,9 @@
           maxNumHands: 2,
           // O modelo leve reduz a defasagem visual em celulares e notebooks.
           // O modelo temporal do tradutor continua sendo uma etapa separada.
-          modelComplexity: 0,
-          minDetectionConfidence: 0.35,
-          minTrackingConfidence: 0.35
+          modelComplexity: 1,
+          minDetectionConfidence: 0.55,
+          minTrackingConfidence: 0.55
         });
 
         const drawCameraFrame = (ctx, width, height) => {
@@ -244,6 +248,18 @@
             self.handsDetected = true;
             self.handsCount = results.multiHandLandmarks.length;
             currentHands = results.multiHandLandmarks.flat();
+            currentHandFrame = {
+              timestampMs: Math.round(performance.timeOrigin + resultAt),
+              hands: results.multiHandLandmarks.map((landmarks, index) => {
+                const classification =
+                  results.multiHandedness?.[index]?.[0] || {};
+                return {
+                  handedness: classification.label || 'Unknown',
+                  score: Number(classification.score || 0),
+                  landmarks: landmarks.map(({ x, y, z }) => ({ x, y, z }))
+                };
+              })
+            };
             const closeToEdge = currentHands.some(
               point => point.x < 0.055 || point.x > 0.945 ||
                        point.y < 0.055 || point.y > 0.945
@@ -255,7 +271,7 @@
             self.handScreenRatio = Math.round(
               Math.max(handWidth, handHeight) * 100
             );
-            const tooFar = self.handScreenRatio < 13;
+            const tooFar = self.handScreenRatio < 6;
             self.trackingQuality = closeToEdge
               ? 'edge'
               : tooFar
@@ -271,6 +287,7 @@
             self.trackingQuality = 'waiting';
             self.handScreenRatio = 0;
             currentHands = [];
+            currentHandFrame = null;
             drawCameraCanvas();
           }
           updateLatestLandmarks();
@@ -361,6 +378,7 @@
           lastResultAt = 0;
           smoothedFrameInterval = 0;
           currentHands = [];
+          currentHandFrame = null;
           clearCameraCanvas();
           
           // Parar loop

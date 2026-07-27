@@ -11,8 +11,10 @@ from routers.auth import get_current_user, get_current_user_helper
 from sign_labels import canonical_visual_label
 from temporal_recognition import (
     extract_temporal_signature,
+    extract_two_hand_signature,
     split_flat_landmarks,
     temporal_distance,
+    two_hand_temporal_distance,
 )
 
 router = APIRouter(prefix="/v1", tags=["translation"])
@@ -24,6 +26,8 @@ _feature_index_fingerprint = None
 _feature_index = []
 _temporal_index_fingerprint = None
 _temporal_index = []
+_temporal_v2_index_fingerprint = None
+_temporal_v2_index = []
 
 def extract_hand_angles(landmarks):
     """Extrai vetor de características de ângulos articulares das mãos (invariante a escala, posição e rotação)."""
@@ -87,7 +91,7 @@ def get_training_feature_index(db: Session):
         ).all()
 
         for sign_name, db_points in samples:
-            if not db_points or len(db_points) < 21:
+            if not isinstance(db_points, list) or len(db_points) < 21:
                 continue
 
             for offset in range(0, len(db_points) - 20, 21):
@@ -124,6 +128,8 @@ def get_temporal_training_index(db: Session):
     ).all()
     rebuilt = []
     for sign_name, flat_landmarks in samples:
+        if not isinstance(flat_landmarks, list):
+            continue
         signature = extract_temporal_signature(
             split_flat_landmarks(flat_landmarks)
         )
@@ -133,6 +139,32 @@ def get_temporal_training_index(db: Session):
     _temporal_index = rebuilt
     _temporal_index_fingerprint = fingerprint
     return _temporal_index
+
+
+def get_temporal_v2_training_index(db: Session):
+    global _temporal_v2_index_fingerprint, _temporal_v2_index
+    sample_stats = db.query(
+        func.count(models.TrainingSample.id),
+        func.max(models.TrainingSample.created_at),
+    ).filter(models.TrainingSample.deleted_at.is_(None)).one()
+    fingerprint = (str(db.get_bind().url), sample_stats[0], sample_stats[1])
+    if fingerprint == _temporal_v2_index_fingerprint:
+        return _temporal_v2_index
+
+    rebuilt = []
+    samples = db.query(
+        models.TrainingSample.sign_name,
+        models.TrainingSample.landmarks,
+    ).filter(models.TrainingSample.deleted_at.is_(None)).all()
+    for sign_name, payload in samples:
+        if not isinstance(payload, dict) or payload.get("format_version") != 2:
+            continue
+        signature = extract_two_hand_signature(payload.get("frames"))
+        if signature:
+            rebuilt.append((canonical_visual_label(sign_name), signature))
+    _temporal_v2_index = rebuilt
+    _temporal_v2_index_fingerprint = fingerprint
+    return rebuilt
 
 
 @router.post("/translation/predict")
@@ -219,6 +251,47 @@ def predict_sign_sequence(payload: dict, db: Session = Depends(get_db)):
         "label": best_label,
         "confidence": round(float(confidence), 2),
         "model": "hand_sequence_v1",
+    }
+
+
+@router.post("/translation/predict-sequence-v2")
+def predict_sign_sequence_v2(payload: dict, db: Session = Depends(get_db)):
+    if payload.get("format_version") != 2:
+        return {"label": "DADOS_INSUFICIENTES", "confidence": 0.0}
+    signature = extract_two_hand_signature(payload.get("frames"))
+    if signature is None:
+        return {"label": "DADOS_INSUFICIENTES", "confidence": 0.0}
+    index = get_temporal_v2_training_index(db)
+    if not index:
+        return {"label": "SINAL_DESCONHECIDO", "confidence": 0.0}
+    ranked = sorted(
+        (
+            (two_hand_temporal_distance(signature, trained), label)
+            for label, trained in index
+        ),
+        key=lambda item: item[0],
+    )
+    best_distance, best_label = ranked[0]
+    # Conservador: não emite tradução quando a sequência não se parece
+    # suficientemente com uma amostra completa.
+    if best_distance > 0.28:
+        return {"label": "SINAL_DESCONHECIDO", "confidence": 0.0}
+    second = next(
+        (distance for distance, label in ranked[1:] if label != best_label),
+        1.0,
+    )
+    margin = max(0.0, second - best_distance)
+    # Sinais visualmente próximos exigem separação real do segundo colocado.
+    if second < 0.40 and margin < 0.01:
+        return {"label": "SINAL_AMBIGUO", "confidence": 0.0}
+    confidence = min(
+        0.99,
+        0.72 + (1.0 - best_distance / 0.28) * 0.22 + min(margin, 0.2) * 0.2,
+    )
+    return {
+        "label": best_label,
+        "confidence": round(float(confidence), 2),
+        "model": "two_hand_sequence_v2",
     }
 
 @router.post("/translation/sessions", response_model=schemas.SessionResponse)

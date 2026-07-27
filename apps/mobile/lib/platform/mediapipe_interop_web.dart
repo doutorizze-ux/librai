@@ -237,4 +237,46 @@ class MediaPipeService {
       return null;
     }
   }
+
+  Map<String, dynamic>? getLatestHandFrame() {
+    try {
+      final b = _bridge;
+      if (b == null) return null;
+      final jsFrame = js_util.getProperty(b, 'latestHandFrame');
+      if (jsFrame == null) return null;
+      final jsHands = js_util.getProperty(jsFrame, 'hands');
+      final handCount = (js_util.getProperty(jsHands, 'length') as num).toInt();
+      final hands = <Map<String, dynamic>>[];
+      for (var handIndex = 0; handIndex < handCount; handIndex++) {
+        final jsHand = js_util.getProperty(jsHands, handIndex);
+        final jsPoints = js_util.getProperty(jsHand, 'landmarks');
+        final pointCount =
+            (js_util.getProperty(jsPoints, 'length') as num).toInt();
+        final points = <Map<String, double>>[];
+        for (var pointIndex = 0; pointIndex < pointCount; pointIndex++) {
+          final point = js_util.getProperty(jsPoints, pointIndex);
+          points.add({
+            'x': (js_util.getProperty(point, 'x') as num).toDouble(),
+            'y': (js_util.getProperty(point, 'y') as num).toDouble(),
+            'z': (js_util.getProperty(point, 'z') as num).toDouble(),
+          });
+        }
+        hands.add({
+          'handedness':
+              js_util.getProperty(jsHand, 'handedness')?.toString() ?? 'Unknown',
+          'score':
+              (js_util.getProperty(jsHand, 'score') as num?)?.toDouble() ?? 0,
+          'landmarks': points,
+        });
+      }
+      return {
+        'timestamp_ms':
+            (js_util.getProperty(jsFrame, 'timestampMs') as num).toInt(),
+        'hands': hands,
+      };
+    } catch (e) {
+      debugPrint('Falha ao ler quadro estruturado das mãos: $e');
+      return null;
+    }
+  }
 }

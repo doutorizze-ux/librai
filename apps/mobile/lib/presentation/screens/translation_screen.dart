@@ -60,6 +60,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
       _lastLandmarkRevision = revision;
 
       final landmarks = _visionService.getLatestLandmarks();
+      final handFrame = _visionService.getLatestHandFrame();
       final handsOk = _visionService.isHandsDetected();
       final faceOk = _visionService.isFaceDetected();
       final bodyOk = _visionService.isBodyDetected();
@@ -80,7 +81,14 @@ class _TranslationScreenState extends State<TranslationScreen> {
       }
 
       // Processamento assíncrono do frame
-      _processFrame(landmarks, faceOk, handsOk, bodyOk, framing);
+      _processFrame(
+        landmarks,
+        handFrame,
+        faceOk,
+        handsOk,
+        bodyOk,
+        framing,
+      );
     });
   }
 
@@ -108,13 +116,22 @@ class _TranslationScreenState extends State<TranslationScreen> {
     return false;
   }
 
-  Future<void> _processFrame(List<Map<String, double>>? landmarks, bool faceOk, bool handsOk, bool bodyOk, VisionState framing) async {
+  Future<void> _processFrame(
+    List<Map<String, double>>? landmarks,
+    Map<String, dynamic>? handFrame,
+    bool faceOk,
+    bool handsOk,
+    bool bodyOk,
+    VisionState framing,
+  ) async {
     if (framing == VisionState.ok && landmarks != null && landmarks.isNotEmpty) {
       if (_frameBuffer.isProcessing) return;
       _frameBuffer.setProcessing(true);
 
       try {
-        final prediction = await _interpreter.predict(landmarks);
+        final prediction = handFrame != null
+            ? await _interpreter.predictHandFrame(handFrame)
+            : await _interpreter.predict(landmarks);
         if (!mounted || !_isTranslating) return;
         
         if (prediction.label != "SINAL_DESCONHECIDO" && 

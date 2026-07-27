@@ -91,6 +91,62 @@ class NativeModelRepository {
   }
 }
 
+class NativeTemporalInterpreter {
+  NativeTemporalInterpreter()
+      : _dio = Dio(BaseOptions(
+          baseUrl: AppConfig.apiUrl,
+          connectTimeout: const Duration(seconds: 5),
+          receiveTimeout: const Duration(seconds: 5),
+          persistentConnection: true,
+          headers: const {'Content-Type': 'application/json'},
+        ));
+
+  final Dio _dio;
+  final List<Map<String, dynamic>> _frames = [];
+
+  void reset() => _frames.clear();
+
+  Future<PredictionResult> predict(Map<String, dynamic> frame) async {
+    _frames.add(frame);
+    if (_frames.length > 48) _frames.removeAt(0);
+    if (_frames.length < 12) {
+      return PredictionResult(
+        label: 'DADOS_INSUFICIENTES',
+        confidence: 0,
+        isTestFixture: false,
+        modelVersion: 'two_hand_sequence_v2',
+      );
+    }
+    final last = _frames.length - 1;
+    final sampled = List.generate(
+      20,
+      (index) => _frames[(index * last / 19).round()],
+    );
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/v1/translation/predict-sequence-v2',
+        data: {'format_version': 2, 'frames': sampled},
+      );
+      final data = response.data;
+      if (data == null) throw const FormatException('Resposta temporal vazia');
+      return PredictionResult(
+        label: data['label'] as String,
+        confidence: (data['confidence'] as num).toDouble(),
+        isTestFixture: false,
+        modelVersion:
+            data['model'] as String? ?? 'two_hand_sequence_v2',
+      );
+    } catch (_) {
+      return PredictionResult(
+        label: 'SINAL_DESCONHECIDO',
+        confidence: 0,
+        isTestFixture: false,
+        modelVersion: 'two_hand_sequence_v2',
+      );
+    }
+  }
+}
+
 class LocalKnnInterpreter {
   NativeTrainingModel? _model;
 
