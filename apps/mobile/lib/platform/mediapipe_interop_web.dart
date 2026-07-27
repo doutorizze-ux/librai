@@ -12,8 +12,9 @@ class MediaPipeService {
       ui_web.platformViewRegistry.registerViewFactory(
         'mediapipe-video-view',
         (int viewId) {
-          final video = html.document.getElementById('mediapipe-video-source') as html.VideoElement?;
-          if (video != null) {
+          final sourceVideo = html.document
+              .getElementById('mediapipe-video-source') as html.VideoElement?;
+          if (sourceVideo != null) {
             final container = html.DivElement()
               ..style.width = '100%'
               ..style.height = '100%'
@@ -21,19 +22,25 @@ class MediaPipeService {
               ..style.overflow = 'hidden'
               ..style.backgroundColor = '#111318';
 
-            video.style.display = 'block';
-            video.style.width = '100%';
-            video.style.height = '100%';
-            video.style.objectFit = 'cover';
-            video.style.backgroundColor = '#111318';
-            video.style.position = 'absolute';
-            video.style
+            final previewVideo = html.VideoElement()
+              ..autoplay = true
+              ..muted = true
+              ..setAttribute('playsinline', 'true')
+              ..setAttribute('aria-label', 'Imagem ao vivo da câmera');
+            previewVideo.style
+              ..display = 'block'
+              ..width = '100%'
+              ..height = '100%'
+              ..objectFit = 'cover'
+              ..backgroundColor = '#111318'
+              ..position = 'absolute'
               ..top = '0'
               ..right = '0'
               ..bottom = '0'
-              ..left = '0';
-            video.style.opacity = '1';
-            video.style.transform = 'scaleX(-1)';
+              ..left = '0'
+              ..opacity = '1'
+              ..transform = 'scaleX(-1)'
+              ..zIndex = '1';
 
             final oldCanvas =
                 html.document.getElementById('mediapipe-overlay-canvas');
@@ -49,15 +56,37 @@ class MediaPipeService {
               ..left = '0'
               ..width = '100%'
               ..height = '100%'
-              ..pointerEvents = 'none';
+              ..pointerEvents = 'none'
+              ..zIndex = '2';
 
-            container.children.addAll([video, canvas]);
+            container.children.addAll([previewVideo, canvas]);
+
+            void attachPreviewStream() {
+              final stream = sourceVideo.srcObject;
+              if (stream == null) return;
+              if (previewVideo.srcObject != stream) {
+                previewVideo.srcObject = stream;
+              }
+              previewVideo.play().catchError((error) {
+                debugPrint('Erro ao iniciar preview visível: $error');
+              });
+            }
+            sourceVideo.onLoadedMetadata.listen((_) => attachPreviewStream());
+            sourceVideo.onPlaying.listen((_) => attachPreviewStream());
 
             Future.delayed(const Duration(milliseconds: 150), () {
-              video.play().catchError((e) {
+              attachPreviewStream();
+              previewVideo.play().catchError((e) {
                 debugPrint("Erro ao forçar play pós-anexo no DOM: $e");
               });
             });
+
+            for (final delay in const [300, 700, 1500]) {
+              Future.delayed(
+                Duration(milliseconds: delay),
+                attachPreviewStream,
+              );
+            }
 
             return container;
           }
