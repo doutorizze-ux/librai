@@ -95034,7 +95034,7 @@ A.au5.prototype={
 $1(a){return new A.mQ(new A.au4(this.a,this.b),null)},
 $S:118}
 A.au4.prototype={
-$2(a,b){var s=null,r=this.b,q=A.x8(r,B.Ic,s,1,!1,s,B.e9),p=this.a,o=A.cc("Velocidade da Voz (TTS): "+B.d.af(p.a,1)+"x",s,s,s,B.bH,s,s),n=p.a,m=t.p
+$2(a,b){var s=null,r=this.b,q=A.x8(r,B.Id,s,1,!1,s,B.e9),p=this.a,o=A.cc("Velocidade da Voz (TTS): "+B.d.af(p.a,1)+"x",s,s,s,B.bH,s,s),n=p.a,m=t.p
 n=A.aGo(A.eG(A.b([B.Ym,B.iC,q,B.dd,o,new A.Ey(n,new A.au1(p,b),0.5,2,15,B.d.af(n,1)+"x",s)],m),B.bd,B.D,B.aX))
 return A.zh(A.b([A.mU(B.fC,new A.au2(a),s),A.aKi(B.XT,new A.au3(p,r,a))],m),n,B.Qc)},
 $S:114}
@@ -95678,7 +95678,7 @@ $1(a){var s=this
 return new A.mQ(new A.aAI(s.a,s.b,s.c,s.d,a),null)},
 $S:118}
 A.aAI.prototype={
-$2(a,b){var s=this,r=null,q=s.c,p=s.d,o=t.p,n=A.b([B.Y5,B.iB,A.x8(q,B.Ie,r,1,!1,r,B.SY),B.e7,A.x8(p,B.Id,r,1,!0,new A.aAF(),B.e9)],o),m=s.a,l=m.a
+$2(a,b){var s=this,r=null,q=s.c,p=s.d,o=t.p,n=A.b([B.Y5,B.iB,A.x8(q,B.Ie,r,1,!1,r,B.SY),B.e7,A.x8(p,B.Ic,r,1,!0,new A.aAF(),B.e9)],o),m=s.a,l=m.a
 if(l!=null)B.b.M(n,A.b([B.e7,A.cc(l,r,r,r,A.fz(r,r,A.V(a).ax.fy,r,r,r,r,r,r,r,r,r,r,r,r,r,r,!0,r,r,r,r,r,r,r,r),r,r)],o))
 n=A.eG(n,B.K,B.D,B.aX)
 l=s.e
@@ -101793,12 +101793,12 @@ B.Ia=new A.BP(null,null,null,null,null,null,null,null,null,B.oA,B.n2,!1,null,!1,
 B.vD=new A.hP(4,B.dq,B.fP)
 B.Ib=new A.kH(null,null,null,null,null,null,null,null,null,null,"Digite a tradu\xe7\xe3o correta...",null,null,null,null,null,!0,!0,!1,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,B.vD,!0,null,null,null,null)
 B.a0X=new A.kH(null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,!0,!0,!1,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,!0,null,null,null,null)
-B.Hx=new A.bU(58240,"MaterialIcons",null,!1)
-B.HY=new A.ds(B.Hx,null,null,null,null)
-B.Ic=new A.kH(null,null,null,null,null,null,null,null,null,null,"https://api.tvcatolica.site",null,null,null,null,null,!0,!0,!1,null,null,null,null,null,null,null,null,null,B.HY,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,B.vD,!0,null,null,null,null)
 B.Hy=new A.bU(58289,"MaterialIcons",null,!1)
 B.I8=new A.ds(B.Hy,null,null,null,null)
-B.Id=new A.kH(null,null,null,"C\xf3digo de acesso",null,null,null,null,null,null,null,null,null,null,null,null,!0,!0,!1,null,null,null,null,null,null,null,null,null,B.I8,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,!0,null,null,null,null)
+B.Ic=new A.kH(null,null,null,"C\xf3digo de professor ou administrativo",null,null,null,null,null,null,null,null,null,null,null,null,!0,!0,!1,null,null,null,null,null,null,null,null,null,B.I8,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,!0,null,null,null,null)
+B.Hx=new A.bU(58240,"MaterialIcons",null,!1)
+B.HY=new A.ds(B.Hx,null,null,null,null)
+B.Id=new A.kH(null,null,null,null,null,null,null,null,null,null,"https://api.tvcatolica.site",null,null,null,null,null,!0,!0,!1,null,null,null,null,null,null,null,null,null,B.HY,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,B.vD,!0,null,null,null,null)
 B.HD=new A.bU(58519,"MaterialIcons",null,!1)
 B.I4=new A.ds(B.HD,null,null,null,null)
 B.Ie=new A.kH(null,null,null,"Nome completo",null,null,null,null,null,null,null,null,null,null,null,null,!0,!0,!1,null,null,null,null,null,null,null,null,null,B.I4,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,!0,null,null,null,null)
