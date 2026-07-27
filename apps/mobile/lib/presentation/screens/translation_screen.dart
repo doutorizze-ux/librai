@@ -134,10 +134,16 @@ class _TranslationScreenState extends State<TranslationScreen> {
           if (isConsistent) {
             final votedLabel = prediction.label;
 
+            // Um sinal confirmado encerra a janela temporal atual. Manter os
+            // quadros anteriores fazia o próximo sinal da frase ser comparado
+            // com uma mistura dos dois movimentos, obrigando o usuário a
+            // retirar as mãos da câmera entre palavras.
+            _interpreter.resetSequence();
+            _predictionHistory.clear();
+
             if (RecognitionPolicy.isUnsupportedStaticAlphabetPrediction(
               votedLabel,
             )) {
-              _predictionHistory.clear();
               setState(() {
                 _partialText =
                     'Sinal com movimento ainda não confirmado pelo modelo temporal';
