@@ -83,6 +83,43 @@
           minTrackingConfidence: 0.35
         });
 
+        const drawCameraFrame = (ctx, width, height) => {
+          if (!videoElement ||
+              videoElement.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+              !videoElement.videoWidth ||
+              !videoElement.videoHeight) {
+            ctx.fillStyle = '#111318';
+            ctx.fillRect(0, 0, width, height);
+            return null;
+          }
+
+          const coverScale = Math.max(
+            width / videoElement.videoWidth,
+            height / videoElement.videoHeight
+          );
+          const renderedWidth = videoElement.videoWidth * coverScale;
+          const renderedHeight = videoElement.videoHeight * coverScale;
+          const offsetX = (width - renderedWidth) / 2;
+          const offsetY = (height - renderedHeight) / 2;
+
+          // Safari/iOS can keep processing a video element while rendering its
+          // platform-view layer as black. Painting the current frame into the
+          // visible canvas keeps preview and landmarks on the same surface.
+          ctx.save();
+          ctx.translate(width, 0);
+          ctx.scale(-1, 1);
+          ctx.drawImage(
+            videoElement,
+            width - offsetX - renderedWidth,
+            offsetY,
+            renderedWidth,
+            renderedHeight
+          );
+          ctx.restore();
+
+          return { renderedWidth, renderedHeight, offsetX, offsetY };
+        };
+
         const drawSkeletonCanvas = (multiHandLandmarks, quality) => {
           const canvas = document.getElementById('mediapipe-overlay-canvas');
           if (!canvas) return;
@@ -91,19 +128,14 @@
 
           const width = canvas.width = Math.max(1, canvas.clientWidth || 640);
           const height = canvas.height = Math.max(1, canvas.clientHeight || 480);
-          const videoWidth = videoElement.videoWidth || 640;
-          const videoHeight = videoElement.videoHeight || 480;
-          const coverScale = Math.max(width / videoWidth, height / videoHeight);
-          const renderedWidth = videoWidth * coverScale;
-          const renderedHeight = videoHeight * coverScale;
-          const offsetX = (width - renderedWidth) / 2;
-          const offsetY = (height - renderedHeight) / 2;
+          ctx.clearRect(0, 0, width, height);
+          const frame = drawCameraFrame(ctx, width, height);
+          if (!frame) return;
+          const { renderedWidth, renderedHeight, offsetX, offsetY } = frame;
           const mapPoint = (point) => ({
             x: width - (offsetX + point.x * renderedWidth),
             y: offsetY + point.y * renderedHeight
           });
-
-          ctx.clearRect(0, 0, width, height);
 
           const connections = [
             [0,1],[1,2],[2,3],[3,4],
@@ -184,11 +216,27 @@
           });
         };
 
-        const clearSkeletonCanvas = () => {
+        const drawCameraCanvas = () => {
           const canvas = document.getElementById('mediapipe-overlay-canvas');
           if (canvas) {
             const ctx = canvas.getContext('2d');
-            if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (ctx) {
+              const width =
+                canvas.width = Math.max(1, canvas.clientWidth || 640);
+              const height =
+                canvas.height = Math.max(1, canvas.clientHeight || 480);
+              ctx.clearRect(0, 0, width, height);
+              drawCameraFrame(ctx, width, height);
+            }
+          }
+          motionTrails.forEach(trail => trail.length = 0);
+        };
+
+        const clearCameraCanvas = () => {
+          const canvas = document.getElementById('mediapipe-overlay-canvas');
+          const ctx = canvas?.getContext('2d');
+          if (canvas && ctx) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
           }
           motionTrails.forEach(trail => trail.length = 0);
         };
@@ -240,7 +288,7 @@
             self.trackingQuality = 'waiting';
             self.handScreenRatio = 0;
             currentHands = [];
-            clearSkeletonCanvas();
+            drawCameraCanvas();
           }
           updateLatestLandmarks();
           // Permite ao Flutter consumir cada resultado apenas uma vez.
@@ -330,7 +378,7 @@
           lastResultAt = 0;
           smoothedFrameInterval = 0;
           currentHands = [];
-          clearSkeletonCanvas();
+          clearCameraCanvas();
           
           // Parar loop
           if (animationFrameId) {
