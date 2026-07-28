@@ -33,7 +33,11 @@ class _AssistedTranslationScreenState extends State<AssistedTranslationScreen> {
   final SignPhraseComposer _phraseComposer = SignPhraseComposer();
   final List<Map<String, dynamic>> _frames = [];
   Timer? _captureTimer;
+  Timer? _diagnosticsTimer;
   int _lastRevision = -1;
+  int _handsCount = 0;
+  int _inferenceLatencyMs = 0;
+  double _inferenceFps = 0;
   bool _capturing = false;
   bool _submitting = false;
   String? _error;
@@ -52,6 +56,27 @@ class _AssistedTranslationScreenState extends State<AssistedTranslationScreen> {
       const Duration(milliseconds: 33),
       (_) => _collectFrame(),
     );
+    _diagnosticsTimer = Timer.periodic(
+      const Duration(milliseconds: 500),
+      (_) => _refreshDiagnostics(),
+    );
+  }
+
+  void _refreshDiagnostics() {
+    if (!mounted) return;
+    final handsCount = _visionService.getHandsCount();
+    final inferenceLatencyMs = _visionService.getInferenceLatencyMs();
+    final inferenceFps = _visionService.getInferenceFps();
+    if (handsCount == _handsCount &&
+        inferenceLatencyMs == _inferenceLatencyMs &&
+        inferenceFps == _inferenceFps) {
+      return;
+    }
+    setState(() {
+      _handsCount = handsCount;
+      _inferenceLatencyMs = inferenceLatencyMs;
+      _inferenceFps = inferenceFps;
+    });
   }
 
   void _collectFrame() {
@@ -145,6 +170,7 @@ class _AssistedTranslationScreenState extends State<AssistedTranslationScreen> {
   @override
   void dispose() {
     _captureTimer?.cancel();
+    _diagnosticsTimer?.cancel();
     _visionService.stop();
     _frames.clear();
     _phraseComposer.reset();
@@ -219,6 +245,41 @@ class _AssistedTranslationScreenState extends State<AssistedTranslationScreen> {
                     child: _statusPill('CAPTURANDO', const Color(0xFFD9364F)),
                   ),
               ],
+            ),
+          ),
+          Positioned(
+            top: topInset + 64,
+            left: 16,
+            right: 16,
+            child: Semantics(
+              liveRegion: true,
+              label: 'Rastreamento: $_handsCount mãos, '
+                  '${_inferenceFps.toStringAsFixed(1)} quadros por segundo, '
+                  '$_inferenceLatencyMs milissegundos de latência',
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _diagnosticPill(
+                    '$_handsCount mão${_handsCount == 1 ? '' : 's'}',
+                    _handsCount > 0
+                        ? const Color(0xFF087F5B)
+                        : const Color(0xFF9A6700),
+                  ),
+                  _diagnosticPill(
+                    '${_inferenceFps.toStringAsFixed(1)} FPS',
+                    _inferenceFps >= 24
+                        ? const Color(0xFF087F5B)
+                        : const Color(0xFF9A6700),
+                  ),
+                  _diagnosticPill(
+                    '$_inferenceLatencyMs ms',
+                    _inferenceLatencyMs <= 50
+                        ? const Color(0xFF087F5B)
+                        : const Color(0xFF9A6700),
+                  ),
+                ],
+              ),
             ),
           ),
           Align(
@@ -417,6 +478,25 @@ class _AssistedTranslationScreenState extends State<AssistedTranslationScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _diagnosticPill(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.88),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+        ),
       ),
     );
   }

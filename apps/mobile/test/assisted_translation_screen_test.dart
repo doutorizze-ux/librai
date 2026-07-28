@@ -24,6 +24,15 @@ class _FakeVisionService extends MediaPipeService {
   int _revision = 0;
 
   @override
+  int getHandsCount() => 1;
+
+  @override
+  double getInferenceFps() => 29.3;
+
+  @override
+  int getInferenceLatencyMs() => 17;
+
+  @override
   int getLandmarkRevision() => ++_revision;
 
   @override
@@ -73,6 +82,9 @@ void main() {
     await tester.tap(find.text('Começar captura'));
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('CAPTURANDO'), findsOneWidget);
+    expect(find.text('1 mão'), findsOneWidget);
+    expect(find.text('29.3 FPS'), findsOneWidget);
+    expect(find.text('17 ms'), findsOneWidget);
 
     await tester.tap(find.text('Finalizar sinal'));
     await tester.pumpAndSettle();

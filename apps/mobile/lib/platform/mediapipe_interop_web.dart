@@ -24,32 +24,16 @@ class MediaPipeService {
               ..style.overflow = 'hidden'
               ..style.backgroundColor = '#111318';
 
-            final previewVideo = html.VideoElement()
-              ..autoplay = true
-              ..muted = true
-              ..setAttribute('playsinline', 'true')
-              ..setAttribute('aria-label', 'Imagem ao vivo da câmera');
-            previewVideo.style
-              ..display = 'block'
-              ..width = '100%'
-              ..height = '100%'
-              ..objectFit = 'cover'
-              ..backgroundColor = '#111318'
-              ..position = 'absolute'
-              ..top = '0'
-              ..right = '0'
-              ..bottom = '0'
-              ..left = '0'
-              ..opacity = '1'
-              ..transform = 'scaleX(-1)'
-              ..zIndex = '1';
-
             final oldCanvas =
                 html.document.getElementById('mediapipe-overlay-canvas');
             oldCanvas?.remove();
             final canvas = html.CanvasElement()
               ..id = 'mediapipe-overlay-canvas'
-              ..setAttribute('aria-hidden', 'true');
+              ..setAttribute('role', 'img')
+              ..setAttribute(
+                'aria-label',
+                'Imagem ao vivo da câmera com rastreamento das mãos',
+              );
             canvas.style
               ..position = 'absolute'
               ..top = '0'
@@ -61,35 +45,11 @@ class MediaPipeService {
               ..pointerEvents = 'none'
               ..zIndex = '2';
 
-            container.children.addAll([previewVideo, canvas]);
-
-            void attachPreviewStream() {
-              final stream = sourceVideo.srcObject;
-              if (stream == null) return;
-              if (previewVideo.srcObject != stream) {
-                previewVideo.srcObject = stream;
-              }
-              previewVideo.play().catchError((error) {
-                debugPrint('Erro ao iniciar preview visível: $error');
-              });
-            }
-
-            sourceVideo.onLoadedMetadata.listen((_) => attachPreviewStream());
-            sourceVideo.onPlaying.listen((_) => attachPreviewStream());
-
-            Future.delayed(const Duration(milliseconds: 150), () {
-              attachPreviewStream();
-              previewVideo.play().catchError((e) {
-                debugPrint("Erro ao forçar play pós-anexo no DOM: $e");
-              });
-            });
-
-            for (final delay in const [300, 700, 1500]) {
-              Future.delayed(
-                Duration(milliseconds: delay),
-                attachPreviewStream,
-              );
-            }
+            // O canvas exibe exatamente o quadro devolvido pelo MediaPipe.
+            // Um segundo <video> mantinha um relógio independente: a imagem
+            // avançava enquanto os landmarks ainda pertenciam ao quadro
+            // anterior, fazendo o contorno parecer atrasado.
+            container.children.add(canvas);
 
             return container;
           }
