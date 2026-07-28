@@ -8,6 +8,12 @@ __pycache__/
 *.py[cod]
 *.db
 .pytest_cache/
+/apps/api-gateway/venv/
+/apps/mobile/.dart_tool/
+/apps/mobile/build/
+/apps/mobile/.flutter-plugins
+/apps/mobile/.flutter-plugins-dependencies
+/ml/.venv-directml/
 ml/dataset/private/
 ml/models/candidate/
 ml/models/review/

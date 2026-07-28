@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from database import Base, get_db
 from main import app
 import models
-from routers import training
+from routers import training, translation
 
 # Configuração de banco de dados SQLite temporário para testes
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
@@ -139,6 +139,80 @@ def structured_hand_frames(
             "hands": hands,
         })
     return frames
+
+
+def test_assisted_prediction_requires_a_complete_ordered_capture():
+    too_short = client.post(
+        "/v1/translation/predict-assisted",
+        json={
+            "format_version": 1,
+            "frames": structured_hand_frames(frame_count=11),
+        },
+    )
+    assert too_short.status_code == 422
+
+    unordered = structured_hand_frames(frame_count=12)
+    unordered[1]["timestamp_ms"] = unordered[0]["timestamp_ms"]
+    duplicate_timestamp = client.post(
+        "/v1/translation/predict-assisted",
+        json={"format_version": 1, "frames": unordered},
+    )
+    assert duplicate_timestamp.status_code == 422
+
+
+def test_assisted_prediction_returns_at_most_three_candidates(monkeypatch):
+    class FakeRecognizer:
+        def predict(self, frames):
+            assert len(frames) == 12
+            return [
+                {"label": "BOM", "confidence": 0.61},
+                {"label": "TARDE", "confidence": 0.25},
+                {"label": "NOITE", "confidence": 0.09},
+            ]
+
+    monkeypatch.setattr(
+        translation,
+        "get_assisted_recognizer",
+        lambda: FakeRecognizer(),
+    )
+    response = client.post(
+        "/v1/translation/predict-assisted",
+        json={
+            "format_version": 1,
+            "frames": structured_hand_frames(frame_count=12),
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "model": "motion_tcn_v1",
+        "candidates": [
+            {"label": "BOM", "confidence": 0.61},
+            {"label": "TARDE", "confidence": 0.25},
+            {"label": "NOITE", "confidence": 0.09},
+        ],
+    }
+
+
+def test_assisted_prediction_loads_packaged_model():
+    response = client.post(
+        "/v1/translation/predict-assisted",
+        json={
+            "format_version": 1,
+            "frames": structured_hand_frames(
+                left_movement=0.001,
+                right_movement=0.002,
+                frame_count=64,
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["model"] == "motion_tcn_v1"
+    assert len(data["candidates"]) == 3
+    assert all(candidate["label"] for candidate in data["candidates"])
+
 
 def test_health():
     response = client.get("/health")

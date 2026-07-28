@@ -3,7 +3,7 @@ description: Aplicativo móvel e web para reconhecimento de Libras em tempo real
 version: 1.0.4+5
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: '>=3.4.0 <4.0.0'
 
 dependencies:
   flutter:
@@ -25,6 +25,7 @@ dependencies:
   hand_landmarker: ^3.0.1
   shared_preferences: ^2.5.5
   speech_to_text: ^7.4.0
+  flutter_tts: ^4.2.5
 
 dev_dependencies:
   flutter_test:

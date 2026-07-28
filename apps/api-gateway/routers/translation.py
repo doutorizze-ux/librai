@@ -1,4 +1,5 @@
 import json
+import logging
 import threading
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 import models
 import schemas
+from assisted_recognition import get_assisted_recognizer
 from routers.auth import get_current_user, get_current_user_helper
 from sign_labels import canonical_visual_label
 from temporal_recognition import (
@@ -18,6 +20,7 @@ from temporal_recognition import (
 )
 
 router = APIRouter(prefix="/v1", tags=["translation"])
+logger = logging.getLogger(__name__)
 
 import math
 
@@ -315,6 +318,36 @@ def predict_sign_sequence_v2(
         "confidence": round(float(confidence), 2),
         "model": "two_hand_sequence_v2",
     }
+
+
+@router.post(
+    "/translation/predict-assisted",
+    response_model=schemas.AssistedPredictionResponse,
+)
+def predict_sign_assisted(payload: schemas.AssistedPredictionRequest):
+    """Classifica uma captura delimitada sem armazenar seus landmarks."""
+    try:
+        recognizer = get_assisted_recognizer()
+        candidates = recognizer.predict(
+            [frame.model_dump() for frame in payload.frames]
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        logger.error("Modelo assistido indisponível: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Modelo assistido indisponível.",
+        ) from exc
+    except Exception as exc:
+        logger.exception("Falha na inferência assistida")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Inferência assistida indisponível.",
+        ) from exc
+    return {
+        "model": "motion_tcn_v1",
+        "candidates": candidates,
+    }
+
 
 @router.post("/translation/sessions", response_model=schemas.SessionResponse)
 def create_session(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):

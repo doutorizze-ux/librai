@@ -2,8 +2,9 @@
 
 Date: 2026-07-27
 
-These experiments are research-only. None of the evaluated models was added to
-the production application.
+These experiments do not support automatic production translation. The best
+model is integrated only in a clearly labelled, bounded-capture assisted pilot
+that asks the person to confirm one of the top three candidates.
 
 ## Dataset integrity
 
@@ -35,7 +36,7 @@ the production application.
 | Full-frame RGB + hand landmarks | 22.18% | 44.45% | Reject |
 | Landmark-guided hand crops | 15.41% | 34.12% | Reject |
 | Hand crops + hand landmarks | 40.04% | 62.22% | Reject |
-| Motion-TCN (coordinates + velocity + acceleration) | **78.57%** | **92.48%** | Reject |
+| Motion-TCN (coordinates + velocity + acceleration) | **78.57%** | **92.48%** | Assisted pilot only |
 
 The full-frame and crop experiments use an ImageNet-pretrained MobileNetV3
 Small encoder. Their poor signer-independent results show that this generic 2D
@@ -56,5 +57,13 @@ a compatible NVIDIA/ROCm environment, then:
 4. export only a model that passes accuracy and on-device latency gates.
 
 The local RX 580 works with PyTorch DirectML for 2D convolution, but its
-DirectML backend failed on the required 3D convolution path. Production
-integration must not proceed from the current results.
+DirectML backend failed on the required 3D convolution path. Automatic
+production integration must not proceed from the current results.
+
+## Reproducible assisted artifact
+
+The Motion-TCN checkpoint was retrained with the fixed seed and reached
+78.57% top-1 / 92.48% top-3 at epoch 70. Its ONNX export reproduced the same
+rankings over all 1,064 holdout samples with maximum absolute logit difference
+of 0.00000381. The deployed model card documents the restricted energy-service
+scope and the mandatory human confirmation.

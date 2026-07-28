@@ -1,8 +1,10 @@
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
-import 'package:flutter/foundation.dart';
-import 'dart:js_util' as js_util;
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 import 'dart:ui_web' as ui_web;
 import 'dart:html' as html;
+
+import 'package:flutter/foundation.dart';
 
 class MediaPipeService {
   bool get isWeb => true;
@@ -71,6 +73,7 @@ class MediaPipeService {
                 debugPrint('Erro ao iniciar preview visível: $error');
               });
             }
+
             sourceVideo.onLoadedMetadata.listen((_) => attachPreviewStream());
             sourceVideo.onPlaying.listen((_) => attachPreviewStream());
 
@@ -98,11 +101,13 @@ class MediaPipeService {
     }
   }
 
-  // Obter o objeto da ponte global do JS usando js_util seguro
-  dynamic get _bridge {
+  JSObject? get _bridge {
     try {
-      if (js_util.hasProperty(html.window, 'sinalizaAiMediaPipe')) {
-        return js_util.getProperty(html.window, 'sinalizaAiMediaPipe');
+      final value = globalContext.getProperty<JSAny?>(
+        'sinalizaAiMediaPipe'.toJS,
+      );
+      if (value != null && value.isA<JSObject>()) {
+        return value as JSObject;
       }
     } catch (e) {
       debugPrint("Erro ao acessar sinalizaAiMediaPipe: $e");
@@ -114,7 +119,7 @@ class MediaPipeService {
     try {
       final b = _bridge;
       if (b != null) {
-        js_util.callMethod(b, 'start', []);
+        b.callMethod<JSAny?>('start'.toJS);
       }
     } catch (e) {
       debugPrint("Falha ao iniciar MediaPipe JS: $e");
@@ -125,7 +130,7 @@ class MediaPipeService {
     try {
       final b = _bridge;
       if (b != null) {
-        js_util.callMethod(b, 'stop', []);
+        b.callMethod<JSAny?>('stop'.toJS);
       }
     } catch (e) {
       debugPrint("Falha ao parar MediaPipe JS: $e");
@@ -136,7 +141,7 @@ class MediaPipeService {
     try {
       final b = _bridge;
       if (b == null) return false;
-      final val = js_util.getProperty(b, 'handsDetected');
+      final val = b.getProperty<JSAny?>('handsDetected'.toJS)?.dartify();
       return val == true;
     } catch (e) {
       return false;
@@ -155,7 +160,9 @@ class MediaPipeService {
     try {
       final b = _bridge;
       if (b == null) return 0;
-      return (js_util.getProperty(b, 'landmarkRevision') as num?)?.toInt() ?? 0;
+      return (b.getProperty<JSAny?>('landmarkRevision'.toJS)?.dartify() as num?)
+              ?.toInt() ??
+          0;
     } catch (e) {
       return 0;
     }
@@ -165,7 +172,11 @@ class MediaPipeService {
     try {
       final b = _bridge;
       if (b == null) return 'waiting';
-      return js_util.getProperty(b, 'trackingQuality')?.toString() ?? 'waiting';
+      return b
+              .getProperty<JSAny?>('trackingQuality'.toJS)
+              ?.dartify()
+              ?.toString() ??
+          'waiting';
     } catch (e) {
       return 'waiting';
     }
@@ -175,7 +186,9 @@ class MediaPipeService {
     try {
       final b = _bridge;
       if (b == null) return 0;
-      return (js_util.getProperty(b, 'handsCount') as num?)?.toInt() ?? 0;
+      return (b.getProperty<JSAny?>('handsCount'.toJS)?.dartify() as num?)
+              ?.toInt() ??
+          0;
     } catch (e) {
       return 0;
     }
@@ -185,7 +198,9 @@ class MediaPipeService {
     try {
       final b = _bridge;
       if (b == null) return 0;
-      return (js_util.getProperty(b, 'inferenceFps') as num?)?.toDouble() ?? 0;
+      return (b.getProperty<JSAny?>('inferenceFps'.toJS)?.dartify() as num?)
+              ?.toDouble() ??
+          0;
     } catch (e) {
       return 0;
     }
@@ -195,7 +210,10 @@ class MediaPipeService {
     try {
       final b = _bridge;
       if (b == null) return 0;
-      return (js_util.getProperty(b, 'inferenceLatencyMs') as num?)?.toInt() ?? 0;
+      return (b.getProperty<JSAny?>('inferenceLatencyMs'.toJS)?.dartify()
+                  as num?)
+              ?.toInt() ??
+          0;
     } catch (e) {
       return 0;
     }
@@ -205,7 +223,9 @@ class MediaPipeService {
     try {
       final b = _bridge;
       if (b == null) return 0;
-      return (js_util.getProperty(b, 'handScreenRatio') as num?)?.toInt() ?? 0;
+      return (b.getProperty<JSAny?>('handScreenRatio'.toJS)?.dartify() as num?)
+              ?.toInt() ??
+          0;
     } catch (e) {
       return 0;
     }
@@ -215,21 +235,22 @@ class MediaPipeService {
     try {
       final b = _bridge;
       if (b == null) return null;
-      
-      final jsLandmarks = js_util.getProperty(b, 'latestLandmarks');
-      if (jsLandmarks == null) return null;
-      
-      final length = js_util.getProperty(jsLandmarks, 'length') as int?;
-      if (length == null || length == 0) return null;
 
-      final List<Map<String, double>> result = [];
-      for (int i = 0; i < length; i++) {
-        final item = js_util.getProperty(jsLandmarks, i);
-        if (item != null) {
-          final double x = (js_util.getProperty(item, 'x') as num).toDouble();
-          final double y = (js_util.getProperty(item, 'y') as num).toDouble();
-          final double z = (js_util.getProperty(item, 'z') as num).toDouble();
-          result.add({'x': x, 'y': y, 'z': z});
+      final raw = b.getProperty<JSAny?>('latestLandmarks'.toJS)?.dartify();
+      if (raw is! List || raw.isEmpty) return null;
+
+      final result = <Map<String, double>>[];
+      for (final item in raw) {
+        if (item is! Map) continue;
+        final x = item['x'];
+        final y = item['y'];
+        final z = item['z'];
+        if (x is num && y is num && z is num) {
+          result.add({
+            'x': x.toDouble(),
+            'y': y.toDouble(),
+            'z': z.toDouble(),
+          });
         }
       }
       return result;
@@ -242,36 +263,39 @@ class MediaPipeService {
     try {
       final b = _bridge;
       if (b == null) return null;
-      final jsFrame = js_util.getProperty(b, 'latestHandFrame');
-      if (jsFrame == null) return null;
-      final jsHands = js_util.getProperty(jsFrame, 'hands');
-      final handCount = (js_util.getProperty(jsHands, 'length') as num).toInt();
+      final rawFrame = b.getProperty<JSAny?>('latestHandFrame'.toJS)?.dartify();
+      if (rawFrame is! Map) return null;
+      final rawHands = rawFrame['hands'];
+      final timestamp = rawFrame['timestampMs'];
+      if (rawHands is! List || timestamp is! num) return null;
       final hands = <Map<String, dynamic>>[];
-      for (var handIndex = 0; handIndex < handCount; handIndex++) {
-        final jsHand = js_util.getProperty(jsHands, handIndex);
-        final jsPoints = js_util.getProperty(jsHand, 'landmarks');
-        final pointCount =
-            (js_util.getProperty(jsPoints, 'length') as num).toInt();
+      for (final rawHand in rawHands) {
+        if (rawHand is! Map) continue;
+        final rawPoints = rawHand['landmarks'];
+        if (rawPoints is! List) continue;
         final points = <Map<String, double>>[];
-        for (var pointIndex = 0; pointIndex < pointCount; pointIndex++) {
-          final point = js_util.getProperty(jsPoints, pointIndex);
+        for (final point in rawPoints) {
+          if (point is! Map) continue;
+          final x = point['x'];
+          final y = point['y'];
+          final z = point['z'];
+          if (x is! num || y is! num || z is! num) continue;
           points.add({
-            'x': (js_util.getProperty(point, 'x') as num).toDouble(),
-            'y': (js_util.getProperty(point, 'y') as num).toDouble(),
-            'z': (js_util.getProperty(point, 'z') as num).toDouble(),
+            'x': x.toDouble(),
+            'y': y.toDouble(),
+            'z': z.toDouble(),
           });
         }
+        if (points.length != 21) continue;
+        final score = rawHand['score'];
         hands.add({
-          'handedness':
-              js_util.getProperty(jsHand, 'handedness')?.toString() ?? 'Unknown',
-          'score':
-              (js_util.getProperty(jsHand, 'score') as num?)?.toDouble() ?? 0,
+          'handedness': rawHand['handedness']?.toString() ?? 'Unknown',
+          'score': score is num ? score.toDouble() : 0.0,
           'landmarks': points,
         });
       }
       return {
-        'timestamp_ms':
-            (js_util.getProperty(jsFrame, 'timestampMs') as num).toInt(),
+        'timestamp_ms': timestamp.toInt(),
         'hands': hands,
       };
     } catch (e) {

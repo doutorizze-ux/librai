@@ -2,15 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'presentation/screens/home_screen.dart';
-import 'presentation/screens/translation_screen.dart';
+import 'presentation/screens/assisted_translation_screen.dart';
 import 'presentation/screens/trainer_screen.dart';
 
 void main() {
-  runApp(
-    const ProviderScope(
-      child: SinalizaAiApp(),
-    ),
-  );
+  runApp(const ProviderScope(child: SinalizaAiApp()));
 }
 
 class SinalizaAiApp extends StatelessWidget {
@@ -21,13 +17,10 @@ class SinalizaAiApp extends StatelessWidget {
     final GoRouter router = GoRouter(
       initialLocation: '/',
       routes: [
-        GoRoute(
-          path: '/',
-          builder: (context, state) => const HomeScreen(),
-        ),
+        GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
         GoRoute(
           path: '/translate',
-          builder: (context, state) => const TranslationScreen(),
+          builder: (context, state) => const AssistedTranslationScreen(),
         ),
         GoRoute(
           path: '/trainer',
@@ -52,10 +45,7 @@ class SinalizaAiApp extends StatelessWidget {
           surfaceTintColor: Colors.transparent,
           centerTitle: true,
         ),
-        cardTheme: const CardThemeData(
-          elevation: 0,
-          margin: EdgeInsets.zero,
-        ),
+        cardTheme: const CardThemeData(elevation: 0, margin: EdgeInsets.zero),
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(
             minimumSize: const Size(48, 56),

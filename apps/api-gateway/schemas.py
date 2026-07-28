@@ -186,6 +186,32 @@ class TrainingFrame(BaseModel):
         return value
 
 
+class AssistedPredictionRequest(BaseModel):
+    format_version: int = Field(default=1, ge=1, le=1)
+    frames: List[TrainingFrame] = Field(min_length=12, max_length=180)
+
+    @field_validator("frames")
+    @classmethod
+    def validate_timestamps(cls, value):
+        timestamps = [frame.timestamp_ms for frame in value]
+        if timestamps != sorted(timestamps) or len(timestamps) != len(set(timestamps)):
+            raise ValueError("timestamps dos quadros devem ser únicos e crescentes")
+        return value
+
+
+class AssistedPredictionCandidate(BaseModel):
+    label: str = Field(min_length=1)
+    confidence: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
+
+
+class AssistedPredictionResponse(BaseModel):
+    model: str = Field(default="motion_tcn_v1", pattern="^motion_tcn_v1$")
+    candidates: List[AssistedPredictionCandidate] = Field(
+        min_length=0,
+        max_length=3,
+    )
+
+
 class TrainingSampleCreateV2(BaseModel):
     sign_name: str = Field(min_length=1, max_length=64)
     format_version: int = Field(default=2, ge=2, le=2)

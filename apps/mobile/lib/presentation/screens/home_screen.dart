@@ -156,9 +156,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         decoration: BoxDecoration(
                           color: const Color(0xFFEDE5FA),
                           borderRadius: BorderRadius.circular(999),
-                          border: Border.all(
-                            color: const Color(0xFFDCCEF3),
-                          ),
+                          border: Border.all(color: const Color(0xFFDCCEF3)),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -173,7 +171,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             const SizedBox(width: 8),
                             const Text(
-                              'Online e pronto para traduzir',
+                              'Piloto de atendimento de energia',
                               style: TextStyle(
                                 color: Color(0xFF513C78),
                                 fontWeight: FontWeight.w700,
@@ -183,9 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
-                    SizedBox(
-                      height: constraints.maxHeight < 650 ? 42 : 72,
-                    ),
+                    SizedBox(height: constraints.maxHeight < 650 ? 42 : 72),
                     Center(
                       child: SizedBox(
                         width: constraints.maxWidth < 420 ? 170 : 205,
@@ -225,12 +221,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    SizedBox(
-                      height: constraints.maxHeight < 650 ? 42 : 74,
-                    ),
+                    SizedBox(height: constraints.maxHeight < 650 ? 42 : 74),
                     Semantics(
                       button: true,
-                      label: 'Traduzir Libras pela câmera',
+                      label:
+                          'Abrir reconhecimento assistido para atendimento de energia',
                       child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
                           elevation: 0,
@@ -243,7 +238,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         icon: const Icon(Icons.camera_alt_rounded, size: 29),
                         label: const Text(
-                          'Abrir tradutor',
+                          'Testar reconhecimento',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w800,
@@ -257,7 +252,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 14),
                     Text(
-                      'A câmera processa os movimentos para reconhecer os sinais.',
+                      '175 expressões de atendimento de energia. Grave um sinal e confirme entre três opções.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: theme.colorScheme.onSurfaceVariant,

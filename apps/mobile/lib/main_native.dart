@@ -7,10 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hand_landmarker/hand_landmarker.dart';
 
-import 'data/native_training_model.dart';
-import 'domain/interfaces/sign_interpreter.dart';
+import 'data/remote_assisted_sign_interpreter.dart';
+import 'domain/entities/assisted_prediction.dart';
 import 'domain/sign_phrase_composer.dart';
-import 'domain/recognition_policy.dart';
+import 'platform/tts_service.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/trainer_screen.dart';
 
@@ -20,11 +20,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   _availableCameras = await availableCameras();
-  runApp(
-    const ProviderScope(
-      child: LibraiNativeApp(),
-    ),
-  );
+  runApp(const ProviderScope(child: LibraiNativeApp()));
 }
 
 class LibraiNativeApp extends StatelessWidget {
@@ -34,10 +30,7 @@ class LibraiNativeApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final router = GoRouter(
       routes: [
-        GoRoute(
-          path: '/',
-          builder: (context, state) => const HomeScreen(),
-        ),
+        GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
         GoRoute(
           path: '/translate',
           builder: (context, state) => const NativeTranslationScreen(),
@@ -75,27 +68,27 @@ class NativeTranslationScreen extends StatefulWidget {
 
 class _NativeTranslationScreenState extends State<NativeTranslationScreen>
     with WidgetsBindingObserver {
-  final NativeModelRepository _modelRepository = NativeModelRepository();
-  final LocalKnnInterpreter _interpreter = LocalKnnInterpreter();
-  final NativeTemporalInterpreter _temporalInterpreter =
-      NativeTemporalInterpreter();
+  final RemoteAssistedSignInterpreter _interpreter =
+      RemoteAssistedSignInterpreter();
   final SignPhraseComposer _phraseComposer = SignPhraseComposer();
+  final TtsService _ttsService = TtsService();
   final Stopwatch _inferenceWatch = Stopwatch();
-  final List<String> _predictionHistory = [];
+  final List<Map<String, dynamic>> _capturedFrames = [];
 
   CameraController? _camera;
   HandLandmarkerPlugin? _landmarker;
   StreamSubscription<List<Hand>>? _landmarkSubscription;
 
   List<Hand> _hands = const [];
-  NativeTrainingModel? _model;
+  List<AssistedPredictionCandidate> _candidates = const [];
   bool _initialized = false;
   bool _processingFrame = false;
-  bool _predictionInFlight = false;
-  bool _paused = false;
+  bool _capturing = false;
+  bool _submitting = false;
+  String? _fatalError;
   String? _error;
-  String _detectedText = 'Sinalize em frente à câmera';
-  double _confidence = 0;
+  String? _selectedLabel;
+  String? _translatedText;
   double _framesPerSecond = 0;
   int _latencyMilliseconds = 0;
   int _resultsInWindow = 0;
@@ -110,7 +103,6 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
 
   Future<void> _initialize() async {
     try {
-      final modelFuture = _modelRepository.synchronize();
       final frontCamera = _availableCameras.firstWhere(
         (camera) => camera.lensDirection == CameraLensDirection.front,
         orElse: () => _availableCameras.first,
@@ -130,28 +122,23 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
       await camera.initialize();
       _camera = camera;
       _landmarker = landmarker;
-      _landmarkSubscription =
-          landmarker.landmarkStream.listen(_handleLandmarks);
+      _landmarkSubscription = landmarker.landmarkStream.listen(
+        _handleLandmarks,
+      );
       await camera.startImageStream(_processCameraFrame);
 
-      final model = await modelFuture;
-      _interpreter.load(model);
       if (!mounted) return;
-      setState(() {
-        _model = model;
-        _initialized = true;
-      });
+      setState(() => _initialized = true);
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = 'Falha ao iniciar o modo nativo: $error');
+      setState(() => _fatalError = 'Falha ao iniciar o modo nativo: $error');
     }
   }
 
   void _processCameraFrame(CameraImage image) {
     final camera = _camera;
     final landmarker = _landmarker;
-    if (_paused ||
-        !_initialized ||
+    if (!_initialized ||
         _processingFrame ||
         camera == null ||
         landmarker == null) {
@@ -171,7 +158,7 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
     }
   }
 
-  Future<void> _handleLandmarks(List<Hand> hands) async {
+  void _handleLandmarks(List<Hand> hands) {
     _inferenceWatch.stop();
     _processingFrame = false;
     _resultsInWindow++;
@@ -179,15 +166,12 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
     final now = DateTime.now();
     final elapsedWindow = now.difference(_fpsWindowStarted);
     if (elapsedWindow.inMilliseconds >= 1000) {
-      _framesPerSecond =
-          _resultsInWindow * 1000 / elapsedWindow.inMilliseconds;
+      _framesPerSecond = _resultsInWindow * 1000 / elapsedWindow.inMilliseconds;
       _resultsInWindow = 0;
       _fpsWindowStarted = now;
     }
 
-    PredictionResult? bestPrediction;
-    if (hands.isNotEmpty && !_predictionInFlight) {
-      _predictionInFlight = true;
+    if (hands.isNotEmpty && _capturing && !_submitting) {
       final orderedHands = [...hands]
         ..sort((a, b) => a.landmarks.first.x.compareTo(b.landmarks.first.x));
       final frame = <String, dynamic>{
@@ -197,60 +181,17 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
             {
               'handedness': index == 0 ? 'Left' : 'Right',
               'score': 1.0,
-              'landmarks': orderedHands[index]
-                  .landmarks
-                  .map((point) => {
-                        'x': point.x,
-                        'y': point.y,
-                        'z': point.z,
-                      })
+              'landmarks': orderedHands[index].landmarks
+                  .map((point) => {'x': point.x, 'y': point.y, 'z': point.z})
                   .toList(growable: false),
             },
         ],
       };
-      bestPrediction = await _temporalInterpreter.predict(frame);
-      _predictionInFlight = false;
-    } else if (hands.isEmpty) {
-      _temporalInterpreter.reset();
-    }
-
-    final validPrediction = bestPrediction != null &&
-        bestPrediction.label != 'SINAL_DESCONHECIDO' &&
-        bestPrediction.label != 'DADOS_INSUFICIENTES' &&
-        bestPrediction.confidence >= 0.70;
-
-    if (validPrediction) {
-      if (RecognitionPolicy.isUnsupportedStaticAlphabetPrediction(
-        bestPrediction.label,
-      )) {
-        _predictionHistory.clear();
-        _detectedText =
-            'Sinal com movimento ainda não confirmado pelo modelo temporal';
-        _confidence = 0;
-        if (!mounted) return;
-        setState(() {
-          _hands = hands;
-          _latencyMilliseconds = _inferenceWatch.elapsedMilliseconds;
-        });
-        return;
+      if (_capturedFrames.length < 180) {
+        _capturedFrames.add(frame);
       }
-      _predictionHistory.add(bestPrediction.label);
-      if (_predictionHistory.length > 2) _predictionHistory.removeAt(0);
-      if (_predictionHistory.length == 2 &&
-          _predictionHistory[0] == _predictionHistory[1]) {
-        final composition = _phraseComposer.accept(bestPrediction.label);
-        if (composition != null) {
-          _detectedText = composition.text;
-          _confidence = bestPrediction.confidence;
-        }
-        _temporalInterpreter.reset();
-      }
-    } else {
-      _predictionHistory.clear();
-      if (hands.isEmpty) {
-        _phraseComposer.releaseCurrentSign();
-        _detectedText = 'Sinalize em frente à câmera';
-        _confidence = 0;
+      if (_capturedFrames.length >= 180) {
+        unawaited(_finishCapture());
       }
     }
 
@@ -259,6 +200,75 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
       _hands = hands;
       _latencyMilliseconds = _inferenceWatch.elapsedMilliseconds;
     });
+  }
+
+  void _startCapture() {
+    setState(() {
+      _capturedFrames.clear();
+      _candidates = const [];
+      _selectedLabel = null;
+      _error = null;
+      _capturing = true;
+    });
+  }
+
+  void _cancelCapture() {
+    setState(() {
+      _capturing = false;
+      _capturedFrames.clear();
+      _error = null;
+    });
+  }
+
+  Future<void> _finishCapture() async {
+    if (!_capturing || _submitting) return;
+    setState(() => _capturing = false);
+    if (_capturedFrames.length < 12) {
+      setState(() {
+        _capturedFrames.clear();
+        _error =
+            'Poucos quadros válidos. Mostre as mãos e repita o sinal inteiro.';
+      });
+      return;
+    }
+    final frames = List<Map<String, dynamic>>.from(_capturedFrames);
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      final prediction = await _interpreter.predict(frames);
+      if (!mounted) return;
+      setState(() {
+        _capturedFrames.clear();
+        _candidates = prediction.candidates;
+        _submitting = false;
+        if (_candidates.isEmpty) {
+          _error = 'O modelo não encontrou uma opção para este sinal.';
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _capturedFrames.clear();
+        _submitting = false;
+        _error =
+            'Não foi possível analisar agora. Verifique a conexão e tente novamente.';
+      });
+    }
+  }
+
+  Future<void> _selectCandidate(AssistedPredictionCandidate candidate) async {
+    _phraseComposer.releaseCurrentSign();
+    final composition = _phraseComposer.accept(candidate.label);
+    setState(() {
+      _selectedLabel = candidate.label;
+      _translatedText =
+          composition?.text ?? SignPhraseComposer.displayLabel(candidate.label);
+    });
+    if (composition?.isFinal == true) {
+      await _ttsService.speak(composition!.text);
+    }
   }
 
   @override
@@ -277,6 +287,7 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _landmarkSubscription?.cancel();
+    _capturedFrames.clear();
     _phraseComposer.reset();
     _camera?.stopImageStream();
     _camera?.dispose();
@@ -286,12 +297,12 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
 
   @override
   Widget build(BuildContext context) {
-    if (_error != null) {
+    if (_fatalError != null) {
       return Scaffold(
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Text(_error!, textAlign: TextAlign.center),
+            child: Text(_fatalError!, textAlign: TextAlign.center),
           ),
         ),
       );
@@ -316,7 +327,7 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
               SizedBox(height: 24),
               CircularProgressIndicator(),
               SizedBox(height: 16),
-              Text('Preparando câmera e modelo nativos…'),
+              Text('Preparando câmera nativa…'),
             ],
           ),
         ),
@@ -371,19 +382,15 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
                       const SizedBox(width: 12),
                       const Expanded(
                         child: Text(
-                          'Librai • Nativo',
+                          'Piloto • energia',
                           style: TextStyle(
-                            fontSize: 22,
+                            fontSize: 19,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
-                      _statusChip(
-                        _model?.isReady == true
-                            ? 'Modelo ${_model!.version}'
-                            : 'Sem modelo',
-                        _model?.isReady == true ? Colors.green : Colors.red,
-                      ),
+                      if (_capturing)
+                        _statusChip('CAPTURANDO', const Color(0xFFD9364F)),
                     ],
                   ),
                   const SizedBox(height: 10),
@@ -405,40 +412,155 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
                         '${_framesPerSecond.toStringAsFixed(1)} FPS',
                         Colors.blue,
                       ),
-                      _statusChip('Inferência local', Colors.purple),
+                      if (_capturing)
+                        _statusChip(
+                          '${_capturedFrames.length} quadros',
+                          Colors.purple,
+                        ),
                     ],
                   ),
                   const Spacer(),
-                  Semantics(
-                    liveRegion: true,
-                    label: 'Tradução detectada: $_detectedText',
-                    child: Text(
-                      _detectedText,
-                      style: const TextStyle(
-                        fontSize: 34,
-                        height: 1.05,
-                        fontWeight: FontWeight.w800,
-                      ),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xE81B1820),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.white24),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _confidence > 0
-                        ? 'Confiança ${(_confidence * 100).round()}%'
-                        : 'Aguardando sinalização',
-                    style: const TextStyle(fontSize: 16),
-                  ),
-                  const SizedBox(height: 18),
-                  Center(
-                    child: IconButton.filled(
-                      tooltip: _paused ? 'Retomar tradução' : 'Pausar tradução',
-                      onPressed: () => setState(() => _paused = !_paused),
-                      iconSize: 32,
-                      constraints: const BoxConstraints.tightFor(
-                        width: 64,
-                        height: 64,
-                      ),
-                      icon: Icon(_paused ? Icons.play_arrow : Icons.pause),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          _instruction,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            height: 1.25,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if (_error != null) ...[
+                          const SizedBox(height: 8),
+                          Semantics(
+                            liveRegion: true,
+                            child: Text(
+                              _error!,
+                              style: const TextStyle(
+                                color: Color(0xFFFFB4AB),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                        if (_translatedText != null) ...[
+                          const SizedBox(height: 12),
+                          Semantics(
+                            liveRegion: true,
+                            label: 'Tradução: $_translatedText',
+                            child: Text(
+                              _translatedText!,
+                              style: const TextStyle(
+                                color: Color(0xFFB9FFDA),
+                                fontSize: 28,
+                                height: 1.1,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ],
+                        if (_candidates.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          for (final candidate in _candidates)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Semantics(
+                                button: true,
+                                label:
+                                    '${SignPhraseComposer.displayLabel(candidate.label)}, possibilidade ${(candidate.confidence * 100).round()} por cento',
+                                child: OutlinedButton(
+                                  style: OutlinedButton.styleFrom(
+                                    minimumSize: const Size(
+                                      double.infinity,
+                                      52,
+                                    ),
+                                    side: BorderSide(
+                                      color: _selectedLabel == candidate.label
+                                          ? const Color(0xFFB9FFDA)
+                                          : Colors.white38,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  onPressed: _selectedLabel == null
+                                      ? () => _selectCandidate(candidate)
+                                      : null,
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          SignPhraseComposer.displayLabel(
+                                            candidate.label,
+                                          ),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ),
+                                      Text(
+                                        '${(candidate.confidence * 100).round()}%',
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                        const SizedBox(height: 8),
+                        if (_submitting)
+                          const SizedBox(
+                            height: 56,
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (_capturing)
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  style: OutlinedButton.styleFrom(
+                                    minimumSize: const Size(48, 56),
+                                  ),
+                                  onPressed: _cancelCapture,
+                                  child: const Text('Cancelar'),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                flex: 2,
+                                child: FilledButton.icon(
+                                  style: FilledButton.styleFrom(
+                                    minimumSize: const Size(48, 56),
+                                    backgroundColor: const Color(0xFFE33855),
+                                  ),
+                                  onPressed: _finishCapture,
+                                  icon: const Icon(Icons.stop_rounded),
+                                  label: const Text('Finalizar sinal'),
+                                ),
+                              ),
+                            ],
+                          )
+                        else
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(double.infinity, 58),
+                              backgroundColor: const Color(0xFF7158A0),
+                            ),
+                            onPressed: _startCapture,
+                            icon: const Icon(Icons.fiber_manual_record),
+                            label: Text(
+                              _candidates.isEmpty
+                                  ? 'Começar captura'
+                                  : 'Capturar próximo sinal',
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ],
@@ -448,6 +570,17 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
         ],
       ),
     );
+  }
+
+  String get _instruction {
+    if (_submitting) return 'Analisando o movimento completo…';
+    if (_capturing) {
+      return 'Faça um único sinal do começo ao fim e toque em finalizar.';
+    }
+    if (_candidates.isNotEmpty) {
+      return 'Toque na opção correta. Se nenhuma servir, grave novamente.';
+    }
+    return 'Piloto de atendimento de energia: grave uma expressão por vez.';
   }
 
   Widget _buildCameraPreview(CameraController camera) {
@@ -485,11 +618,27 @@ class _HandPainter extends CustomPainter {
   final List<Hand> hands;
 
   static const connections = [
-    [0, 1], [1, 2], [2, 3], [3, 4],
-    [0, 5], [5, 6], [6, 7], [7, 8],
-    [5, 9], [9, 10], [10, 11], [11, 12],
-    [9, 13], [13, 14], [14, 15], [15, 16],
-    [13, 17], [0, 17], [17, 18], [18, 19], [19, 20],
+    [0, 1],
+    [1, 2],
+    [2, 3],
+    [3, 4],
+    [0, 5],
+    [5, 6],
+    [6, 7],
+    [7, 8],
+    [5, 9],
+    [9, 10],
+    [10, 11],
+    [11, 12],
+    [9, 13],
+    [13, 14],
+    [14, 15],
+    [15, 16],
+    [13, 17],
+    [0, 17],
+    [17, 18],
+    [18, 19],
+    [19, 20],
   ];
 
   @override
