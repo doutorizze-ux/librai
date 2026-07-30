@@ -190,11 +190,11 @@ class _LibrasAccessScreenState extends ConsumerState<LibrasAccessScreen> {
                   ),
                 ),
                 if (_isListening)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 10),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
                     child: Semantics(
                       liveRegion: true,
-                      child: Row(
+                      child: const Row(
                         children: [
                           Icon(Icons.graphic_eq_rounded, color: Colors.red),
                           SizedBox(width: 8),
