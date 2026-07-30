@@ -7,7 +7,6 @@ import '../../domain/entities/reference_sign.dart';
 import '../../platform/device_speech_recognizer.dart';
 import '../../platform/vlibras/vlibras_avatar_view.dart';
 import '../state/reference_catalog_providers.dart';
-import 'reference_motion_screen.dart';
 
 class LibrasAccessScreen extends ConsumerStatefulWidget {
   const LibrasAccessScreen({super.key});
@@ -243,38 +242,39 @@ class _LibrasAccessScreenState extends ConsumerState<LibrasAccessScreen> {
               ],
             ),
           ),
-          Expanded(
-            child: _gloss == null
-                ? const _TranslatorEmptyState()
-                : Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(18, 4, 18, 8),
-                        child: Semantics(
-                          liveRegion: true,
-                          label:
-                              'Tradução preparada para $_translatedSource',
-                          child: Text(
-                            'Tradução oficial preparada',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(24),
-                          ),
-                          child: VlibrasAvatarView(
-                            key: ValueKey(_gloss),
-                            gloss: _gloss!,
-                          ),
-                        ),
-                      ),
-                    ],
+          if (_gloss != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 4, 18, 8),
+              child: Semantics(
+                liveRegion: true,
+                label: 'Tradução preparada para $_translatedSource',
+                child: Text(
+                  'Tradução oficial preparada',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
                   ),
+                ),
+              ),
+            ),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // O player é carregado enquanto a pessoa digita. Quando a
+                  // tradução chega, a mesma instância recebe a nova sequência.
+                  VlibrasAvatarView(gloss: _gloss ?? ''),
+                  if (_gloss == null)
+                    const ColoredBox(
+                      color: Color(0xFFF9F5FC),
+                      child: _TranslatorEmptyState(),
+                    ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -327,16 +327,30 @@ class _LibrasDictionaryTab extends ConsumerStatefulWidget {
 }
 
 class _LibrasDictionaryTabState extends ConsumerState<_LibrasDictionaryTab> {
+  static const _pageSize = 100;
+
   final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
   Timer? _debounce;
   List<ReferenceSign> _results = const [];
   bool _loading = false;
+  bool _loadingMore = false;
+  bool _hasMore = true;
   String? _error;
+  String? _selectedGloss;
+  int _searchGeneration = 0;
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     unawaited(_search(''));
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.extentAfter < 500) {
+      unawaited(_loadMore());
+    }
   }
 
   void _onSearchChanged(String value) {
@@ -349,22 +363,27 @@ class _LibrasDictionaryTabState extends ConsumerState<_LibrasDictionaryTab> {
   }
 
   Future<void> _search(String query) async {
+    final generation = ++_searchGeneration;
     setState(() {
       _loading = true;
+      _loadingMore = false;
+      _hasMore = true;
       _error = null;
     });
     try {
       final results = await ref.read(referenceSignRepositoryProvider).search(
             query: query.trim(),
-            limit: 100,
+            offset: 0,
+            limit: _pageSize,
           );
-      if (!mounted) return;
+      if (!mounted || generation != _searchGeneration) return;
       setState(() {
         _results = results;
         _loading = false;
+        _hasMore = results.length == _pageSize;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || generation != _searchGeneration) return;
       setState(() {
         _loading = false;
         _error = 'Não foi possível consultar o dicionário agora.';
@@ -372,9 +391,35 @@ class _LibrasDictionaryTabState extends ConsumerState<_LibrasDictionaryTab> {
     }
   }
 
+  Future<void> _loadMore() async {
+    if (_loading || _loadingMore || !_hasMore || _error != null) return;
+    final generation = _searchGeneration;
+    setState(() => _loadingMore = true);
+    try {
+      final results = await ref.read(referenceSignRepositoryProvider).search(
+            query: _searchController.text.trim(),
+            offset: _results.length,
+            limit: _pageSize,
+          );
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        _results = [..._results, ...results];
+        _loadingMore = false;
+        _hasMore = results.length == _pageSize;
+      });
+    } catch (_) {
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        _loadingMore = false;
+        _error = 'Não foi possível carregar mais sinais agora.';
+      });
+    }
+  }
+
   @override
   void dispose() {
     _debounce?.cancel();
+    _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -414,12 +459,45 @@ class _LibrasDictionaryTabState extends ConsumerState<_LibrasDictionaryTab> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  '13.597 sinais disponíveis • até 100 resultados por pesquisa',
+                  'Mais de 22 mil sinais oficiais • pesquise pelo nome',
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
               ],
             ),
           ),
+          if (_selectedGloss != null)
+            SizedBox(
+              height: 320,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: VlibrasAvatarView(gloss: _selectedGloss!),
+                    ),
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Semantics(
+                      button: true,
+                      label: 'Fechar demonstração do sinal',
+                      child: IconButton.filledTonal(
+                        constraints: const BoxConstraints.tightFor(
+                          width: 48,
+                          height: 48,
+                        ),
+                        tooltip: 'Fechar demonstração',
+                        onPressed: () => setState(
+                          () => _selectedGloss = null,
+                        ),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           if (_loading) const LinearProgressIndicator(),
           if (_error != null)
             Padding(
@@ -439,10 +517,21 @@ class _LibrasDictionaryTabState extends ConsumerState<_LibrasDictionaryTab> {
                       child: Text('Nenhum sinal encontrado.'),
                     )
                   : ListView.separated(
+                      controller: _scrollController,
                       padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-                      itemCount: _results.length,
+                      itemCount: _results.length + (_loadingMore ? 1 : 0),
                       separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (context, index) {
+                        if (index == _results.length) {
+                          return const Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                semanticsLabel: 'Carregando mais sinais',
+                              ),
+                            ),
+                          );
+                        }
                         final sign = _results[index];
                         final label = sign.label.replaceAll('_', ' ');
                         return Semantics(
@@ -464,12 +553,8 @@ class _LibrasDictionaryTabState extends ConsumerState<_LibrasDictionaryTab> {
                             ),
                             trailing:
                                 const Icon(Icons.chevron_right_rounded),
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => ReferenceMotionScreen(
-                                  label: sign.label,
-                                ),
-                              ),
+                            onTap: () => setState(
+                              () => _selectedGloss = sign.label,
                             ),
                           ),
                         );

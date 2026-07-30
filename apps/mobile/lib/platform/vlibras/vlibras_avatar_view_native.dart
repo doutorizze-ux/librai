@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -25,6 +28,7 @@ class _VlibrasAvatarViewState extends State<VlibrasAvatarView> {
   WebViewController? _controller;
   int _progress = 0;
   bool _failed = false;
+  bool _pageLoaded = false;
 
   bool get _isSupported =>
       defaultTargetPlatform == TargetPlatform.android ||
@@ -49,7 +53,9 @@ class _VlibrasAvatarViewState extends State<VlibrasAvatarView> {
                 setState(() {
                   _progress = 100;
                   _failed = false;
+                  _pageLoaded = true;
                 });
+                unawaited(_sendGlossToPlayer());
               },
               onWebResourceError: (error) {
                 if (error.isForMainFrame != true || !mounted) return;
@@ -68,11 +74,21 @@ class _VlibrasAvatarViewState extends State<VlibrasAvatarView> {
   void didUpdateWidget(covariant VlibrasAvatarView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.gloss != widget.gloss) {
-      setState(() {
-        _progress = 0;
-        _failed = false;
-      });
-      _controller?.loadRequest(_playerUri(widget.gloss));
+      unawaited(_sendGlossToPlayer());
+    }
+  }
+
+  Future<void> _sendGlossToPlayer() async {
+    final controller = _controller;
+    final gloss = widget.gloss.trim();
+    if (controller == null || !_pageLoaded || gloss.isEmpty) return;
+    try {
+      await controller.runJavaScript(
+        'window.libraiAvatar && '
+        'window.libraiAvatar.setGloss(${jsonEncode(gloss)});',
+      );
+    } catch (_) {
+      if (mounted) setState(() => _failed = true);
     }
   }
 

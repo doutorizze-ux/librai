@@ -31,6 +31,7 @@ COPY data/vlibras/reference-motions/ /data/vlibras/reference-motions/
 
 ENV VLIBRAS_CATALOG_PATH=/data/vlibras/catalog-v1.json
 ENV VLIBRAS_MOTION_PATH=/data/vlibras/reference-motions
+ENV VLIBRAS_LIVE_CATALOG=true
 
 EXPOSE 8000
 

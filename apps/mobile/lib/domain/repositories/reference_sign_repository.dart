@@ -6,6 +6,7 @@ import '../entities/reference_translation.dart';
 abstract interface class ReferenceSignRepository {
   Future<List<ReferenceSign>> search({
     String query = '',
+    int offset = 0,
     int limit = 100,
   });
 

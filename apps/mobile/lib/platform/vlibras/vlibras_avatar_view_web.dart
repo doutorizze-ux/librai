@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:js_interop';
 import 'dart:ui_web' as ui_web;
 
 import 'package:flutter/material.dart';
@@ -20,6 +23,7 @@ class VlibrasAvatarView extends StatefulWidget {
 class _VlibrasAvatarViewState extends State<VlibrasAvatarView> {
   late final String _viewType;
   late final web.HTMLIFrameElement _iframe;
+  StreamSubscription<web.Event>? _loadSubscription;
 
   @override
   void initState() {
@@ -31,7 +35,8 @@ class _VlibrasAvatarViewState extends State<VlibrasAvatarView> {
       ..style.width = '100%'
       ..style.height = '100%'
       ..setAttribute('allowfullscreen', 'true');
-    _loadGloss();
+    _loadInitialPlayer();
+    _loadSubscription = _iframe.onLoad.listen((_) => _sendGloss());
     ui_web.platformViewRegistry.registerViewFactory(
       _viewType,
       (_) => _iframe,
@@ -42,17 +47,36 @@ class _VlibrasAvatarViewState extends State<VlibrasAvatarView> {
   void didUpdateWidget(covariant VlibrasAvatarView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.gloss != widget.gloss) {
-      _loadGloss();
+      _sendGloss();
     }
   }
 
-  void _loadGloss() {
+  void _loadInitialPlayer() {
     final playerUri = Uri.base.resolve('vlibras-player/').replace(
       queryParameters: {'glosa': widget.gloss},
     );
     _iframe
       ..title = 'Avatar Librai demonstrando ${widget.gloss}'
       ..src = playerUri.toString();
+  }
+
+  void _sendGloss() {
+    final gloss = widget.gloss.trim();
+    if (gloss.isEmpty) return;
+    final message = jsonEncode({
+      'type': 'librai-play',
+      'gloss': gloss,
+    });
+    _iframe.contentWindow?.postMessage(
+      message.toJS,
+      web.window.location.origin.toJS,
+    );
+  }
+
+  @override
+  void dispose() {
+    unawaited(_loadSubscription?.cancel());
+    super.dispose();
   }
 
   @override

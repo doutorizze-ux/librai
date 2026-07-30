@@ -280,7 +280,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 14),
                     Text(
-                      'Tradução por texto, voz e dicionário com 13.597 sinais.',
+                      'Tradução por texto, voz e mais de 22 mil sinais oficiais.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: theme.colorScheme.onSurfaceVariant,

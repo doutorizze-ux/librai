@@ -13,9 +13,14 @@ class ReferenceSignRepositoryImpl implements ReferenceSignRepository {
   @override
   Future<List<ReferenceSign>> search({
     String query = '',
+    int offset = 0,
     int limit = 100,
   }) async {
-    final records = await _datasource.search(query: query, limit: limit);
+    final records = await _datasource.search(
+      query: query,
+      offset: offset,
+      limit: limit,
+    );
     return records
         .map(
           (record) => ReferenceSign(

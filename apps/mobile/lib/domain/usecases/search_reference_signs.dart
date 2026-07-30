@@ -6,7 +6,15 @@ class SearchReferenceSigns {
 
   final ReferenceSignRepository _repository;
 
-  Future<List<ReferenceSign>> call(String query, {int limit = 100}) {
-    return _repository.search(query: query.trim(), limit: limit);
+  Future<List<ReferenceSign>> call(
+    String query, {
+    int offset = 0,
+    int limit = 100,
+  }) {
+    return _repository.search(
+      query: query.trim(),
+      offset: offset,
+      limit: limit,
+    );
   }
 }

@@ -1,8 +1,10 @@
 import gzip
+import hashlib
 import json
 import os
 import unicodedata
 import re
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import List
@@ -49,6 +51,10 @@ VLIBRAS_TRANSLATOR_URL = os.getenv(
     "VLIBRAS_TRANSLATOR_URL",
     "https://traducao2.vlibras.gov.br/translate",
 )
+VLIBRAS_DICTIONARY_URL = os.getenv(
+    "VLIBRAS_DICTIONARY_URL",
+    "https://dicionario2.vlibras.gov.br/signs?version=2018.3.1",
+)
 
 
 def _request_official_translation(text: str) -> str:
@@ -71,6 +77,65 @@ def _request_official_translation(text: str) -> str:
 
 def _normalize_official_gloss(value: str) -> str:
     return " ".join(value.strip().split())
+
+
+def _request_official_dictionary() -> dict:
+    headers = {
+        "Accept": "application/json",
+        "Origin": "https://doutorizze-ux.github.io",
+        "Referer": "https://doutorizze-ux.github.io/librai/",
+        "User-Agent": "Librai/1.0",
+    }
+    with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+        response = client.get(VLIBRAS_DICTIONARY_URL, headers=headers)
+        response.raise_for_status()
+        payload = response.json()
+    if not isinstance(payload, dict) or not isinstance(payload.get("root"), dict):
+        raise ValueError("Resposta invÃ¡lida do dicionÃ¡rio oficial VLibras")
+    return payload
+
+
+def _official_dictionary_labels(payload: dict) -> list[str]:
+    labels: list[str] = []
+
+    def visit(node: dict, prefix: str) -> None:
+        if node.get("end") is True:
+            labels.append(prefix)
+        children = node.get("children", {})
+        if not isinstance(children, dict):
+            raise ValueError("Trie invÃ¡lida do dicionÃ¡rio oficial VLibras")
+        for character, child in children.items():
+            if not isinstance(character, str) or not isinstance(child, dict):
+                raise ValueError("Trie invÃ¡lida do dicionÃ¡rio oficial VLibras")
+            visit(child, prefix + character)
+
+    visit(payload["root"], "")
+    return labels
+
+
+def _catalog_from_official_dictionary(payload: dict) -> dict:
+    labels = _official_dictionary_labels(payload)
+    signs = [
+        {
+            "id": hashlib.sha256(label.encode("utf-8")).hexdigest()[:16],
+            "label": label,
+            "search_key": _normalize_query(label),
+            "size_bytes": 0,
+            "platforms": ["webgl"],
+            "is_compound": "_" in label,
+        }
+        for label in labels
+        if label
+    ]
+    signs.sort(key=lambda sign: (sign["search_key"], sign["label"]))
+    return {
+        "schema_version": "1.0",
+        "source": "VLibras Official Dictionary",
+        "license": "VLibras open-source dictionary",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "total": len(signs),
+        "signs": signs,
+    }
 
 
 def _default_catalog_path() -> Path:
@@ -125,12 +190,31 @@ def _normalize_query(value: str) -> str:
 
 
 @lru_cache(maxsize=1)
-def _load_catalog() -> dict:
+def _load_local_catalog() -> dict:
     path = _configured_path("VLIBRAS_CATALOG_PATH", _default_catalog_path())
     if not path.is_file():
         raise FileNotFoundError(path)
     with path.open("r", encoding="utf-8") as catalog_file:
         return json.load(catalog_file)
+
+
+@lru_cache(maxsize=1)
+def _load_catalog() -> dict:
+    use_official = os.getenv("VLIBRAS_LIVE_CATALOG", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    if use_official:
+        try:
+            return _catalog_from_official_dictionary(
+                _request_official_dictionary()
+            )
+        except (httpx.HTTPError, OSError, ValueError, json.JSONDecodeError):
+            # A falha do serviÃ§o oficial nÃ£o derruba o dicionÃ¡rio do app.
+            # O snapshot local continua disponÃ­vel atÃ© a prÃ³xima implantaÃ§Ã£o.
+            pass
+    return _load_local_catalog()
 
 
 @router.get("/catalog", response_model=ReferenceCatalog)

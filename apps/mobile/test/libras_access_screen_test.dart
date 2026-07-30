@@ -27,6 +27,7 @@ class _FakeReferenceSignRepository implements ReferenceSignRepository {
   @override
   Future<List<ReferenceSign>> search({
     String query = '',
+    int offset = 0,
     int limit = 100,
   }) async {
     return const [
@@ -80,7 +81,7 @@ void main() {
     await tester.tap(find.text('Dicionário'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('13.597 sinais'), findsOneWidget);
+    expect(find.textContaining('Mais de 22 mil sinais'), findsOneWidget);
     expect(find.text('AJUDA'), findsOneWidget);
   });
 }

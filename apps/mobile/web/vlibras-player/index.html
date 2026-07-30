@@ -280,7 +280,7 @@
         const PLAYER_MANAGER = "PlayerManager";
         const AVATAR = "Avatar";
         const params = new URLSearchParams(window.location.search);
-        const gloss = (params.get("glosa") || "BOM")
+        let gloss = (params.get("glosa") || "")
           .trim()
           .toLocaleUpperCase("pt-BR");
         const loading = document.getElementById("loading");
@@ -294,7 +294,7 @@
         let gameInstance;
         let ready = false;
 
-        glossLabel.textContent = gloss;
+        glossLabel.textContent = gloss || "Aguardando mensagem";
 
         function showError(message) {
           errorMessage.textContent = message;
@@ -329,7 +329,7 @@
         }
 
         function play() {
-          if (!ready) return;
+          if (!ready || !gloss) return;
           errorMessage.hidden = true;
           send(PLAYER_MANAGER, "stopAll");
           window.setTimeout(
@@ -337,6 +337,31 @@
             80,
           );
         }
+
+        function setGloss(value) {
+          const nextGloss = String(value || "")
+            .trim()
+            .toLocaleUpperCase("pt-BR");
+          if (!nextGloss) return;
+          gloss = nextGloss;
+          glossLabel.textContent = gloss;
+          if (ready) play();
+        }
+
+        window.addEventListener("message", (event) => {
+          if (event.origin !== window.location.origin) return;
+          let message = event.data;
+          if (typeof message === "string") {
+            try {
+              message = JSON.parse(message);
+            } catch (_) {
+              return;
+            }
+          }
+          if (message?.type === "librai-play") {
+            setGloss(message.gloss);
+          }
+        });
 
         window.onLoadPlayer = () => {
           send(PLAYER_MANAGER, "initRandomAnimationsProcess");
@@ -352,7 +377,7 @@
           window.setTimeout(applyLibraiIdentity, 900);
           window.setTimeout(() => {
             loading.hidden = true;
-            play();
+            if (gloss) play();
           }, 1_350);
         };
 
@@ -362,10 +387,9 @@
         window.FinishWelcome = () => {};
         window.updateProgress = () => {};
 
-        // Recriar a cena é mais confiável do que reutilizar o estado interno
-        // do Unity 2018 depois que uma animação termina. Os binários e o sinal
-        // permanecem em cache, então a repetição não baixa os arquivos de novo.
-        replayButton.addEventListener("click", () => window.location.reload());
+        // O Unity permanece carregado. Repetir ou trocar de sinal reutiliza a
+        // mesma instância, evitando baixar e inicializar o player novamente.
+        replayButton.addEventListener("click", play);
 
         window.addEventListener("error", (event) => {
           if (!ready) {
@@ -394,6 +418,7 @@
           );
           window.libraiAvatar = {
             play,
+            setGloss,
             select: (avatar) =>
               send(PLAYER_MANAGER, "Change", String(avatar || "hozana")),
             customize: applyLibraiIdentity,

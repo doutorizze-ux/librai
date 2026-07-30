@@ -7,12 +7,14 @@ class VlibrasReferenceRemoteDatasource {
 
   Future<List<Map<String, dynamic>>> search({
     required String query,
+    required int offset,
     required int limit,
   }) async {
     final response = await _dio.get<Map<String, dynamic>>(
       '/v1/vlibras-reference/catalog',
       queryParameters: {
         'query': query,
+        'offset': offset,
         'limit': limit,
       },
     );

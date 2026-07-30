@@ -6,7 +6,9 @@
   "required": ["schema_version", "source", "license", "generated_at", "total", "signs"],
   "properties": {
     "schema_version": { "const": "1.0" },
-    "source": { "const": "VLibras" },
+    "source": {
+      "enum": ["VLibras", "VLibras Official Dictionary"]
+    },
     "license": { "type": "string", "minLength": 1 },
     "generated_at": { "type": "string", "format": "date-time" },
     "total": { "type": "integer", "minimum": 0 },
@@ -19,10 +21,10 @@
           "id": { "type": "string", "pattern": "^[a-f0-9]{16}$" },
           "label": { "type": "string", "minLength": 1 },
           "search_key": { "type": "string", "minLength": 1 },
-          "size_bytes": { "type": "integer", "minimum": 1 },
+          "size_bytes": { "type": "integer", "minimum": 0 },
           "platforms": {
             "type": "array",
-            "items": { "enum": ["android", "ios", "linux"] },
+            "items": { "enum": ["android", "ios", "linux", "webgl"] },
             "minItems": 1,
             "uniqueItems": true
           },
