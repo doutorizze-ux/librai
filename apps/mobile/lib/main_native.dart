@@ -12,6 +12,7 @@ import 'domain/entities/assisted_prediction.dart';
 import 'domain/sign_phrase_composer.dart';
 import 'platform/tts_service.dart';
 import 'presentation/screens/home_screen.dart';
+import 'presentation/screens/reference_motion_screen.dart';
 import 'presentation/screens/trainer_screen.dart';
 
 late final List<CameraDescription> _availableCameras;
@@ -38,6 +39,11 @@ class LibraiNativeApp extends StatelessWidget {
         GoRoute(
           path: '/trainer',
           builder: (context, state) => const TrainerScreen(),
+        ),
+        GoRoute(
+          path: '/learn/bom',
+          builder: (context, state) =>
+              const ReferenceMotionScreen(label: 'BOM'),
         ),
       ],
     );
@@ -181,7 +187,8 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
             {
               'handedness': index == 0 ? 'Left' : 'Right',
               'score': 1.0,
-              'landmarks': orderedHands[index].landmarks
+              'landmarks': orderedHands[index]
+                  .landmarks
                   .map((point) => {'x': point.x, 'y': point.y, 'z': point.z})
                   .toList(growable: false),
             },

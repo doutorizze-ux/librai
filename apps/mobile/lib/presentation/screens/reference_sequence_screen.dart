@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/reference_avatar_asset_catalog.dart';
 import '../state/reference_catalog_providers.dart';
+import '../widgets/reference_avatar_video_player.dart';
 import 'reference_motion_screen.dart';
 
 class ReferenceSequenceScreen extends ConsumerStatefulWidget {
@@ -63,6 +65,35 @@ class _ReferenceSequenceScreenState
           final index = _currentIndex % data.signs.length;
           final sign = data.signs[index];
           final motion = ref.watch(referenceMotionProvider(sign.label));
+          final avatarAsset = ReferenceAvatarAssetCatalog.assetFor(sign.label);
+          final motionPlayer = motion.when(
+            loading: () => const Center(
+              child: CircularProgressIndicator(),
+            ),
+            error: (error, stackTrace) => Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'O movimento de ${sign.label.replaceAll('_', ' ')} ainda não foi publicado.',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: () => _advance(data.signs.length),
+                    child: const Text('Próximo sinal'),
+                  ),
+                ],
+              ),
+            ),
+            data: (referenceMotion) => ReferenceMotionPlayer(
+              key: ValueKey('motion-${sign.label}'),
+              motion: referenceMotion,
+              compact: true,
+              loop: false,
+              onCompleted: () => _advance(data.signs.length),
+            ),
+          );
           return SafeArea(
             child: Column(
               children: [
@@ -94,34 +125,17 @@ class _ReferenceSequenceScreenState
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: motion.when(
-                      loading: () => const Center(
-                        child: CircularProgressIndicator(),
-                      ),
-                      error: (error, stackTrace) => Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'O movimento de ${sign.label.replaceAll('_', ' ')} ainda não foi publicado.',
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 16),
-                            FilledButton(
-                              onPressed: () => _advance(data.signs.length),
-                              child: const Text('Próximo sinal'),
-                            ),
-                          ],
-                        ),
-                      ),
-                      data: (referenceMotion) => ReferenceMotionPlayer(
-                        key: ValueKey(sign.label),
-                        motion: referenceMotion,
-                        compact: true,
-                        loop: false,
-                        onCompleted: () => _advance(data.signs.length),
-                      ),
-                    ),
+                    child: avatarAsset == null
+                        ? motionPlayer
+                        : ReferenceAvatarVideoPlayer(
+                            key: ValueKey('avatar-${sign.label}'),
+                            assetPath: avatarAsset,
+                            label: sign.label,
+                            compact: true,
+                            loop: false,
+                            onCompleted: () => _advance(data.signs.length),
+                            fallback: motionPlayer,
+                          ),
                   ),
                 ),
                 if (data.unresolved.isNotEmpty)
