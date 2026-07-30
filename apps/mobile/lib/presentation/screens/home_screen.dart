@@ -253,7 +253,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 14),
                     Semantics(
                       button: true,
-                      label: 'Aprender o sinal de bom com avatar realista',
+                      label: 'Aprender o sinal de bom com o avatar Librai',
                       child: OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size(double.infinity, 58),

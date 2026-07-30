@@ -3,10 +3,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../data/reference_avatar_asset_catalog.dart';
+import '../../domain/entities/libras_gloss.dart';
 import '../../domain/entities/reference_motion.dart';
+import '../../platform/vlibras/vlibras_avatar_view.dart';
 import '../state/reference_catalog_providers.dart';
-import '../widgets/reference_avatar_video_player.dart';
 
 class ReferenceMotionScreen extends ConsumerWidget {
   const ReferenceMotionScreen({
@@ -18,16 +18,15 @@ class ReferenceMotionScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final avatarAsset = ReferenceAvatarAssetCatalog.assetFor(label);
+    final gloss = LibrasGloss(label);
     return Scaffold(
-      appBar: AppBar(title: Text(label.replaceAll('_', ' '))),
-      body: avatarAsset == null
-          ? _RemoteReferenceMotion(label: label)
-          : ReferenceAvatarVideoPlayer(
-              assetPath: avatarAsset,
-              label: label,
-              fallback: _RemoteReferenceMotion(label: label),
-            ),
+      appBar: AppBar(title: Text(gloss.displayLabel)),
+      body: SafeArea(
+        child: VlibrasAvatarView(
+          gloss: gloss.value,
+          fallback: _RemoteReferenceMotion(label: label),
+        ),
+      ),
     );
   }
 }

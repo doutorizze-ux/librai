@@ -1,0 +1,13 @@
+{
+"companyName": "Vlibras",
+"productName": "Vlibras",
+"dataUrl": "final.data.unityweb",
+"wasmCodeUrl": "final.wasm.code.unityweb",
+"wasmFrameworkUrl": "final.wasm.framework.unityweb",
+"TOTAL_MEMORY": 268435456,
+"graphicsAPI": ["WebGL 2.0", "WebGL 1.0"],
+"webglContextAttributes": {"preserveDrawingBuffer": false},
+"splashScreenStyle": "Light",
+"backgroundColor": "transparent",
+"cacheControl": {"default": "must-revalidate"}
+}
