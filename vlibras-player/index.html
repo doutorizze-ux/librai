@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#6f56a0" />
+    <title>Avatar Librai</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        --brand: #6f56a0;
+        --brand-dark: #49356f;
+        --surface: #fbf8ff;
+        --ink: #211b2b;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 50% 18%, #ffffff 0, #f5effd 52%, #e9def6 100%);
+        color: var(--ink);
+      }
+
+      body {
+        display: grid;
+        place-items: center;
+      }
+
+      .app-shell {
+        position: relative;
+        width: min(100vw, 560px);
+        height: 100dvh;
+        min-height: 560px;
+        overflow: hidden;
+        background: var(--surface);
+      }
+
+      .brand {
+        position: absolute;
+        z-index: 4;
+        top: max(14px, env(safe-area-inset-top));
+        left: 18px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px 8px 8px;
+        border: 1px solid rgb(111 86 160 / 18%);
+        border-radius: 999px;
+        background: rgb(255 255 255 / 88%);
+        box-shadow: 0 8px 24px rgb(57 35 89 / 12%);
+        backdrop-filter: blur(12px);
+      }
+
+      .brand img {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        object-fit: contain;
+      }
+
+      .brand strong {
+        font-size: 16px;
+        letter-spacing: 0.01em;
+      }
+
+      .stage {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+      }
+
+      #gameContainer {
+        width: 100%;
+        height: 100%;
+        background: transparent !important;
+      }
+
+      #gameContainer canvas {
+        width: 100% !important;
+        height: 100% !important;
+        background: transparent !important;
+      }
+
+      .loading {
+        position: absolute;
+        z-index: 3;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: var(--surface);
+        transition:
+          opacity 240ms ease,
+          visibility 240ms ease;
+      }
+
+      .loading[hidden] {
+        display: grid;
+        visibility: hidden;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .loading-card {
+        width: min(82%, 320px);
+        text-align: center;
+      }
+
+      .loading-card img {
+        width: 72px;
+        height: 72px;
+        border-radius: 20px;
+        object-fit: contain;
+        box-shadow: 0 12px 30px rgb(79 48 119 / 15%);
+      }
+
+      .loading-card p {
+        margin: 18px 0 12px;
+        font-weight: 650;
+      }
+
+      .progress-track {
+        height: 7px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #e8dff2;
+      }
+
+      .progress-bar {
+        width: 0;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--brand-dark), #9f7bd0);
+        transition: width 120ms linear;
+      }
+
+      .controls {
+        position: absolute;
+        z-index: 4;
+        right: 16px;
+        bottom: max(16px, env(safe-area-inset-bottom));
+        left: 16px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 56px;
+        gap: 10px;
+        padding: 12px;
+        border: 1px solid rgb(111 86 160 / 16%);
+        border-radius: 22px;
+        background: rgb(255 255 255 / 90%);
+        box-shadow: 0 16px 44px rgb(62 39 92 / 18%);
+        backdrop-filter: blur(16px);
+      }
+
+      .signal {
+        min-width: 0;
+      }
+
+      .signal small {
+        display: block;
+        margin-bottom: 3px;
+        color: #6d6378;
+      }
+
+      .signal strong {
+        display: block;
+        overflow: hidden;
+        font-size: 22px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      button {
+        width: 56px;
+        min-width: 48px;
+        height: 56px;
+        min-height: 48px;
+        border: 0;
+        border-radius: 18px;
+        background: var(--brand);
+        color: white;
+        font: inherit;
+        font-size: 25px;
+        cursor: pointer;
+        box-shadow: 0 8px 18px rgb(79 52 118 / 24%);
+      }
+
+      button:focus-visible {
+        outline: 3px solid #2d1950;
+        outline-offset: 3px;
+      }
+
+      .error {
+        position: absolute;
+        z-index: 6;
+        right: 18px;
+        bottom: 100px;
+        left: 18px;
+        padding: 14px 16px;
+        border-radius: 14px;
+        background: #9d1c2b;
+        color: white;
+        font-size: 14px;
+        text-align: center;
+      }
+
+      @media (min-width: 561px) {
+        .app-shell {
+          height: min(94vh, 920px);
+          border-radius: 34px;
+          box-shadow: 0 28px 80px rgb(51 29 80 / 22%);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app-shell" aria-label="Demonstração do avatar Librai">
+      <header class="brand">
+        <img src="librai-icon.png" alt="" />
+        <strong>Librai</strong>
+      </header>
+
+      <section class="stage" aria-label="Avatar sinalizando em Libras">
+        <div id="gameContainer"></div>
+      </section>
+
+      <section id="loading" class="loading" aria-live="polite">
+        <div class="loading-card">
+          <img src="librai-icon.png" alt="" />
+          <p id="loadingLabel">Preparando o avatar…</p>
+          <div
+            class="progress-track"
+            role="progressbar"
+            aria-label="Carregamento do avatar"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+          >
+            <div id="progressBar" class="progress-bar"></div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="controls" aria-label="Controles do sinal">
+        <div class="signal">
+          <small>Sinal demonstrado</small>
+          <strong id="glossLabel">BOM</strong>
+        </div>
+        <button
+          id="replayButton"
+          type="button"
+          aria-label="Repetir demonstração do sinal"
+          title="Repetir"
+        >
+          ↻
+        </button>
+      </aside>
+
+      <div id="errorMessage" class="error" role="alert" hidden></div>
+    </main>
+
+    <script src="Build/UnityLoader.js"></script>
+    <script>
+      (() => {
+        const DICTIONARY_URL =
+          "https://dicionario2.vlibras.gov.br/2018.3.1/WEBGL/";
+        const PLAYER_MANAGER = "PlayerManager";
+        const AVATAR = "Avatar";
+        const params = new URLSearchParams(window.location.search);
+        const gloss = (params.get("glosa") || "BOM")
+          .trim()
+          .toLocaleUpperCase("pt-BR");
+        const loading = document.getElementById("loading");
+        const loadingLabel = document.getElementById("loadingLabel");
+        const progressBar = document.getElementById("progressBar");
+        const progressTrack = document.querySelector('[role="progressbar"]');
+        const errorMessage = document.getElementById("errorMessage");
+        const glossLabel = document.getElementById("glossLabel");
+        const replayButton = document.getElementById("replayButton");
+
+        let gameInstance;
+        let ready = false;
+
+        glossLabel.textContent = gloss;
+
+        function showError(message) {
+          errorMessage.textContent = message;
+          errorMessage.hidden = false;
+          loading.hidden = true;
+        }
+
+        function send(target, method, value) {
+          if (!gameInstance) return;
+          if (typeof value === "undefined") {
+            gameInstance.SendMessage(target, method);
+          } else {
+            gameInstance.SendMessage(target, method, value);
+          }
+        }
+
+        function applyLibraiIdentity() {
+          send(PLAYER_MANAGER, "Change", "hozana");
+          send(
+            AVATAR,
+            "setEditorCustomization",
+            JSON.stringify({
+              corpo: "#DFB56F",
+              olhos: "#fffafa",
+              cabelo: "#2F2F2F",
+              camisa: "#8E24AA",
+              calca: "#2F2F2F",
+              iris: "#614927",
+              pos: "center",
+            }),
+          );
+        }
+
+        function play() {
+          if (!ready) return;
+          errorMessage.hidden = true;
+          send(PLAYER_MANAGER, "stopAll");
+          window.setTimeout(
+            () => send(PLAYER_MANAGER, "playNow", gloss),
+            80,
+          );
+        }
+
+        window.onLoadPlayer = () => {
+          send(PLAYER_MANAGER, "initRandomAnimationsProcess");
+          send(PLAYER_MANAGER, "setURL", "");
+          send(PLAYER_MANAGER, "setBaseUrl", DICTIONARY_URL);
+          ready = true;
+          loadingLabel.textContent = "Avatar pronto";
+
+          // O Unity ainda conclui a criação do avatar padrão após avisar que o
+          // player carregou. Aplicar a identidade depois dessa etapa evita que
+          // o personagem padrão sobrescreva a escolha da Librai.
+          window.setTimeout(applyLibraiIdentity, 250);
+          window.setTimeout(applyLibraiIdentity, 900);
+          window.setTimeout(() => {
+            loading.hidden = true;
+            play();
+          }, 1_350);
+        };
+
+        window.onPlayingStateChange = () => {};
+        window.CounterGloss = () => {};
+        window.GetAvatar = () => {};
+        window.FinishWelcome = () => {};
+        window.updateProgress = () => {};
+
+        // Recriar a cena é mais confiável do que reutilizar o estado interno
+        // do Unity 2018 depois que uma animação termina. Os binários e o sinal
+        // permanecem em cache, então a repetição não baixa os arquivos de novo.
+        replayButton.addEventListener("click", () => window.location.reload());
+
+        window.addEventListener("error", (event) => {
+          if (!ready) {
+            showError(
+              "Não foi possível carregar o avatar. Verifique a conexão e tente novamente.",
+            );
+          }
+          console.error(event.error || event.message);
+        });
+
+        try {
+          gameInstance = UnityLoader.instantiate(
+            "gameContainer",
+            "Build/final.json",
+            {
+              onProgress: (_instance, progress) => {
+                const percent = Math.round(progress * 100);
+                progressBar.style.width = `${percent}%`;
+                progressTrack.setAttribute("aria-valuenow", String(percent));
+                loadingLabel.textContent =
+                  percent < 100
+                    ? `Preparando o avatar… ${percent}%`
+                    : "Finalizando…";
+              },
+            },
+          );
+          window.libraiAvatar = {
+            play,
+            select: (avatar) =>
+              send(PLAYER_MANAGER, "Change", String(avatar || "hozana")),
+            customize: applyLibraiIdentity,
+          };
+        } catch (error) {
+          console.error(error);
+          showError("O player do avatar não pôde ser iniciado.");
+        }
+      })();
+    </script>
+  </body>
+</html>
