@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/assisted_translation_screen.dart';
-import 'presentation/screens/reference_motion_screen.dart';
+import 'presentation/screens/libras_access_screen.dart';
 import 'presentation/screens/trainer_screen.dart';
 
 void main() {
@@ -28,9 +28,8 @@ class SinalizaAiApp extends StatelessWidget {
           builder: (context, state) => const TrainerScreen(),
         ),
         GoRoute(
-          path: '/learn/bom',
-          builder: (context, state) =>
-              const ReferenceMotionScreen(label: 'BOM'),
+          path: '/libras',
+          builder: (context, state) => const LibrasAccessScreen(),
         ),
       ],
     );

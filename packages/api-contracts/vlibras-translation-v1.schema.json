@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://librai.app/contracts/vlibras-translation-v1.schema.json",
+  "title": "VLibrasTranslationV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source",
+    "source_text",
+    "gloss"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "source": {
+      "const": "VLibras Translator"
+    },
+    "source_text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "gloss": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 5000
+    }
+  }
+}

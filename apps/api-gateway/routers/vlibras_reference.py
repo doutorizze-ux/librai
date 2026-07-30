@@ -7,6 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import List
 
+import httpx
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -35,6 +36,41 @@ class ReferenceCatalog(BaseModel):
 
 class ComposeRequest(BaseModel):
     text: str = Field(min_length=1, max_length=500)
+
+
+class OfficialTranslation(BaseModel):
+    schema_version: str
+    source: str
+    source_text: str
+    gloss: str
+
+
+VLIBRAS_TRANSLATOR_URL = os.getenv(
+    "VLIBRAS_TRANSLATOR_URL",
+    "https://traducao2.vlibras.gov.br/translate",
+)
+
+
+def _request_official_translation(text: str) -> str:
+    headers = {
+        "Accept": "text/plain",
+        "Content-Type": "application/json",
+        "Origin": "https://doutorizze-ux.github.io",
+        "Referer": "https://doutorizze-ux.github.io/librai/",
+        "User-Agent": "Librai/1.0",
+    }
+    with httpx.Client(timeout=12.0, follow_redirects=True) as client:
+        response = client.post(
+            VLIBRAS_TRANSLATOR_URL,
+            headers=headers,
+            json={"text": text},
+        )
+        response.raise_for_status()
+        return response.text
+
+
+def _normalize_official_gloss(value: str) -> str:
+    return " ".join(value.strip().split())
 
 
 def _default_catalog_path() -> Path:
@@ -226,4 +262,30 @@ def compose_reference_sequence(payload: ComposeRequest):
         "source_text": payload.text,
         "signs": signs,
         "unresolved": unresolved,
+    }
+
+
+@router.post("/translate", response_model=OfficialTranslation)
+def translate_portuguese_to_libras(payload: ComposeRequest):
+    try:
+        gloss = _normalize_official_gloss(
+            _request_official_translation(payload.text)
+        )
+    except (httpx.HTTPError, OSError) as error:
+        raise HTTPException(
+            status_code=503,
+            detail="Serviço oficial de tradução para Libras indisponível",
+        ) from error
+
+    if not gloss or len(gloss) > 5000:
+        raise HTTPException(
+            status_code=502,
+            detail="O serviço oficial retornou uma tradução inválida",
+        )
+
+    return {
+        "schema_version": "1.0",
+        "source": "VLibras Translator",
+        "source_text": payload.text,
+        "gloss": gloss,
     }

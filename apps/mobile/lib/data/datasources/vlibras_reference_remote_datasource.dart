@@ -48,4 +48,18 @@ class VlibrasReferenceRemoteDatasource {
     }
     return data;
   }
+
+  Future<Map<String, dynamic>> translatePortuguese(String text) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/v1/vlibras-reference/translate',
+      data: {'text': text},
+    );
+    final data = response.data;
+    if (data == null ||
+        data['source_text'] is! String ||
+        data['gloss'] is! String) {
+      throw const FormatException('Tradução oficial de Libras inválida');
+    }
+    return data;
+  }
 }

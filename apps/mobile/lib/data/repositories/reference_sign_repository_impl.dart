@@ -1,6 +1,7 @@
 import '../../domain/entities/reference_sign.dart';
 import '../../domain/entities/reference_motion.dart';
 import '../../domain/entities/reference_sequence.dart';
+import '../../domain/entities/reference_translation.dart';
 import '../../domain/repositories/reference_sign_repository.dart';
 import '../datasources/vlibras_reference_remote_datasource.dart';
 
@@ -73,6 +74,15 @@ class ReferenceSignRepositoryImpl implements ReferenceSignRepository {
       unresolved: (record['unresolved'] as List)
           .whereType<String>()
           .toList(growable: false),
+    );
+  }
+
+  @override
+  Future<ReferenceTranslation> translatePortuguese(String text) async {
+    final record = await _datasource.translatePortuguese(text);
+    return ReferenceTranslation(
+      sourceText: record['source_text'] as String,
+      gloss: record['gloss'] as String,
     );
   }
 

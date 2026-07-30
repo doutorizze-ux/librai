@@ -253,7 +253,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 14),
                     Semantics(
                       button: true,
-                      label: 'Aprender o sinal de bom com o avatar Librai',
+                      label:
+                          'Traduzir texto ou voz para Libras e abrir o dicionário',
                       child: OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size(double.infinity, 58),
@@ -268,18 +269,18 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         icon: const Icon(Icons.sign_language_rounded, size: 26),
                         label: const Text(
-                          'Aprender Libras',
+                          'Português para Libras',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        onPressed: () => context.push('/learn/bom'),
+                        onPressed: () => context.push('/libras'),
                       ),
                     ),
                     const SizedBox(height: 14),
                     Text(
-                      '175 expressões de atendimento de energia. Grave um sinal e confirme entre três opções.',
+                      'Tradução por texto, voz e dicionário com 13.597 sinais.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: theme.colorScheme.onSurfaceVariant,
