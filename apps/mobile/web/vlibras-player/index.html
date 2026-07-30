@@ -217,6 +217,37 @@
         text-align: center;
       }
 
+      body.embedded .app-shell {
+        height: 100dvh;
+        min-height: 0;
+      }
+
+      body.embedded .brand {
+        display: none;
+      }
+
+      body.embedded .controls {
+        right: 12px;
+        bottom: 12px;
+        left: auto;
+        display: block;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+        backdrop-filter: none;
+      }
+
+      body.embedded .signal {
+        display: none;
+      }
+
+      body.embedded .controls button {
+        width: 48px;
+        height: 48px;
+        border-radius: 16px;
+      }
+
       @media (min-width: 561px) {
         .app-shell {
           height: min(94vh, 920px);
@@ -280,6 +311,9 @@
         const PLAYER_MANAGER = "PlayerManager";
         const AVATAR = "Avatar";
         const params = new URLSearchParams(window.location.search);
+        if (params.get("embedded") === "1") {
+          document.body.classList.add("embedded");
+        }
         let gloss = (params.get("glosa") || "")
           .trim()
           .toLocaleUpperCase("pt-BR");

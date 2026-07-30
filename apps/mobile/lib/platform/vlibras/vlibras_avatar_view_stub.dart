@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 class VlibrasAvatarView extends StatelessWidget {
   const VlibrasAvatarView({
     required this.gloss,
+    this.embedded = false,
     this.fallback,
     super.key,
   });
 
   final String gloss;
+  final bool embedded;
   final Widget? fallback;
 
   @override

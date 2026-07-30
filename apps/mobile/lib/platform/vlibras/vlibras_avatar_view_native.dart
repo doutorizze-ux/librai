@@ -8,11 +8,13 @@ import 'package:webview_flutter/webview_flutter.dart';
 class VlibrasAvatarView extends StatefulWidget {
   const VlibrasAvatarView({
     required this.gloss,
+    this.embedded = false,
     this.fallback,
     super.key,
   });
 
   final String gloss;
+  final bool embedded;
   final Widget? fallback;
 
   @override
@@ -94,7 +96,10 @@ class _VlibrasAvatarViewState extends State<VlibrasAvatarView> {
 
   Uri _playerUri(String gloss) {
     return Uri.parse(_productionPlayerBaseUrl).replace(
-      queryParameters: {'glosa': gloss},
+      queryParameters: {
+        'glosa': gloss,
+        if (widget.embedded) 'embedded': '1',
+      },
     );
   }
 

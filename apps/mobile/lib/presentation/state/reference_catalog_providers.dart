@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/datasources/vlibras_reference_remote_datasource.dart';
@@ -20,9 +21,28 @@ final referenceSignRepositoryProvider =
       receiveTimeout: const Duration(seconds: 8),
     ),
   );
-  ref.onDispose(dio.close);
+  final officialTranslatorDio = Dio(
+    BaseOptions(
+      baseUrl: 'https://traducao2.vlibras.gov.br',
+      connectTimeout: const Duration(seconds: 8),
+      receiveTimeout: const Duration(seconds: 12),
+      headers: kIsWeb
+          ? const <String, String>{}
+          : const {
+              'Origin': 'https://doutorizze-ux.github.io',
+              'Referer': 'https://doutorizze-ux.github.io/librai/',
+            },
+    ),
+  );
+  ref.onDispose(() {
+    dio.close();
+    officialTranslatorDio.close();
+  });
   return ReferenceSignRepositoryImpl(
-    VlibrasReferenceRemoteDatasource(dio),
+    VlibrasReferenceRemoteDatasource(
+      dio,
+      officialTranslatorDio: officialTranslatorDio,
+    ),
   );
 });
 

@@ -9,11 +9,13 @@ import 'package:web/web.dart' as web;
 class VlibrasAvatarView extends StatefulWidget {
   const VlibrasAvatarView({
     required this.gloss,
+    this.embedded = false,
     this.fallback,
     super.key,
   });
 
   final String gloss;
+  final bool embedded;
   final Widget? fallback;
 
   @override
@@ -53,7 +55,10 @@ class _VlibrasAvatarViewState extends State<VlibrasAvatarView> {
 
   void _loadInitialPlayer() {
     final playerUri = Uri.base.resolve('vlibras-player/').replace(
-      queryParameters: {'glosa': widget.gloss},
+      queryParameters: {
+        'glosa': widget.gloss,
+        if (widget.embedded) 'embedded': '1',
+      },
     );
     _iframe
       ..title = 'Avatar Librai demonstrando ${widget.gloss}'

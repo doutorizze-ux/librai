@@ -12,8 +12,7 @@ class LibrasAccessScreen extends ConsumerStatefulWidget {
   const LibrasAccessScreen({super.key});
 
   @override
-  ConsumerState<LibrasAccessScreen> createState() =>
-      _LibrasAccessScreenState();
+  ConsumerState<LibrasAccessScreen> createState() => _LibrasAccessScreenState();
 }
 
 class _LibrasAccessScreenState extends ConsumerState<LibrasAccessScreen> {
@@ -176,13 +175,10 @@ class _LibrasAccessScreenState extends ConsumerState<LibrasAccessScreen> {
                         tooltip: _speechAvailable
                             ? (_isListening ? 'Parar' : 'Usar microfone')
                             : 'Microfone indisponível',
-                        onPressed:
-                            _speechAvailable ? _toggleListening : null,
+                        onPressed: _speechAvailable ? _toggleListening : null,
                         icon: Icon(
                           _isListening ? Icons.stop_rounded : Icons.mic_rounded,
-                          color: _isListening
-                              ? theme.colorScheme.error
-                              : null,
+                          color: _isListening ? theme.colorScheme.error : null,
                         ),
                       ),
                     ),
@@ -466,36 +462,74 @@ class _LibrasDictionaryTabState extends ConsumerState<_LibrasDictionaryTab> {
             ),
           ),
           if (_selectedGloss != null)
-            SizedBox(
-              height: 320,
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: VlibrasAvatarView(gloss: _selectedGloss!),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: SizedBox(
+                height: 360,
+                child: Material(
+                  color: theme.colorScheme.surface,
+                  clipBehavior: Clip.antiAlias,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(22),
+                    side: BorderSide(
+                      color: theme.colorScheme.outlineVariant,
                     ),
                   ),
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Semantics(
-                      button: true,
-                      label: 'Fechar demonstração do sinal',
-                      child: IconButton.filledTonal(
-                        constraints: const BoxConstraints.tightFor(
-                          width: 48,
-                          height: 48,
+                  child: Column(
+                    children: [
+                      SizedBox(
+                        height: 64,
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 16, right: 8),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.sign_language_rounded,
+                                color: theme.colorScheme.primary,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  _selectedGloss!.replaceAll('_', ' '),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                              Semantics(
+                                button: true,
+                                label: 'Fechar demonstração do sinal',
+                                child: IconButton.filledTonal(
+                                  constraints: const BoxConstraints.tightFor(
+                                    width: 48,
+                                    height: 48,
+                                  ),
+                                  tooltip: 'Fechar demonstração',
+                                  onPressed: () => setState(
+                                    () => _selectedGloss = null,
+                                  ),
+                                  icon: const Icon(Icons.close_rounded),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        tooltip: 'Fechar demonstração',
-                        onPressed: () => setState(
-                          () => _selectedGloss = null,
-                        ),
-                        icon: const Icon(Icons.close_rounded),
                       ),
-                    ),
+                      Divider(
+                        height: 1,
+                        color: theme.colorScheme.outlineVariant,
+                      ),
+                      Expanded(
+                        child: VlibrasAvatarView(
+                          gloss: _selectedGloss!,
+                          embedded: true,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           if (_loading) const LinearProgressIndicator(),
@@ -539,8 +573,7 @@ class _LibrasDictionaryTabState extends ConsumerState<_LibrasDictionaryTab> {
                           label: 'Demonstrar o sinal $label',
                           child: ListTile(
                             minTileHeight: 58,
-                            leading:
-                                const Icon(Icons.sign_language_rounded),
+                            leading: const Icon(Icons.sign_language_rounded),
                             title: Text(
                               label,
                               style:
@@ -551,8 +584,7 @@ class _LibrasDictionaryTabState extends ConsumerState<_LibrasDictionaryTab> {
                                   ? 'Expressão composta'
                                   : 'Sinal individual',
                             ),
-                            trailing:
-                                const Icon(Icons.chevron_right_rounded),
+                            trailing: const Icon(Icons.chevron_right_rounded),
                             onTap: () => setState(
                               () => _selectedGloss = sign.label,
                             ),

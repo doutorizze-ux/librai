@@ -1,9 +1,13 @@
 import 'package:dio/dio.dart';
 
 class VlibrasReferenceRemoteDatasource {
-  VlibrasReferenceRemoteDatasource(this._dio);
+  VlibrasReferenceRemoteDatasource(
+    this._dio, {
+    required Dio officialTranslatorDio,
+  }) : _officialTranslatorDio = officialTranslatorDio;
 
   final Dio _dio;
+  final Dio _officialTranslatorDio;
 
   Future<List<Map<String, dynamic>>> search({
     required String query,
@@ -52,16 +56,42 @@ class VlibrasReferenceRemoteDatasource {
   }
 
   Future<Map<String, dynamic>> translatePortuguese(String text) async {
-    final response = await _dio.post<Map<String, dynamic>>(
-      '/v1/vlibras-reference/translate',
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/v1/vlibras-reference/translate',
+        data: {'text': text},
+      );
+      final data = response.data;
+      if (data == null ||
+          data['source_text'] is! String ||
+          data['gloss'] is! String) {
+        throw const FormatException('Tradução oficial de Libras inválida');
+      }
+      return data;
+    } catch (_) {
+      // Mantém a tradução disponível quando o gateway ainda está em uma
+      // versão anterior ou passa por uma indisponibilidade temporária.
+      return _translateDirectlyWithOfficialService(text);
+    }
+  }
+
+  Future<Map<String, dynamic>> _translateDirectlyWithOfficialService(
+    String text,
+  ) async {
+    final response = await _officialTranslatorDio.post<String>(
+      '/translate',
       data: {'text': text},
+      options: Options(responseType: ResponseType.plain),
     );
-    final data = response.data;
-    if (data == null ||
-        data['source_text'] is! String ||
-        data['gloss'] is! String) {
+    final gloss = response.data?.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (gloss == null || gloss.isEmpty) {
       throw const FormatException('Tradução oficial de Libras inválida');
     }
-    return data;
+    return {
+      'source_text': text,
+      'gloss': gloss,
+      'source': 'VLibras Translator',
+      'schema_version': '1.0',
+    };
   }
 }
