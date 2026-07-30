@@ -3,8 +3,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/reference_avatar_asset_catalog.dart';
 import '../../domain/entities/reference_motion.dart';
 import '../state/reference_catalog_providers.dart';
+import '../widgets/reference_avatar_video_player.dart';
 
 class ReferenceMotionScreen extends ConsumerWidget {
   const ReferenceMotionScreen({
@@ -16,41 +18,59 @@ class ReferenceMotionScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final motion = ref.watch(referenceMotionProvider(label));
+    final avatarAsset = ReferenceAvatarAssetCatalog.assetFor(label);
     return Scaffold(
       appBar: AppBar(title: Text(label.replaceAll('_', ' '))),
-      body: motion.when(
-        loading: () => const Center(
-          child: CircularProgressIndicator(
-            semanticsLabel: 'Carregando demonstração do sinal',
-          ),
-        ),
-        error: (error, stackTrace) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.animation_outlined, size: 56),
-                const SizedBox(height: 16),
-                const Text(
-                  'A demonstração visual deste sinal ainda está sendo preparada.',
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: () => ref.invalidate(
-                    referenceMotionProvider(label),
-                  ),
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Tentar novamente'),
-                ),
-              ],
+      body: avatarAsset == null
+          ? _RemoteReferenceMotion(label: label)
+          : ReferenceAvatarVideoPlayer(
+              assetPath: avatarAsset,
+              label: label,
+              fallback: _RemoteReferenceMotion(label: label),
             ),
+    );
+  }
+}
+
+class _RemoteReferenceMotion extends ConsumerWidget {
+  const _RemoteReferenceMotion({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final motion = ref.watch(referenceMotionProvider(label));
+    return motion.when(
+      loading: () => const Center(
+        child: CircularProgressIndicator(
+          semanticsLabel: 'Carregando demonstração do sinal',
+        ),
+      ),
+      error: (error, stackTrace) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.animation_outlined, size: 56),
+              const SizedBox(height: 16),
+              const Text(
+                'A demonstração visual deste sinal ainda está sendo preparada.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () => ref.invalidate(
+                  referenceMotionProvider(label),
+                ),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Tentar novamente'),
+              ),
+            ],
           ),
         ),
-        data: (data) => ReferenceMotionPlayer(motion: data),
       ),
+      data: (data) => ReferenceMotionPlayer(motion: data),
     );
   }
 }

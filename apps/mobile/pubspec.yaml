@@ -26,6 +26,7 @@ dependencies:
   shared_preferences: ^2.5.5
   speech_to_text: ^7.4.0
   flutter_tts: ^4.2.5
+  video_player: ^2.13.0
 
 dev_dependencies:
   flutter_test:
@@ -48,6 +49,7 @@ flutter:
   assets:
     - assets/models/weights.json
     - assets/branding/librai-icon.png
+    - assets/avatar/signs/BOM.mp4
 
 flutter_launcher_icons:
   android: true
