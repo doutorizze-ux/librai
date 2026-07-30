@@ -7,6 +7,7 @@ import '../../domain/entities/reference_sign.dart';
 import '../../platform/device_speech_recognizer.dart';
 import '../../platform/vlibras/vlibras_avatar_view.dart';
 import '../state/reference_catalog_providers.dart';
+import '../state/vlibras_avatar_provider.dart';
 
 class LibrasAccessScreen extends ConsumerStatefulWidget {
   const LibrasAccessScreen({super.key});
@@ -145,6 +146,7 @@ class _LibrasAccessScreenState extends ConsumerState<LibrasAccessScreen> {
 
   Widget _buildTranslator(BuildContext context) {
     final theme = Theme.of(context);
+    final avatar = ref.watch(vlibrasAvatarProvider);
     return SafeArea(
       child: Column(
         children: [
@@ -262,7 +264,10 @@ class _LibrasAccessScreenState extends ConsumerState<LibrasAccessScreen> {
                 children: [
                   // O player é carregado enquanto a pessoa digita. Quando a
                   // tradução chega, a mesma instância recebe a nova sequência.
-                  VlibrasAvatarView(gloss: _gloss ?? ''),
+                  VlibrasAvatarView(
+                    gloss: _gloss ?? '',
+                    avatar: avatar.playerId,
+                  ),
                   if (_gloss == null)
                     const ColoredBox(
                       color: Color(0xFFF9F5FC),
@@ -423,6 +428,7 @@ class _LibrasDictionaryTabState extends ConsumerState<_LibrasDictionaryTab> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final avatar = ref.watch(vlibrasAvatarProvider);
     return SafeArea(
       child: Column(
         children: [
@@ -524,6 +530,7 @@ class _LibrasDictionaryTabState extends ConsumerState<_LibrasDictionaryTab> {
                       Expanded(
                         child: VlibrasAvatarView(
                           gloss: _selectedGloss!,
+                          avatar: avatar.playerId,
                           embedded: true,
                         ),
                       ),

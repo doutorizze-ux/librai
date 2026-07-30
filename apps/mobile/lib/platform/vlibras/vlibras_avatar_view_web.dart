@@ -9,12 +9,14 @@ import 'package:web/web.dart' as web;
 class VlibrasAvatarView extends StatefulWidget {
   const VlibrasAvatarView({
     required this.gloss,
+    this.avatar = 'hozana',
     this.embedded = false,
     this.fallback,
     super.key,
   });
 
   final String gloss;
+  final String avatar;
   final bool embedded;
   final Widget? fallback;
 
@@ -38,7 +40,7 @@ class _VlibrasAvatarViewState extends State<VlibrasAvatarView> {
       ..style.height = '100%'
       ..setAttribute('allowfullscreen', 'true');
     _loadInitialPlayer();
-    _loadSubscription = _iframe.onLoad.listen((_) => _sendGloss());
+    _loadSubscription = _iframe.onLoad.listen((_) => _sendPlayerState());
     ui_web.platformViewRegistry.registerViewFactory(
       _viewType,
       (_) => _iframe,
@@ -48,8 +50,8 @@ class _VlibrasAvatarViewState extends State<VlibrasAvatarView> {
   @override
   void didUpdateWidget(covariant VlibrasAvatarView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.gloss != widget.gloss) {
-      _sendGloss();
+    if (oldWidget.gloss != widget.gloss || oldWidget.avatar != widget.avatar) {
+      _sendPlayerState();
     }
   }
 
@@ -57,6 +59,7 @@ class _VlibrasAvatarViewState extends State<VlibrasAvatarView> {
     final playerUri = Uri.base.resolve('vlibras-player/').replace(
       queryParameters: {
         'glosa': widget.gloss,
+        'avatar': widget.avatar,
         if (widget.embedded) 'embedded': '1',
       },
     );
@@ -65,12 +68,12 @@ class _VlibrasAvatarViewState extends State<VlibrasAvatarView> {
       ..src = playerUri.toString();
   }
 
-  void _sendGloss() {
+  void _sendPlayerState() {
     final gloss = widget.gloss.trim();
-    if (gloss.isEmpty) return;
     final message = jsonEncode({
       'type': 'librai-play',
       'gloss': gloss,
+      'avatar': widget.avatar,
     });
     _iframe.contentWindow?.postMessage(
       message.toJS,

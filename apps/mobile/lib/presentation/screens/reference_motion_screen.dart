@@ -7,6 +7,7 @@ import '../../domain/entities/libras_gloss.dart';
 import '../../domain/entities/reference_motion.dart';
 import '../../platform/vlibras/vlibras_avatar_view.dart';
 import '../state/reference_catalog_providers.dart';
+import '../state/vlibras_avatar_provider.dart';
 
 class ReferenceMotionScreen extends ConsumerWidget {
   const ReferenceMotionScreen({
@@ -19,11 +20,13 @@ class ReferenceMotionScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final gloss = LibrasGloss(label);
+    final avatar = ref.watch(vlibrasAvatarProvider);
     return Scaffold(
       appBar: AppBar(title: Text(gloss.displayLabel)),
       body: SafeArea(
         child: VlibrasAvatarView(
           gloss: gloss.value,
+          avatar: avatar.playerId,
           fallback: _RemoteReferenceMotion(label: label),
         ),
       ),

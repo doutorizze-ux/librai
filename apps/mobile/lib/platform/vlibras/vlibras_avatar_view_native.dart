@@ -8,12 +8,14 @@ import 'package:webview_flutter/webview_flutter.dart';
 class VlibrasAvatarView extends StatefulWidget {
   const VlibrasAvatarView({
     required this.gloss,
+    this.avatar = 'hozana',
     this.embedded = false,
     this.fallback,
     super.key,
   });
 
   final String gloss;
+  final String avatar;
   final bool embedded;
   final Widget? fallback;
 
@@ -57,7 +59,7 @@ class _VlibrasAvatarViewState extends State<VlibrasAvatarView> {
                   _failed = false;
                   _pageLoaded = true;
                 });
-                unawaited(_sendGlossToPlayer());
+                unawaited(_sendPlayerState());
               },
               onWebResourceError: (error) {
                 if (error.isForMainFrame != true || !mounted) return;
@@ -75,19 +77,21 @@ class _VlibrasAvatarViewState extends State<VlibrasAvatarView> {
   @override
   void didUpdateWidget(covariant VlibrasAvatarView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.gloss != widget.gloss) {
-      unawaited(_sendGlossToPlayer());
+    if (oldWidget.gloss != widget.gloss || oldWidget.avatar != widget.avatar) {
+      unawaited(_sendPlayerState());
     }
   }
 
-  Future<void> _sendGlossToPlayer() async {
+  Future<void> _sendPlayerState() async {
     final controller = _controller;
     final gloss = widget.gloss.trim();
-    if (controller == null || !_pageLoaded || gloss.isEmpty) return;
+    if (controller == null || !_pageLoaded) return;
     try {
       await controller.runJavaScript(
-        'window.libraiAvatar && '
-        'window.libraiAvatar.setGloss(${jsonEncode(gloss)});',
+        'if (window.libraiAvatar) {'
+        'window.libraiAvatar.select(${jsonEncode(widget.avatar)});'
+        'window.libraiAvatar.setGloss(${jsonEncode(gloss)});'
+        '}',
       );
     } catch (_) {
       if (mounted) setState(() => _failed = true);
@@ -98,6 +102,7 @@ class _VlibrasAvatarViewState extends State<VlibrasAvatarView> {
     return Uri.parse(_productionPlayerBaseUrl).replace(
       queryParameters: {
         'glosa': gloss,
+        'avatar': widget.avatar,
         if (widget.embedded) 'embedded': '1',
       },
     );

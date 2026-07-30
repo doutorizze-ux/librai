@@ -310,6 +310,7 @@
           "https://dicionario2.vlibras.gov.br/2018.3.1/WEBGL/";
         const PLAYER_MANAGER = "PlayerManager";
         const AVATAR = "Avatar";
+        const AVAILABLE_AVATARS = new Set(["hozana", "icaro"]);
         const params = new URLSearchParams(window.location.search);
         if (params.get("embedded") === "1") {
           document.body.classList.add("embedded");
@@ -317,6 +318,7 @@
         let gloss = (params.get("glosa") || "")
           .trim()
           .toLocaleUpperCase("pt-BR");
+        let selectedAvatar = normalizeAvatar(params.get("avatar"));
         const loading = document.getElementById("loading");
         const loadingLabel = document.getElementById("loadingLabel");
         const progressBar = document.getElementById("progressBar");
@@ -345,8 +347,15 @@
           }
         }
 
+        function normalizeAvatar(value) {
+          const avatar = String(value || "")
+            .trim()
+            .toLocaleLowerCase("pt-BR");
+          return AVAILABLE_AVATARS.has(avatar) ? avatar : "hozana";
+        }
+
         function applyLibraiIdentity() {
-          send(PLAYER_MANAGER, "Change", "hozana");
+          send(PLAYER_MANAGER, "Change", selectedAvatar);
           send(
             AVATAR,
             "setEditorCustomization",
@@ -360,6 +369,17 @@
               pos: "center",
             }),
           );
+        }
+
+        function selectAvatar(value) {
+          const nextAvatar = normalizeAvatar(value);
+          if (nextAvatar === selectedAvatar) return;
+          selectedAvatar = nextAvatar;
+          if (!ready) return;
+          send(PLAYER_MANAGER, "stopAll");
+          applyLibraiIdentity();
+          window.setTimeout(applyLibraiIdentity, 500);
+          window.setTimeout(play, 900);
         }
 
         function play() {
@@ -393,6 +413,7 @@
             }
           }
           if (message?.type === "librai-play") {
+            selectAvatar(message.avatar);
             setGloss(message.gloss);
           }
         });
@@ -453,8 +474,7 @@
           window.libraiAvatar = {
             play,
             setGloss,
-            select: (avatar) =>
-              send(PLAYER_MANAGER, "Change", String(avatar || "hozana")),
+            select: selectAvatar,
             customize: applyLibraiIdentity,
           };
         } catch (error) {

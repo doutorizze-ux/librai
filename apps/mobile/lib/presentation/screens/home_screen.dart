@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../domain/entities/vlibras_avatar.dart';
 import '../../platform/app_config.dart';
 import '../../platform/tts_service.dart';
+import '../state/vlibras_avatar_provider.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _logoTapCount = 0;
   DateTime? _lastLogoTapTime;
 
@@ -31,8 +34,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showSettingsDialog() {
-    final controller = TextEditingController(text: AppConfig.apiUrl);
+    var temporaryApiUrl = AppConfig.apiUrl;
     var temporarySpeed = AppConfig.ttsSpeed;
+    var temporaryAvatar = ref.read(vlibrasAvatarProvider);
     showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -50,12 +54,43 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
+                  'Avatar de Libras:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: SegmentedButton<VlibrasAvatar>(
+                    showSelectedIcon: true,
+                    segments: VlibrasAvatar.values
+                        .map(
+                          (avatar) => ButtonSegment<VlibrasAvatar>(
+                            value: avatar,
+                            label: Text(avatar.displayName),
+                            tooltip:
+                                '${avatar.displayName}, ${avatar.description}',
+                          ),
+                        )
+                        .toList(growable: false),
+                    selected: {temporaryAvatar},
+                    onSelectionChanged: (selection) {
+                      setDialogState(
+                        () => temporaryAvatar = selection.single,
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Divider(),
+                const SizedBox(height: 12),
+                const Text(
                   'URL da API do servidor:',
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
-                TextField(
-                  controller: controller,
+                TextFormField(
+                  initialValue: temporaryApiUrl,
+                  onChanged: (value) => temporaryApiUrl = value,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.link),
@@ -83,18 +118,23 @@ class _HomeScreenState extends State<HomeScreen> {
               child: const Text('Cancelar'),
             ),
             FilledButton(
-              onPressed: () {
-                final url = controller.text.trim();
+              onPressed: () async {
+                final url = temporaryApiUrl.trim();
                 if (url.isNotEmpty) AppConfig.apiUrl = url;
                 AppConfig.ttsSpeed = temporarySpeed;
-                Navigator.pop(dialogContext);
+                await ref
+                    .read(vlibrasAvatarProvider.notifier)
+                    .select(temporaryAvatar);
+                if (dialogContext.mounted) {
+                  Navigator.pop(dialogContext);
+                }
               },
               child: const Text('Salvar'),
             ),
           ],
         ),
       ),
-    ).whenComplete(controller.dispose);
+    );
   }
 
   @override

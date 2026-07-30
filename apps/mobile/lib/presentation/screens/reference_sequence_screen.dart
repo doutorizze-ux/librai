@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/libras_gloss.dart';
 import '../../platform/vlibras/vlibras_avatar_view.dart';
 import '../state/reference_catalog_providers.dart';
+import '../state/vlibras_avatar_provider.dart';
 
 class ReferenceSequenceScreen extends ConsumerWidget {
   const ReferenceSequenceScreen({
@@ -16,6 +17,7 @@ class ReferenceSequenceScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sequence = ref.watch(referenceSequenceProvider(text));
+    final avatar = ref.watch(vlibrasAvatarProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Resposta em Libras')),
       body: sequence.when(
@@ -61,7 +63,10 @@ class ReferenceSequenceScreen extends ConsumerWidget {
                   ),
                 ),
                 Expanded(
-                  child: VlibrasAvatarView(gloss: gloss.value),
+                  child: VlibrasAvatarView(
+                    gloss: gloss.value,
+                    avatar: avatar.playerId,
+                  ),
                 ),
                 if (data.unresolved.isNotEmpty)
                   Padding(
