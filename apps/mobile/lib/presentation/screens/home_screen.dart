@@ -251,33 +251,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 14),
-                    Semantics(
-                      button: true,
-                      label: 'Aprender o sinal de bom com avatar realista',
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 58),
-                          foregroundColor: const Color(0xFF5D4788),
-                          side: const BorderSide(
-                            color: Color(0xFF9B83C1),
-                            width: 1.5,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        ),
-                        icon: const Icon(Icons.sign_language_rounded, size: 26),
-                        label: const Text(
-                          'Aprender Libras',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        onPressed: () => context.push('/learn/bom'),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
                     Text(
                       '175 expressões de atendimento de energia. Grave um sinal e confirme entre três opções.',
                       textAlign: TextAlign.center,
