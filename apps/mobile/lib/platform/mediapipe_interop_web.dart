@@ -45,10 +45,26 @@ class MediaPipeService {
               ..pointerEvents = 'none'
               ..zIndex = '2';
 
-            // O canvas exibe exatamente o quadro devolvido pelo MediaPipe.
-            // Um segundo <video> mantinha um relógio independente: a imagem
-            // avançava enquanto os landmarks ainda pertenciam ao quadro
-            // anterior, fazendo o contorno parecer atrasado.
+            // A prévia usa o vídeo nativo do navegador. O MediaPipe desenha
+            // somente os landmarks no canvas transparente acima dele. Assim,
+            // uma inferência mais demorada não congela a imagem da câmera.
+            sourceVideo.style
+              ..display = 'block'
+              ..position = 'absolute'
+              ..top = '0'
+              ..right = '0'
+              ..bottom = '0'
+              ..left = '0'
+              ..width = '100%'
+              ..height = '100%'
+              ..opacity = '1'
+              ..zIndex = '1'
+              ..transform = 'scaleX(-1)';
+            sourceVideo.style.setProperty('object-fit', 'cover');
+            sourceVideo.style.setProperty('will-change', 'transform');
+            sourceVideo.style.setProperty('backface-visibility', 'hidden');
+
+            container.children.add(sourceVideo);
             container.children.add(canvas);
 
             return container;

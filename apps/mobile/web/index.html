@@ -97,7 +97,7 @@
           return { width, height };
         };
 
-        const drawCameraFrame = (ctx, width, height, image) => {
+        const getCoverFrame = (width, height, image) => {
           const sourceWidth =
             Number(image?.videoWidth || image?.naturalWidth || image?.width);
           const sourceHeight =
@@ -115,18 +115,6 @@
           const offsetX = (width - renderedWidth) / 2;
           const offsetY = (height - renderedHeight) / 2;
 
-          ctx.save();
-          ctx.translate(width, 0);
-          ctx.scale(-1, 1);
-          ctx.drawImage(
-            image,
-            offsetX,
-            offsetY,
-            renderedWidth,
-            renderedHeight
-          );
-          ctx.restore();
-
           return { renderedWidth, renderedHeight, offsetX, offsetY };
         };
 
@@ -138,7 +126,7 @@
 
           const { width, height } = syncCanvasSize(canvas);
           ctx.clearRect(0, 0, width, height);
-          const frame = drawCameraFrame(ctx, width, height, image);
+          const frame = getCoverFrame(width, height, image);
           if (!frame) return;
           const { renderedWidth, renderedHeight, offsetX, offsetY } = frame;
           const mapPoint = (point) => ({
@@ -166,9 +154,10 @@
           multiHandLandmarks.forEach((landmarks, handIndex) => {
             const wrist = mapPoint(landmarks[0]);
             const trail = motionTrails[handIndex] || motionTrails[0];
-            trail.push({ ...wrist, createdAt: performance.now() });
+            const trailNow = performance.now();
+            trail.push({ ...wrist, createdAt: trailNow });
             while (trail.length > 6 ||
-                   (trail[0] && performance.now() - trail[0].createdAt > 120)) {
+                   (trail[0] && trailNow - trail[0].createdAt > 120)) {
               trail.shift();
             }
 
@@ -194,24 +183,27 @@
             ctx.shadowColor = neonColor;
             ctx.shadowBlur = 14;
 
+            // Um único stroke por mão mantém o neon, mas evita dezenas de
+            // rasterizações de sombra independentes em cada quadro.
+            ctx.beginPath();
             for (const [start, end] of connections) {
               const p1 = landmarks[start];
               const p2 = landmarks[end];
               if (p1 && p2) {
                 const a = mapPoint(p1);
                 const b = mapPoint(p2);
-                ctx.beginPath();
                 ctx.moveTo(a.x, a.y);
                 ctx.lineTo(b.x, b.y);
-                ctx.stroke();
               }
             }
+            ctx.stroke();
 
             ctx.shadowBlur = 10;
             ctx.fillStyle = '#F7FFFF';
+            ctx.beginPath();
             for (const pt of landmarks) {
               const mapped = mapPoint(pt);
-              ctx.beginPath();
+              ctx.moveTo(mapped.x + Math.max(3.5, width / 300), mapped.y);
               ctx.arc(
                 mapped.x,
                 mapped.y,
@@ -219,20 +211,19 @@
                 0,
                 2 * Math.PI
               );
-              ctx.fill();
             }
+            ctx.fill();
             ctx.shadowBlur = 0;
           });
         };
 
-        const drawCameraCanvas = (image) => {
+        const clearLandmarkCanvas = () => {
           const canvas = document.getElementById('mediapipe-overlay-canvas');
           if (canvas) {
             const ctx = canvas.getContext('2d');
             if (ctx) {
               const { width, height } = syncCanvasSize(canvas);
               ctx.clearRect(0, 0, width, height);
-              drawCameraFrame(ctx, width, height, image);
             }
           }
           motionTrails.forEach(trail => trail.length = 0);
@@ -308,7 +299,7 @@
             self.handScreenRatio = 0;
             currentHands = [];
             currentHandFrame = null;
-            drawCameraCanvas(results.image);
+            clearLandmarkCanvas();
           }
           updateLatestLandmarks();
           // Permite ao Flutter consumir cada resultado apenas uma vez.
