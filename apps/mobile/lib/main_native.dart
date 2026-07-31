@@ -7,9 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hand_landmarker/hand_landmarker.dart';
 
-import 'data/remote_assisted_sign_interpreter.dart';
-import 'domain/entities/assisted_prediction.dart';
 import 'domain/sign_phrase_composer.dart';
+import 'platform/mock_interpreter.dart';
 import 'platform/tts_service.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/libras_access_screen.dart';
@@ -73,22 +72,20 @@ class NativeTranslationScreen extends StatefulWidget {
 
 class _NativeTranslationScreenState extends State<NativeTranslationScreen>
     with WidgetsBindingObserver {
-  final RemoteAssistedSignInterpreter _interpreter =
-      RemoteAssistedSignInterpreter();
+  final MockSignInterpreter _interpreter = MockSignInterpreter();
   final SignPhraseComposer _phraseComposer = SignPhraseComposer();
   final TtsService _ttsService = TtsService();
   final Stopwatch _inferenceWatch = Stopwatch();
-  final List<Map<String, dynamic>> _capturedFrames = [];
+  final List<String> _predictionHistory = [];
 
   CameraController? _camera;
   HandLandmarkerPlugin? _landmarker;
   StreamSubscription<List<Hand>>? _landmarkSubscription;
 
   List<Hand> _hands = const [];
-  List<AssistedPredictionCandidate> _candidates = const [];
   bool _initialized = false;
   bool _processingFrame = false;
-  bool _capturing = false;
+  bool _capturing = true;
   bool _submitting = false;
   String? _fatalError;
   String? _error;
@@ -125,6 +122,7 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
       );
 
       await camera.initialize();
+      await _interpreter.loadModel('trained-sequence-v2');
       _camera = camera;
       _landmarker = landmarker;
       _landmarkSubscription = landmarker.landmarkStream.listen(
@@ -176,7 +174,7 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
       _fpsWindowStarted = now;
     }
 
-    if (hands.isNotEmpty && _capturing && !_submitting) {
+    if (hands.isNotEmpty && _capturing) {
       final orderedHands = [...hands]
         ..sort((a, b) => a.landmarks.first.x.compareTo(b.landmarks.first.x));
       final frame = <String, dynamic>{
@@ -193,12 +191,14 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
             },
         ],
       };
-      if (_capturedFrames.length < 180) {
-        _capturedFrames.add(frame);
+      _interpreter.addHandFrame(frame);
+      if (_interpreter.hasEnoughHandFrames && !_submitting) {
+        unawaited(_recognizeBufferedSequence());
       }
-      if (_capturedFrames.length >= 180) {
-        unawaited(_finishCapture());
-      }
+    } else if (hands.isEmpty) {
+      _predictionHistory.clear();
+      _interpreter.resetSequence();
+      _phraseComposer.releaseCurrentSign();
     }
 
     if (!mounted) return;
@@ -208,72 +208,47 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
     });
   }
 
-  void _startCapture() {
-    setState(() {
-      _capturedFrames.clear();
-      _candidates = const [];
-      _selectedLabel = null;
-      _error = null;
-      _capturing = true;
-    });
-  }
-
-  void _cancelCapture() {
-    setState(() {
-      _capturing = false;
-      _capturedFrames.clear();
-      _error = null;
-    });
-  }
-
-  Future<void> _finishCapture() async {
+  Future<void> _recognizeBufferedSequence() async {
     if (!_capturing || _submitting) return;
-    setState(() => _capturing = false);
-    if (_capturedFrames.length < 12) {
-      setState(() {
-        _capturedFrames.clear();
-        _error =
-            'Poucos quadros válidos. Mostre as mãos e repita o sinal inteiro.';
-      });
-      return;
-    }
-    final frames = List<Map<String, dynamic>>.from(_capturedFrames);
-    setState(() {
-      _submitting = true;
-      _error = null;
-    });
+    _submitting = true;
     try {
-      final prediction = await _interpreter.predict(frames);
-      if (!mounted) return;
+      final prediction = await _interpreter.predictBufferedSequence();
+      if (!mounted || !_capturing) return;
+      if (prediction.label == 'SINAL_DESCONHECIDO' ||
+          prediction.label == 'DADOS_INSUFICIENTES' ||
+          prediction.confidence < 0.70) {
+        return;
+      }
+
+      _predictionHistory.add(prediction.label);
+      if (_predictionHistory.length > 2) {
+        _predictionHistory.removeAt(0);
+      }
+      final consistent = prediction.confidence >= 0.86 ||
+          (_predictionHistory.length == 2 &&
+              _predictionHistory[0] == _predictionHistory[1]);
+      if (!consistent) return;
+
+      _interpreter.resetSequence();
+      _predictionHistory.clear();
+      final composition = _phraseComposer.accept(prediction.label);
+      if (composition == null) return;
       setState(() {
-        _capturedFrames.clear();
-        _candidates = prediction.candidates;
-        _submitting = false;
-        if (_candidates.isEmpty) {
-          _error = 'O modelo não encontrou uma opção para este sinal.';
-        }
+        _selectedLabel = prediction.label;
+        _translatedText = composition.text;
+        _error = null;
       });
-    } catch (_) {
+      if (composition.isFinal) {
+        await _ttsService.speak(composition.text);
+      }
+    } catch (error) {
       if (!mounted) return;
       setState(() {
-        _capturedFrames.clear();
-        _submitting = false;
         _error =
             'Não foi possível analisar agora. Verifique a conexão e tente novamente.';
       });
-    }
-  }
-
-  Future<void> _selectCandidate(AssistedPredictionCandidate candidate) async {
-    _phraseComposer.releaseCurrentSign();
-    final composition = _phraseComposer.accept(candidate.label);
-    setState(() {
-      _selectedLabel = candidate.label;
-      _translatedText =
-          composition?.text ?? SignPhraseComposer.displayLabel(candidate.label);
-    });
-    if (composition?.isFinal == true) {
-      await _ttsService.speak(composition!.text);
+    } finally {
+      _submitting = false;
     }
   }
 
@@ -293,7 +268,8 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _landmarkSubscription?.cancel();
-    _capturedFrames.clear();
+    _predictionHistory.clear();
+    _interpreter.resetSequence();
     _phraseComposer.reset();
     _camera?.stopImageStream();
     _camera?.dispose();
@@ -388,15 +364,17 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
                       const SizedBox(width: 12),
                       const Expanded(
                         child: Text(
-                          'Piloto • energia',
+                          'Tradução ao vivo',
                           style: TextStyle(
                             fontSize: 19,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
-                      if (_capturing)
-                        _statusChip('CAPTURANDO', const Color(0xFFD9364F)),
+                      _statusChip(
+                        _capturing ? 'TRADUZINDO' : 'PAUSADO',
+                        _capturing ? Colors.green : Colors.orange,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 10),
@@ -418,11 +396,6 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
                         '${_framesPerSecond.toStringAsFixed(1)} FPS',
                         Colors.blue,
                       ),
-                      if (_capturing)
-                        _statusChip(
-                          '${_capturedFrames.length} quadros',
-                          Colors.purple,
-                        ),
                     ],
                   ),
                   const Spacer(),
@@ -473,99 +446,36 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
                             ),
                           ),
                         ],
-                        if (_candidates.isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          for (final candidate in _candidates)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: Semantics(
-                                button: true,
-                                label:
-                                    '${SignPhraseComposer.displayLabel(candidate.label)}, possibilidade ${(candidate.confidence * 100).round()} por cento',
-                                child: OutlinedButton(
-                                  style: OutlinedButton.styleFrom(
-                                    minimumSize: const Size(
-                                      double.infinity,
-                                      52,
-                                    ),
-                                    side: BorderSide(
-                                      color: _selectedLabel == candidate.label
-                                          ? const Color(0xFFB9FFDA)
-                                          : Colors.white38,
-                                      width: 2,
-                                    ),
-                                  ),
-                                  onPressed: _selectedLabel == null
-                                      ? () => _selectCandidate(candidate)
-                                      : null,
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          SignPhraseComposer.displayLabel(
-                                            candidate.label,
-                                          ),
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w800,
-                                          ),
-                                        ),
-                                      ),
-                                      Text(
-                                        '${(candidate.confidence * 100).round()}%',
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
                         const SizedBox(height: 8),
-                        if (_submitting)
-                          const SizedBox(
-                            height: 56,
-                            child: Center(child: CircularProgressIndicator()),
-                          )
-                        else if (_capturing)
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton(
-                                  style: OutlinedButton.styleFrom(
-                                    minimumSize: const Size(48, 56),
-                                  ),
-                                  onPressed: _cancelCapture,
-                                  child: const Text('Cancelar'),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                flex: 2,
-                                child: FilledButton.icon(
-                                  style: FilledButton.styleFrom(
-                                    minimumSize: const Size(48, 56),
-                                    backgroundColor: const Color(0xFFE33855),
-                                  ),
-                                  onPressed: _finishCapture,
-                                  icon: const Icon(Icons.stop_rounded),
-                                  label: const Text('Finalizar sinal'),
-                                ),
-                              ),
-                            ],
-                          )
-                        else
-                          FilledButton.icon(
+                        Semantics(
+                          button: true,
+                          label: _capturing
+                              ? 'Pausar tradução automática'
+                              : 'Retomar tradução automática',
+                          child: FilledButton.icon(
                             style: FilledButton.styleFrom(
                               minimumSize: const Size(double.infinity, 58),
                               backgroundColor: const Color(0xFF7158A0),
                             ),
-                            onPressed: _startCapture,
-                            icon: const Icon(Icons.fiber_manual_record),
+                            onPressed: () {
+                              setState(() {
+                                _capturing = !_capturing;
+                                _error = null;
+                              });
+                              _interpreter.resetSequence();
+                              _predictionHistory.clear();
+                              _phraseComposer.releaseCurrentSign();
+                            },
+                            icon: Icon(
+                              _capturing ? Icons.pause : Icons.play_arrow,
+                            ),
                             label: Text(
-                              _candidates.isEmpty
-                                  ? 'Começar captura'
-                                  : 'Capturar próximo sinal',
+                              _capturing
+                                  ? 'Pausar tradução'
+                                  : 'Retomar tradução',
                             ),
                           ),
+                        ),
                       ],
                     ),
                   ),
@@ -579,14 +489,13 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
   }
 
   String get _instruction {
-    if (_submitting) return 'Analisando o movimento completo…';
-    if (_capturing) {
-      return 'Faça um único sinal do começo ao fim e toque em finalizar.';
+    if (!_capturing) return 'Tradução pausada.';
+    if (_hands.isEmpty) return 'Mostre as mãos e sinalize normalmente.';
+    if (_submitting) return 'Reconhecendo o movimento…';
+    if (_selectedLabel != null) {
+      return 'Sinal reconhecido: ${SignPhraseComposer.displayLabel(_selectedLabel!)}';
     }
-    if (_candidates.isNotEmpty) {
-      return 'Toque na opção correta. Se nenhuma servir, grave novamente.';
-    }
-    return 'Piloto de atendimento de energia: grave uma expressão por vez.';
+    return 'Tradução automática ativa. Faça um sinal do começo ao fim.';
   }
 
   Widget _buildCameraPreview(CameraController camera) {

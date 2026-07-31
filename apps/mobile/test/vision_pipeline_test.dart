@@ -13,16 +13,28 @@ void main() {
       final buffer = LandmarkBuffer(maxFrames: 5);
 
       // Adicionar 3 frames
-      buffer.addFrame([{'x': 0.1, 'y': 0.1, 'z': 0.0}]);
-      buffer.addFrame([{'x': 0.2, 'y': 0.2, 'z': 0.0}]);
-      buffer.addFrame([{'x': 0.3, 'y': 0.3, 'z': 0.0}]);
+      buffer.addFrame([
+        {'x': 0.1, 'y': 0.1, 'z': 0.0}
+      ]);
+      buffer.addFrame([
+        {'x': 0.2, 'y': 0.2, 'z': 0.0}
+      ]);
+      buffer.addFrame([
+        {'x': 0.3, 'y': 0.3, 'z': 0.0}
+      ]);
 
       expect(buffer.currentSize, equals(3));
 
       // Adicionar mais 3 frames (totalizando 6, estourando o limite de 5)
-      buffer.addFrame([{'x': 0.4, 'y': 0.4, 'z': 0.0}]);
-      buffer.addFrame([{'x': 0.5, 'y': 0.5, 'z': 0.0}]);
-      buffer.addFrame([{'x': 0.6, 'y': 0.6, 'z': 0.0}]);
+      buffer.addFrame([
+        {'x': 0.4, 'y': 0.4, 'z': 0.0}
+      ]);
+      buffer.addFrame([
+        {'x': 0.5, 'y': 0.5, 'z': 0.0}
+      ]);
+      buffer.addFrame([
+        {'x': 0.6, 'y': 0.6, 'z': 0.0}
+      ]);
 
       // Tamanho do buffer deve travar em 5
       expect(buffer.currentSize, equals(5));
@@ -39,7 +51,9 @@ void main() {
       expect(buffer.isProcessing, isFalse);
 
       // Adiciona um frame
-      final added1 = buffer.addFrame([{'x': 0.5, 'y': 0.5, 'z': 0.0}]);
+      final added1 = buffer.addFrame([
+        {'x': 0.5, 'y': 0.5, 'z': 0.0}
+      ]);
       expect(added1, isTrue);
 
       // Sinaliza processamento ocupado
@@ -47,20 +61,26 @@ void main() {
       expect(buffer.isProcessing, isTrue);
 
       // Tenta adicionar frame
-      final added2 = buffer.addFrame([{'x': 0.6, 'y': 0.6, 'z': 0.0}]);
+      final added2 = buffer.addFrame([
+        {'x': 0.6, 'y': 0.6, 'z': 0.0}
+      ]);
       expect(added2, isFalse); // Deve descartar por backpressure
       expect(buffer.currentSize, equals(1));
 
       // Conclui processamento
       buffer.setProcessing(false);
-      final added3 = buffer.addFrame([{'x': 0.7, 'y': 0.7, 'z': 0.0}]);
+      final added3 = buffer.addFrame([
+        {'x': 0.7, 'y': 0.7, 'z': 0.0}
+      ]);
       expect(added3, isTrue);
       expect(buffer.currentSize, equals(2));
     });
   });
 
   group('Testes do Validador de Enquadramento (VisionValidator)', () {
-    test('Deve detectar ausência de pessoa quando landmarks são nulos ou vazios', () {
+    test(
+        'Deve detectar ausência de pessoa quando landmarks são nulos ou vazios',
+        () {
       final state1 = VisionValidator.validateFraming(null, true);
       expect(state1, equals(VisionState.waitingPerson));
 
@@ -69,12 +89,16 @@ void main() {
     });
 
     test('Deve alertar se o rosto não for detectado', () {
-      final landmarks = [{'x': 0.5, 'y': 0.5, 'z': 0.0}];
+      final landmarks = [
+        {'x': 0.5, 'y': 0.5, 'z': 0.0}
+      ];
       final state = VisionValidator.validateFraming(landmarks, false);
       expect(state, equals(VisionState.faceOutOfFrame));
     });
 
-    test('Deve validar como OK quando landmarks estão centralizados e proporcionais', () {
+    test(
+        'Deve validar como OK quando landmarks estão centralizados e proporcionais',
+        () {
       // Landmarks com espalhamento médio (~0.3) e centralizados
       final landmarks = [
         {'x': 0.4, 'y': 0.5, 'z': 0.0},
@@ -84,7 +108,9 @@ void main() {
       expect(state, equals(VisionState.ok));
     });
 
-    test('Deve alertar para aproximar-se se o espalhamento for muito pequeno (sinalizador longe)', () {
+    test(
+        'Deve alertar para aproximar-se se o espalhamento for muito pequeno (sinalizador longe)',
+        () {
       final landmarks = [
         {'x': 0.49, 'y': 0.5, 'z': 0.0},
         {'x': 0.51, 'y': 0.5, 'z': 0.0},
@@ -93,7 +119,9 @@ void main() {
       expect(state, equals(VisionState.stepCloser));
     });
 
-    test('Deve alertar para afastar-se se o espalhamento for muito grande (sinalizador muito próximo)', () {
+    test(
+        'Deve alertar para afastar-se se o espalhamento for muito grande (sinalizador muito próximo)',
+        () {
       final landmarks = [
         {'x': 0.1, 'y': 0.5, 'z': 0.0},
         {'x': 0.8, 'y': 0.5, 'z': 0.0},
@@ -115,12 +143,14 @@ void main() {
     test('Deve falhar se tentar inferir sem carregar o modelo', () {
       final interpreter = MockSignInterpreter();
       expect(
-        () => interpreter.predict([{'x': 0.5, 'y': 0.5, 'z': 0.0}]),
-        throwsStateError
-      );
+          () => interpreter.predict([
+                {'x': 0.5, 'y': 0.5, 'z': 0.0}
+              ]),
+          throwsStateError);
     });
 
-    test('Deve validar landmarks e prever sinal conhecido com alta confiança', () async {
+    test('Deve validar landmarks e prever sinal conhecido com alta confiança',
+        () async {
       final interpreter = MockSignInterpreter();
       await interpreter.loadModel("test_assets/weights.json");
 
@@ -135,7 +165,9 @@ void main() {
       expect(result.isTestFixture, isTrue);
     });
 
-    test('Deve rejeitar sinal com "SINAL_DESCONHECIDO" se a confiança for baixa', () async {
+    test(
+        'Deve rejeitar sinal com "SINAL_DESCONHECIDO" se a confiança for baixa',
+        () async {
       final interpreter = MockSignInterpreter();
       await interpreter.loadModel("test_assets/weights.json");
 
@@ -166,7 +198,7 @@ void main() {
       // Tenta adicionar ruído do sistema de rejeição
       buffer.addGloss("SINAL_DESCONHECIDO");
       buffer.addGloss("DADOS_INSUFICIENTES");
-      
+
       expect(buffer.length, equals(1)); // Deve manter apenas o sinal válido
 
       // Adiciona novo sinal
@@ -177,13 +209,16 @@ void main() {
   });
 
   group('Testes do Tradutor de Libras (LocalLibrasTranslator)', () {
-    test('Deve traduzir frase estruturada localmente (Offline fallback)', () async {
+    test('Deve traduzir frase estruturada localmente (Offline fallback)',
+        () async {
       final translator = LocalLibrasTranslator();
 
-      final result1 = await translator.translate(["EU", "IR", "HOSPITAL"], sessionId: "session_test");
+      final result1 = await translator
+          .translate(["EU", "IR", "HOSPITAL"], sessionId: "session_test");
       expect(result1, equals("Eu preciso ir ao hospital."));
 
-      final result2 = await translator.translate(["BOM_DIA"], sessionId: "session_test");
+      final result2 =
+          await translator.translate(["BOM_DIA"], sessionId: "session_test");
       expect(result2, equals("Bom dia!"));
 
       final result3 = await translator.translate(
@@ -199,10 +234,12 @@ void main() {
       expect(result4, equals("Boa tarde!"));
     });
 
-    test('Deve efetuar tradução literal em caso de sequência desconhecida', () async {
+    test('Deve efetuar tradução literal em caso de sequência desconhecida',
+        () async {
       final translator = LocalLibrasTranslator();
 
-      final result = await translator.translate(["CASA", "AZUL"], sessionId: "session_test");
+      final result = await translator
+          .translate(["CASA", "AZUL"], sessionId: "session_test");
       expect(result, equals("Casa azul."));
     });
   });
@@ -271,8 +308,19 @@ void main() {
     test('Exibe os nomes dos sinais com capitalização natural', () {
       expect(SignPhraseComposer.displayLabel('OBRIGADO'), equals('Obrigado'));
       expect(SignPhraseComposer.displayLabel('BOM_DIA'), equals('Bom dia'));
+      expect(SignPhraseComposer.displayLabel('OLA'), equals('Olá'));
       expect(SignPhraseComposer.displayLabel('cpf'), equals('CPF'));
       expect(SignPhraseComposer.displayLabel('d'), equals('D'));
+    });
+
+    test('Trata OLA treinado sem acento como palavra completa', () {
+      final composer = SignPhraseComposer();
+
+      final result = composer.accept('OLA');
+
+      expect(result?.isFinal, isTrue);
+      expect(result?.text, equals('Olá.'));
+      expect(result?.glosses, equals(['OLA']));
     });
 
     test('Espera tempo suficiente pelo segundo sinal da saudação', () {
@@ -302,7 +350,7 @@ void main() {
 
       storage.saveSession(session);
       expect(storage.getSessions().length, equals(1));
-      
+
       final jsonStr = storage.exportSessionsAsJson();
       expect(jsonStr, contains("session_abc"));
     });

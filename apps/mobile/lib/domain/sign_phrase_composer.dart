@@ -103,6 +103,7 @@ class SignPhraseComposer {
   static String displayLabel(String rawLabel) {
     final normalized = normalizeLabel(rawLabel);
     if (normalized.isEmpty) return '';
+    if (normalized == 'OLA' || normalized == 'OLÁ') return 'Olá';
     if (normalized.length == 1) return normalized;
     const acronyms = {'CPF', 'RG', 'SUS', 'IA', 'LGPD'};
     if (acronyms.contains(normalized)) return normalized;
@@ -185,6 +186,7 @@ class SignPhraseComposer {
   }
 
   String _literalText(String label) {
+    if (label == 'OLA' || label == 'OLÁ') return 'Olá.';
     final words = label.toLowerCase().replaceAll('_', ' ');
     return '${words[0].toUpperCase()}${words.substring(1)}.';
   }

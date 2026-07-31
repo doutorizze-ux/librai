@@ -35,7 +35,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
   String _partialText = "Aguardando sinalização...";
   String _finalText = "";
   double _confidence = 0.0;
-  
+
   bool _handsDetected = false;
   bool _faceDetected = false;
   bool _bodyDetected = false;
@@ -52,7 +52,8 @@ class _TranslationScreenState extends State<TranslationScreen> {
     _interpreter.loadModel("weights.json");
 
     // Loop de processamento de quadros a ~30 FPS (a cada 33ms)
-    _processingTimer = Timer.periodic(const Duration(milliseconds: 33), (timer) {
+    _processingTimer =
+        Timer.periodic(const Duration(milliseconds: 33), (timer) {
       if (!_isTranslating) return;
 
       final revision = _visionService.getLandmarkRevision();
@@ -100,24 +101,45 @@ class _TranslationScreenState extends State<TranslationScreen> {
   bool _isSpellingUnit(String label) {
     final clean = label.trim().toUpperCase();
     if (clean.isEmpty) return false;
-    
+
     // Se for uma única letra (A-Z)
     if (clean.length == 1 && RegExp(r'[A-Z]').hasMatch(clean)) {
       return true;
     }
-    
+
     // Lista de palavras curtas conhecidas que NÃO são sílabas
-    final knownWords = {'SIM', 'NÃO', 'OLÁ', 'RUA', 'SUS', 'CPF', 'RG'};
+    final knownWords = {
+      'SIM',
+      'NÃO',
+      'OLA',
+      'OLÁ',
+      'RUA',
+      'SUS',
+      'CPF',
+      'RG',
+    };
     if (clean.length <= 3 && !knownWords.contains(clean)) {
       return true;
     }
-    
+
     // Sílabas conhecidas
-    final knownSyllables = {'FRE', 'DE', 'RI', 'CO', 'BO', 'MA', 'TA', 'RA', 'PA', 'LI', 'AI'};
+    final knownSyllables = {
+      'FRE',
+      'DE',
+      'RI',
+      'CO',
+      'BO',
+      'MA',
+      'TA',
+      'RA',
+      'PA',
+      'LI',
+      'AI'
+    };
     if (knownSyllables.contains(clean)) {
       return true;
     }
-    
+
     return false;
   }
 
@@ -139,23 +161,22 @@ class _TranslationScreenState extends State<TranslationScreen> {
             ? await _interpreter.predictBufferedSequence()
             : await _interpreter.predict(landmarks);
         if (!mounted || !_isTranslating) return;
-        
-        if (prediction.label != "SINAL_DESCONHECIDO" && 
-            prediction.label != "DADOS_INSUFICIENTES" && 
+
+        if (prediction.label != "SINAL_DESCONHECIDO" &&
+            prediction.label != "DADOS_INSUFICIENTES" &&
             prediction.confidence >= 0.70) {
-          
           // Histórico rápido de 2 predições para eliminar pequenas cintilações instantaneamente
           _predictionHistory.add(prediction.label);
           if (_predictionHistory.length > 2) {
             _predictionHistory.removeAt(0);
           }
-          
+
           // Uma correspondência muito forte pode ser aceita imediatamente.
           // Resultados limítrofes ainda precisam de confirmação consecutiva.
           final bool isConsistent = prediction.confidence >= 0.86 ||
               (_predictionHistory.length >= 2 &&
                   _predictionHistory[0] == _predictionHistory[1]);
-          
+
           if (isConsistent) {
             final votedLabel = prediction.label;
 
@@ -176,15 +197,16 @@ class _TranslationScreenState extends State<TranslationScreen> {
               });
               return;
             }
-            
+
             if (_isSpellingUnit(votedLabel)) {
               // Evitar duplicar a mesma sílaba se for detectada repetida muito rápido
-              if (_spellingBuffer.isEmpty || _spellingBuffer.last != votedLabel) {
+              if (_spellingBuffer.isEmpty ||
+                  _spellingBuffer.last != votedLabel) {
                 // Cancelar timer de finalização anterior apenas ao entrar nova sílaba
                 _spellingEndTimer?.cancel();
-                
+
                 _spellingBuffer.add(votedLabel);
-                
+
                 // Mostrar progresso (ex: F-R-E ou FRE-DE)
                 final separator = votedLabel.length == 1 ? "" : "-";
                 final progressText = _spellingBuffer.join(separator);
@@ -192,9 +214,10 @@ class _TranslationScreenState extends State<TranslationScreen> {
                   _partialText = "Soletrando: $progressText";
                   _confidence = prediction.confidence;
                 });
-                
+
                 // Agendar a finalização da palavra soletrada (1.5 segundos sem novos sinais)
-                _spellingEndTimer = Timer(const Duration(milliseconds: 1500), () async {
+                _spellingEndTimer =
+                    Timer(const Duration(milliseconds: 1500), () async {
                   if (_spellingBuffer.isNotEmpty) {
                     final fullWord = _spellingBuffer.join("");
                     setState(() {
@@ -257,7 +280,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
       _predictionHistory.clear();
       _interpreter.resetSequence();
       _phraseComposer.releaseCurrentSign();
-      
+
       // Se estava no meio de uma soletragem, finaliza imediatamente ao retirar a mão
       if (_spellingBuffer.isNotEmpty) {
         _spellingEndTimer?.cancel();
@@ -624,82 +647,94 @@ class _TranslationScreenState extends State<TranslationScreen> {
                 child: AspectRatio(
                   aspectRatio: 16 / 9,
                   child: ClipRRect(
-                borderRadius: BorderRadius.circular(16.0),
-                child: Container(
-                  color: Colors.black87,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // Renders live webcam stream on web
-                      if (kIsWeb)
-                        const Positioned.fill(
-                          child: HtmlElementView(viewType: 'mediapipe-video-view'),
-                        ),
-
-                      // Moldura de enquadramento
-                      Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: _framingState == VisionState.ok ? Colors.green.withOpacity(0.5) : Colors.red.withOpacity(0.5),
-                            width: 3.0,
-                          ),
-                        ),
-                      ),
-                      
-                      // Câmera Placeholder (só mostra o ícone de pessoa se não for web)
-                      if (!kIsWeb)
-                        Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.person, color: theme.colorScheme.primary.withOpacity(0.3), size: 100),
-                            const SizedBox(height: 8),
-                            Text(
-                              _getWarningMessage(_framingState),
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    borderRadius: BorderRadius.circular(16.0),
+                    child: Container(
+                      color: Colors.black87,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Renders live webcam stream on web
+                          if (kIsWeb)
+                            const Positioned.fill(
+                              child: HtmlElementView(
+                                  viewType: 'mediapipe-video-view'),
                             ),
-                          ],
-                        ),
 
-                      if (kIsWeb)
-                        Positioned(
-                          bottom: 16,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          // Moldura de enquadramento
+                          Container(
                             decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              _getWarningMessage(_framingState),
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                              border: Border.all(
+                                color: _framingState == VisionState.ok
+                                    ? Colors.green.withOpacity(0.5)
+                                    : Colors.red.withOpacity(0.5),
+                                width: 3.0,
+                              ),
                             ),
                           ),
-                        ),
-                      
-                      // Status de landmarks
-                      Positioned(
-                        top: 16,
-                        left: 16,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildLandmarkChip('Mãos', _handsDetected),
-                            const SizedBox(height: 4),
-                            _buildLandmarkChip('Rosto', _faceDetected),
-                            const SizedBox(height: 4),
-                            _buildLandmarkChip('Tronco', _bodyDetected),
-                          ],
-                        ),
+
+                          // Câmera Placeholder (só mostra o ícone de pessoa se não for web)
+                          if (!kIsWeb)
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.person,
+                                    color: theme.colorScheme.primary
+                                        .withOpacity(0.3),
+                                    size: 100),
+                                const SizedBox(height: 8),
+                                Text(
+                                  _getWarningMessage(_framingState),
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+
+                          if (kIsWeb)
+                            Positioned(
+                              bottom: 16,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  _getWarningMessage(_framingState),
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12),
+                                ),
+                              ),
+                            ),
+
+                          // Status de landmarks
+                          Positioned(
+                            top: 16,
+                            left: 16,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildLandmarkChip('Mãos', _handsDetected),
+                                const SizedBox(height: 4),
+                                _buildLandmarkChip('Rosto', _faceDetected),
+                                const SizedBox(height: 4),
+                                _buildLandmarkChip('Tronco', _bodyDetected),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-          
+
           // Legenda e Painel de Controle
           Expanded(
             flex: 2,
@@ -730,16 +765,18 @@ class _TranslationScreenState extends State<TranslationScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  
+
                   // Legenda Consolidada
                   Text(
-                    _finalText.isNotEmpty ? _finalText : "Sinalize em frente à câmera",
+                    _finalText.isNotEmpty
+                        ? _finalText
+                        : "Sinalize em frente à câmera",
                     style: theme.textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 12),
-                  
+
                   // Nível de Confiança
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -747,11 +784,17 @@ class _TranslationScreenState extends State<TranslationScreen> {
                       Row(
                         children: [
                           Icon(
-                            _confidence >= 0.8 ? Icons.verified : Icons.warning_amber_rounded,
-                            color: _confidence >= 0.8 ? Colors.green : Colors.orange,
+                            _confidence >= 0.8
+                                ? Icons.verified
+                                : Icons.warning_amber_rounded,
+                            color: _confidence >= 0.8
+                                ? Colors.green
+                                : Colors.orange,
                           ),
                           const SizedBox(width: 8),
-                          Text(_confidence > 0.0 ? 'Confiança: ${(_confidence * 100).toStringAsFixed(0)}%' : 'Sem sinalização ativa'),
+                          Text(_confidence > 0.0
+                              ? 'Confiança: ${(_confidence * 100).toStringAsFixed(0)}%'
+                              : 'Sem sinalização ativa'),
                         ],
                       ),
                       IconButton(
@@ -766,15 +809,18 @@ class _TranslationScreenState extends State<TranslationScreen> {
                     ],
                   ),
                   const Spacer(),
-                  
+
                   // Controles de Ação
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       IconButton.filledTonal(
                         icon: Semantics(
-                          label: _isTranslating ? 'Pausar tradução' : 'Retomar tradução',
-                          child: Icon(_isTranslating ? Icons.pause : Icons.play_arrow),
+                          label: _isTranslating
+                              ? 'Pausar tradução'
+                              : 'Retomar tradução',
+                          child: Icon(
+                              _isTranslating ? Icons.pause : Icons.play_arrow),
                         ),
                         onPressed: () {
                           setState(() {
@@ -810,12 +856,15 @@ class _TranslationScreenState extends State<TranslationScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: detected ? Colors.green.withOpacity(0.8) : Colors.red.withOpacity(0.8),
+        color: detected
+            ? Colors.green.withOpacity(0.8)
+            : Colors.red.withOpacity(0.8),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         '$label: ${detected ? "Ok" : "Ausente"}',
-        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+        style: const TextStyle(
+            color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
       ),
     );
   }

@@ -264,8 +264,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     SizedBox(height: constraints.maxHeight < 650 ? 42 : 74),
                     Semantics(
                       button: true,
-                      label:
-                          'Abrir reconhecimento assistido para atendimento de energia',
+                      label: 'Abrir tradução automática de Libras',
                       child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
                           elevation: 0,
@@ -278,7 +277,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ),
                         icon: const Icon(Icons.camera_alt_rounded, size: 29),
                         label: const Text(
-                          'Testar reconhecimento',
+                          'Traduzir Libras',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w800,

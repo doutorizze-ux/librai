@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'presentation/screens/home_screen.dart';
-import 'presentation/screens/assisted_translation_screen.dart';
+import 'presentation/screens/translation_screen.dart';
 import 'presentation/screens/libras_access_screen.dart';
 import 'presentation/screens/trainer_screen.dart';
 
@@ -21,7 +21,7 @@ class SinalizaAiApp extends StatelessWidget {
         GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
         GoRoute(
           path: '/translate',
-          builder: (context, state) => const AssistedTranslationScreen(),
+          builder: (context, state) => const TranslationScreen(),
         ),
         GoRoute(
           path: '/trainer',
