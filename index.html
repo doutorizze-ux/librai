@@ -17,6 +17,8 @@
 
   <title>Librai</title>
   <link rel="manifest" href="manifest.json">
+  <link rel="preconnect" href="https://traducao2.vlibras.gov.br" crossorigin>
+  <link rel="preconnect" href="https://dicionario2.vlibras.gov.br" crossorigin>
 
   <!-- CDN scripts do MediaPipe para Visão Computacional -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -439,6 +441,44 @@
         console.warn("MediaPipe não pôde ser carregado na inicialização.", e);
       }
     });
+  </script>
+
+  <!--
+    Prepara o player oficial em segundo plano. A tela de tradução reaproveita
+    este mesmo iframe, mantendo a instância Unity e os sinais já baixados.
+  -->
+  <script>
+    (function prewarmLibraiAvatar() {
+      function createPlayer() {
+        if (document.getElementById('librai-avatar-prewarm')) return;
+        const iframe = document.createElement('iframe');
+        iframe.id = 'librai-avatar-prewarm';
+        iframe.title = 'Preparando avatar Librai';
+        iframe.src = new URL(
+          'vlibras-player/?embedded=1',
+          document.baseURI
+        ).toString();
+        iframe.setAttribute('aria-hidden', 'true');
+        iframe.tabIndex = -1;
+        Object.assign(iframe.style, {
+          position: 'fixed',
+          left: '-10000px',
+          top: '0',
+          width: '1px',
+          height: '1px',
+          border: '0',
+          opacity: '0',
+          pointerEvents: 'none'
+        });
+        document.body.appendChild(iframe);
+      }
+
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(createPlayer, { timeout: 1500 });
+      } else {
+        window.setTimeout(createPlayer, 800);
+      }
+    })();
   </script>
 
   <!-- Script de Boot do Flutter -->
