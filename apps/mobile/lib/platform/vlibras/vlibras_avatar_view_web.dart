@@ -33,18 +33,38 @@ class _VlibrasAvatarViewState extends State<VlibrasAvatarView> {
   void initState() {
     super.initState();
     _viewType = 'librai-vlibras-avatar-${identityHashCode(this)}';
-    _iframe = web.HTMLIFrameElement()
-      ..title = 'Avatar Librai demonstrando ${widget.gloss}'
-      ..style.border = '0'
-      ..style.width = '100%'
-      ..style.height = '100%'
-      ..setAttribute('allowfullscreen', 'true');
-    _loadInitialPlayer();
+    final prewarmed = web.document.querySelector('#librai-avatar-prewarm');
+    if (prewarmed != null) {
+      _iframe = prewarmed as web.HTMLIFrameElement;
+      _iframe.removeAttribute('id');
+      _configureIFrame();
+      Timer.run(_sendPlayerState);
+    } else {
+      _iframe = web.HTMLIFrameElement();
+      _configureIFrame();
+      _loadInitialPlayer();
+    }
     _loadSubscription = _iframe.onLoad.listen((_) => _sendPlayerState());
     ui_web.platformViewRegistry.registerViewFactory(
       _viewType,
       (_) => _iframe,
     );
+  }
+
+  void _configureIFrame() {
+    _iframe
+      ..title = 'Avatar Librai demonstrando ${widget.gloss}'
+      ..removeAttribute('aria-hidden')
+      ..removeAttribute('tabindex')
+      ..style.position = 'static'
+      ..style.left = 'auto'
+      ..style.top = 'auto'
+      ..style.border = '0'
+      ..style.width = '100%'
+      ..style.height = '100%'
+      ..style.opacity = '1'
+      ..style.pointerEvents = 'auto'
+      ..setAttribute('allowfullscreen', 'true');
   }
 
   @override
