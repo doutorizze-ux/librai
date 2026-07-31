@@ -37,7 +37,9 @@ class MockSignInterpreter implements SignInterpreter {
     }
   }
 
-  bool get hasEnoughHandFrames => _structuredSequenceFrames.length >= 20;
+  // O servidor temporal já consegue normalizar sequências a partir de 12
+  // quadros. Esperar 20 atrasava desnecessariamente a primeira tentativa.
+  bool get hasEnoughHandFrames => _structuredSequenceFrames.length >= 12;
 
   Future<PredictionResult> predictBufferedSequence() async {
     if (_loadedModelPath == null) {
@@ -100,12 +102,15 @@ class MockSignInterpreter implements SignInterpreter {
 
     // Verificar se todos os pontos têm as chaves obrigatórias
     for (final point in landmarks) {
-      if (!point.containsKey('x') || !point.containsKey('y') || !point.containsKey('z')) {
+      if (!point.containsKey('x') ||
+          !point.containsKey('y') ||
+          !point.containsKey('z')) {
         throw ArgumentError("Landmarks devem conter chaves x, y, z");
       }
     }
 
-    final bool isTest = _loadedModelPath != null && _loadedModelPath!.contains("test_");
+    final bool isTest =
+        _loadedModelPath != null && _loadedModelPath!.contains("test_");
 
     if (!isTest) {
       _sequenceFrames.add(
@@ -137,17 +142,17 @@ class MockSignInterpreter implements SignInterpreter {
           '/v1/translation/predict-sequence',
           data: {'frames': sampledFrames},
         );
-        
+
         if (response.statusCode == 200) {
           final label = response.data['label'] as String;
           final confidence = (response.data['confidence'] as num).toDouble();
-          
+
           return PredictionResult(
             label: label,
             confidence: confidence,
             isTestFixture: false,
-            modelVersion: response.data['model'] as String? ??
-                "hand_sequence_v1",
+            modelVersion:
+                response.data['model'] as String? ?? "hand_sequence_v1",
           );
         }
       } catch (e) {

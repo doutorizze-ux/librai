@@ -28,8 +28,11 @@ class _TranslationScreenState extends State<TranslationScreen> {
   Timer? _processingTimer;
   final List<String> _spellingBuffer = [];
   Timer? _spellingEndTimer;
+  Timer? _handsReleaseTimer;
   final List<String> _predictionHistory = [];
   int _lastLandmarkRevision = -1;
+  int _sequenceGeneration = 0;
+  bool _handsWereReleased = true;
 
   bool _isTranslating = true;
   String _partialText = "Aguardando sinalização...";
@@ -68,6 +71,13 @@ class _TranslationScreenState extends State<TranslationScreen> {
 
       // Validação de enquadramento
       final framing = VisionValidator.validateFraming(landmarks, faceOk);
+      if (handsOk) {
+        _handsReleaseTimer?.cancel();
+        _handsReleaseTimer = null;
+        _handsWereReleased = false;
+      } else {
+        _scheduleHandsRelease();
+      }
       if (handFrame != null) {
         // A captura não pode parar enquanto uma requisição de reconhecimento
         // está em andamento. O movimento precisa permanecer contínuo.
@@ -90,10 +100,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
       _processFrame(
         landmarks,
         handFrame,
-        faceOk,
         handsOk,
-        bodyOk,
-        framing,
       );
     });
   }
@@ -146,21 +153,23 @@ class _TranslationScreenState extends State<TranslationScreen> {
   Future<void> _processFrame(
     List<Map<String, double>>? landmarks,
     Map<String, dynamic>? handFrame,
-    bool faceOk,
     bool handsOk,
-    bool bodyOk,
-    VisionState framing,
   ) async {
     if (handsOk && landmarks != null && landmarks.isNotEmpty) {
       if (_frameBuffer.isProcessing) return;
       if (handFrame != null && !_interpreter.hasEnoughHandFrames) return;
       _frameBuffer.setProcessing(true);
+      final sequenceGeneration = _sequenceGeneration;
 
       try {
         final prediction = handFrame != null
             ? await _interpreter.predictBufferedSequence()
             : await _interpreter.predict(landmarks);
-        if (!mounted || !_isTranslating) return;
+        if (!mounted ||
+            !_isTranslating ||
+            sequenceGeneration != _sequenceGeneration) {
+          return;
+        }
 
         if (prediction.label != "SINAL_DESCONHECIDO" &&
             prediction.label != "DADOS_INSUFICIENTES" &&
@@ -186,6 +195,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
             // retirar as mãos da câmera entre palavras.
             _interpreter.resetSequence();
             _predictionHistory.clear();
+            _sequenceGeneration++;
 
             if (RecognitionPolicy.isUnsupportedStaticAlphabetPrediction(
               votedLabel,
@@ -258,7 +268,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
                 sessionId: "session_live",
               );
 
-              if (translation.isNotEmpty && translation != _finalText) {
+              if (translation.isNotEmpty) {
                 setState(() {
                   _partialText =
                       "Sinais detectados: ${composition.glosses.join(' + ')}";
@@ -276,12 +286,20 @@ class _TranslationScreenState extends State<TranslationScreen> {
       } finally {
         _frameBuffer.setProcessing(false);
       }
-    } else if (framing == VisionState.waitingPerson) {
+    }
+  }
+
+  void _scheduleHandsRelease() {
+    if (_handsWereReleased || _handsReleaseTimer?.isActive == true) return;
+    _handsReleaseTimer = Timer(const Duration(milliseconds: 250), () {
+      _handsReleaseTimer = null;
+      _handsWereReleased = true;
+      _sequenceGeneration++;
       _predictionHistory.clear();
       _interpreter.resetSequence();
       _phraseComposer.releaseCurrentSign();
 
-      // Se estava no meio de uma soletragem, finaliza imediatamente ao retirar a mão
+      if (!mounted) return;
       if (_spellingBuffer.isNotEmpty) {
         _spellingEndTimer?.cancel();
         final fullWord = _spellingBuffer.join("");
@@ -297,13 +315,14 @@ class _TranslationScreenState extends State<TranslationScreen> {
           _confidence = 0.0;
         });
       }
-    }
+    });
   }
 
   @override
   void dispose() {
     _processingTimer?.cancel();
     _spellingEndTimer?.cancel();
+    _handsReleaseTimer?.cancel();
     _predictionHistory.clear();
     _interpreter.resetSequence();
     _phraseComposer.reset();

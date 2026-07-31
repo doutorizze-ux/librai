@@ -77,6 +77,8 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
   final TtsService _ttsService = TtsService();
   final Stopwatch _inferenceWatch = Stopwatch();
   final List<String> _predictionHistory = [];
+  Timer? _handsReleaseTimer;
+  int _sequenceGeneration = 0;
 
   CameraController? _camera;
   HandLandmarkerPlugin? _landmarker;
@@ -175,6 +177,8 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
     }
 
     if (hands.isNotEmpty && _capturing) {
+      _handsReleaseTimer?.cancel();
+      _handsReleaseTimer = null;
       final orderedHands = [...hands]
         ..sort((a, b) => a.landmarks.first.x.compareTo(b.landmarks.first.x));
       final frame = <String, dynamic>{
@@ -195,10 +199,14 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
       if (_interpreter.hasEnoughHandFrames && !_submitting) {
         unawaited(_recognizeBufferedSequence());
       }
-    } else if (hands.isEmpty) {
-      _predictionHistory.clear();
-      _interpreter.resetSequence();
-      _phraseComposer.releaseCurrentSign();
+    } else if (hands.isEmpty && _handsReleaseTimer?.isActive != true) {
+      _handsReleaseTimer = Timer(const Duration(milliseconds: 250), () {
+        _handsReleaseTimer = null;
+        _sequenceGeneration++;
+        _predictionHistory.clear();
+        _interpreter.resetSequence();
+        _phraseComposer.releaseCurrentSign();
+      });
     }
 
     if (!mounted) return;
@@ -211,9 +219,14 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
   Future<void> _recognizeBufferedSequence() async {
     if (!_capturing || _submitting) return;
     _submitting = true;
+    final sequenceGeneration = _sequenceGeneration;
     try {
       final prediction = await _interpreter.predictBufferedSequence();
-      if (!mounted || !_capturing) return;
+      if (!mounted ||
+          !_capturing ||
+          sequenceGeneration != _sequenceGeneration) {
+        return;
+      }
       if (prediction.label == 'SINAL_DESCONHECIDO' ||
           prediction.label == 'DADOS_INSUFICIENTES' ||
           prediction.confidence < 0.70) {
@@ -231,6 +244,7 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
 
       _interpreter.resetSequence();
       _predictionHistory.clear();
+      _sequenceGeneration++;
       final composition = _phraseComposer.accept(prediction.label);
       if (composition == null) return;
       setState(() {
@@ -268,6 +282,7 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _landmarkSubscription?.cancel();
+    _handsReleaseTimer?.cancel();
     _predictionHistory.clear();
     _interpreter.resetSequence();
     _phraseComposer.reset();
@@ -464,6 +479,7 @@ class _NativeTranslationScreenState extends State<NativeTranslationScreen>
                               });
                               _interpreter.resetSequence();
                               _predictionHistory.clear();
+                              _sequenceGeneration++;
                               _phraseComposer.releaseCurrentSign();
                             },
                             icon: Icon(

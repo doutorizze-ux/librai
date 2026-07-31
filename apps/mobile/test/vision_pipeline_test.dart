@@ -181,6 +181,33 @@ void main() {
       expect(result.label, equals("SINAL_DESCONHECIDO"));
       expect(result.confidence, lessThan(0.75));
     });
+
+    test('Inicia a tentativa temporal após doze quadros úteis', () async {
+      final interpreter = MockSignInterpreter();
+      await interpreter.loadModel('weights.json');
+
+      Map<String, dynamic> frame(int index) => {
+            'timestamp_ms': 1000 + index * 33,
+            'hands': [
+              {
+                'handedness': 'Left',
+                'score': 0.99,
+                'landmarks': [
+                  for (var point = 0; point < 21; point++)
+                    {'x': 0.2, 'y': 0.3, 'z': 0.0},
+                ],
+              },
+            ],
+          };
+
+      for (var index = 0; index < 11; index++) {
+        interpreter.addHandFrame(frame(index));
+      }
+      expect(interpreter.hasEnoughHandFrames, isFalse);
+
+      interpreter.addHandFrame(frame(11));
+      expect(interpreter.hasEnoughHandFrames, isTrue);
+    });
   });
 
   group('Testes do Buffer de Sinais (GlossesBuffer)', () {
