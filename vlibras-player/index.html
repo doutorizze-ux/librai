@@ -83,12 +83,15 @@
         overflow: hidden;
       }
 
-      #unity-canvas {
-        display: block;
+      #gameContainer {
         width: 100%;
         height: 100%;
-        border: 0;
-        outline: 0;
+        background: transparent !important;
+      }
+
+      #gameContainer canvas {
+        width: 100% !important;
+        height: 100% !important;
         background: transparent !important;
       }
 
@@ -262,7 +265,7 @@
       </header>
 
       <section class="stage" aria-label="Avatar sinalizando em Libras">
-        <canvas id="unity-canvas" aria-label="Avatar Librai sinalizando em Libras"></canvas>
+        <div id="gameContainer"></div>
       </section>
 
       <section id="loading" class="loading" aria-live="polite">
@@ -300,13 +303,14 @@
       <div id="errorMessage" class="error" role="alert" hidden></div>
     </main>
 
-    <script src="Build/vlibras-player-build-minimal.loader.js"></script>
+    <script src="Build/UnityLoader.js"></script>
     <script>
       (() => {
         const DICTIONARY_URL =
           "https://dicionario2.vlibras.gov.br/2018.3.1/WEBGL/";
         const PLAYER_MANAGER = "PlayerManager";
-        const AVAILABLE_AVATARS = new Set(["librai"]);
+        const AVATAR = "Avatar";
+        const AVAILABLE_AVATARS = new Set(["hozana", "icaro"]);
         const params = new URLSearchParams(window.location.search);
         if (params.get("embedded") === "1") {
           document.body.classList.add("embedded");
@@ -314,6 +318,8 @@
         let gloss = (params.get("glosa") || "")
           .trim()
           .toLocaleUpperCase("pt-BR");
+        // Hozana is the stable default signer. Icaro remains available only
+        // when explicitly requested by the application.
         let selectedAvatar = normalizeAvatar(params.get("avatar"));
         const loading = document.getElementById("loading");
         const loadingLabel = document.getElementById("loadingLabel");
@@ -347,11 +353,24 @@
           const avatar = String(value || "")
             .trim()
             .toLocaleLowerCase("pt-BR");
-          return AVAILABLE_AVATARS.has(avatar) ? avatar : "librai";
+          return AVAILABLE_AVATARS.has(avatar) ? avatar : "hozana";
         }
 
         function applyLibraiIdentity() {
-          send(PLAYER_MANAGER, "Change", "librai");
+          send(PLAYER_MANAGER, "Change", selectedAvatar);
+          send(
+            AVATAR,
+            "setEditorCustomization",
+            JSON.stringify({
+              corpo: "#DFB56F",
+              olhos: "#fffafa",
+              cabelo: "#2F2F2F",
+              camisa: "#8E24AA",
+              calca: "#2F2F2F",
+              iris: "#614927",
+              pos: "center",
+            }),
+          );
         }
 
         function selectAvatar(value) {
@@ -402,10 +421,6 @@
         });
 
         window.onLoadPlayer = () => {
-          if (!gameInstance) {
-            window.setTimeout(window.onLoadPlayer, 100);
-            return;
-          }
           send(PLAYER_MANAGER, "initRandomAnimationsProcess");
           send(PLAYER_MANAGER, "setURL", "");
           send(PLAYER_MANAGER, "setBaseUrl", DICTIONARY_URL);
@@ -424,9 +439,6 @@
         };
 
         window.onPlayingStateChange = () => {};
-        window.onLibraiPlayerError = (message) => {
-          showError(message || "Não foi possível demonstrar este sinal.");
-        };
         window.CounterGloss = () => {};
         window.GetAvatar = () => {};
         window.FinishWelcome = () => {};
@@ -445,46 +457,32 @@
           console.error(event.error || event.message);
         });
 
-        const canvas = document.getElementById("unity-canvas");
-        const buildUrl = "Build";
-        const config = {
-          dataUrl: `${buildUrl}/vlibras-player-build-minimal.data.unityweb`,
-          frameworkUrl: `${buildUrl}/vlibras-player-build-minimal.framework.js.unityweb`,
-          codeUrl: `${buildUrl}/vlibras-player-build-minimal.wasm.unityweb`,
-          streamingAssetsUrl: "StreamingAssets",
-          companyName: "Librai",
-          productName: "Avatar Librai",
-          productVersion: "1.0",
-          matchWebGLToCanvasSize: true,
-          devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
-          showBanner: (message, type) => {
-            if (type === "error") showError(message);
-            else console.warn(message);
-          },
-        };
-
-        createUnityInstance(canvas, config, (progress) => {
-          const percent = Math.round(progress * 100);
-          progressBar.style.width = `${percent}%`;
-          progressTrack.setAttribute("aria-valuenow", String(percent));
-          loadingLabel.textContent =
-            percent < 100
-              ? `Preparando o avatar… ${percent}%`
-              : "Finalizando…";
-        })
-          .then((instance) => {
-            gameInstance = instance;
-            window.libraiAvatar = {
-              play,
-              setGloss,
-              select: selectAvatar,
-              customize: applyLibraiIdentity,
-            };
-          })
-          .catch((error) => {
-            console.error(error);
-            showError("O player do avatar não pôde ser iniciado.");
-          });
+        try {
+          gameInstance = UnityLoader.instantiate(
+            "gameContainer",
+            "Build/final.json",
+            {
+              onProgress: (_instance, progress) => {
+                const percent = Math.round(progress * 100);
+                progressBar.style.width = `${percent}%`;
+                progressTrack.setAttribute("aria-valuenow", String(percent));
+                loadingLabel.textContent =
+                  percent < 100
+                    ? `Preparando o avatar… ${percent}%`
+                    : "Finalizando…";
+              },
+            },
+          );
+          window.libraiAvatar = {
+            play,
+            setGloss,
+            select: selectAvatar,
+            customize: applyLibraiIdentity,
+          };
+        } catch (error) {
+          console.error(error);
+          showError("O player do avatar não pôde ser iniciado.");
+        }
       })();
     </script>
   </body>
