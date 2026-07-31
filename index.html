@@ -20,10 +20,6 @@
   <link rel="preconnect" href="https://traducao2.vlibras.gov.br" crossorigin>
   <link rel="preconnect" href="https://dicionario2.vlibras.gov.br" crossorigin>
 
-  <!-- CDN scripts do MediaPipe para Visão Computacional -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-
   <style>
     /* Esconder o elemento de vídeo de processamento de frames original */
     #mediapipe-video-source {
@@ -52,6 +48,7 @@
       handsCount: 0,
       inferenceFps: 0,
       inferenceLatencyMs: 0,
+      inferenceDelegate: 'initializing',
       handScreenRatio: 0,
       isActive: false,
 
@@ -64,9 +61,15 @@
         let currentHandFrame = null;
         let activeStream = null;
         let animationFrameId = null;
+        let videoFrameCallbackId = null;
         let lastFrameStartedAt = 0;
         let lastResultAt = 0;
         let smoothedFrameInterval = 0;
+        let handWorker = null;
+        let workerReadyPromise = null;
+        let frameInFlight = false;
+        let cameraSessionId = 0;
+        let lastSubmittedTimestamp = 0;
         const motionTrails = [[], []];
 
         const updateLatestLandmarks = () => {
@@ -76,18 +79,70 @@
           self.latestHandFrame = currentHandFrame;
         };
 
-        // Inicializar Hands
-        const hands = new Hands({
-          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-        });
-        hands.setOptions({
-          maxNumHands: 2,
-          // Mantém o modelo completo: a sincronização do quadro e a ausência
-          // de fila cuidam da fluidez sem trocar precisão por velocidade.
-          modelComplexity: 1,
-          minDetectionConfidence: 0.55,
-          minTrackingConfidence: 0.55
-        });
+        const ensureWorker = () => {
+          if (workerReadyPromise) return workerReadyPromise;
+
+          workerReadyPromise = new Promise((resolve, reject) => {
+            const workerUrl = new URL(
+              'mediapipe-hand-worker.js',
+              document.baseURI
+            );
+            handWorker = new Worker(workerUrl);
+
+            handWorker.onerror = (event) => {
+              handWorker?.terminate();
+              handWorker = null;
+              workerReadyPromise = null;
+              reject(new Error(event.message || 'Falha no worker do MediaPipe.'));
+            };
+
+            handWorker.onmessage = async (event) => {
+              const message = event.data || {};
+              if (message.type === 'warmup-request') {
+                try {
+                  self.inferenceDelegate = message.delegate || 'CPU';
+                  const warmupCanvas = document.createElement('canvas');
+                  warmupCanvas.width = 224;
+                  warmupCanvas.height = 224;
+                  const warmupContext = warmupCanvas.getContext('2d');
+                  warmupContext.fillStyle = '#777';
+                  warmupContext.fillRect(0, 0, 224, 224);
+                  const bitmap = await createImageBitmap(warmupCanvas);
+                  handWorker.postMessage({ type: 'warmup', bitmap }, [bitmap]);
+                } catch (error) {
+                  handWorker?.terminate();
+                  handWorker = null;
+                  workerReadyPromise = null;
+                  reject(error);
+                }
+                return;
+              }
+              if (message.type === 'ready') {
+                self.inferenceDelegate = message.delegate || 'CPU';
+                resolve();
+                return;
+              }
+              if (message.type === 'init-error') {
+                handWorker?.terminate();
+                handWorker = null;
+                workerReadyPromise = null;
+                reject(new Error(message.message || 'Falha ao iniciar MediaPipe.'));
+                return;
+              }
+              handleWorkerResult(message);
+            };
+
+            handWorker.postMessage({
+              type: 'init',
+              wasmRoot:
+                'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm',
+              modelAssetPath:
+                'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'
+            });
+          });
+
+          return workerReadyPromise;
+        };
 
         const syncCanvasSize = (canvas) => {
           const width = Math.max(1, Math.round(canvas.clientWidth || 640));
@@ -238,28 +293,17 @@
           motionTrails.forEach(trail => trail.length = 0);
         };
 
-        hands.onResults((results) => {
-          const resultAt = performance.now();
-          self.inferenceLatencyMs = lastFrameStartedAt > 0
-            ? Math.round(resultAt - lastFrameStartedAt)
-            : 0;
-          if (lastResultAt > 0) {
-            const interval = resultAt - lastResultAt;
-            smoothedFrameInterval = smoothedFrameInterval === 0
-              ? interval
-              : smoothedFrameInterval * 0.8 + interval * 0.2;
-            self.inferenceFps = smoothedFrameInterval > 0
-              ? Math.round((1000 / smoothedFrameInterval) * 10) / 10
-              : 0;
-          }
-          lastResultAt = resultAt;
-
+        const processResults = (
+          results,
+          resultAt,
+          capturedTimestampMs
+        ) => {
           if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
             self.handsDetected = true;
             self.handsCount = results.multiHandLandmarks.length;
             currentHands = results.multiHandLandmarks.flat();
             currentHandFrame = {
-              timestampMs: Math.round(performance.timeOrigin + resultAt),
+              timestampMs: capturedTimestampMs,
               hands: results.multiHandLandmarks.map((landmarks, index) => {
                 const classification =
                   results.multiHandedness?.[index]?.[0] || {};
@@ -304,27 +348,92 @@
           updateLatestLandmarks();
           // Permite ao Flutter consumir cada resultado apenas uma vez.
           self.landmarkRevision++;
-        });
+        };
 
-        // Loop de processamento de frames nativo
-        async function processFrameLoop() {
-          if (!self.isActive) return;
-
-          const now = performance.now();
-          // Não cria fila de inferência: no máximo um quadro novo a cada 33 ms.
-          if (videoElement &&
-              videoElement.readyState === 4 &&
-              now - lastFrameStartedAt >= 33) {
-            try {
-              lastFrameStartedAt = now;
-              await hands.send({ image: videoElement });
-            } catch (e) {
-              console.warn("Erro ao processar frame:", e);
-            }
+        const handleWorkerResult = (message) => {
+          if (message.type !== 'result' && message.type !== 'frame-error') {
+            return;
           }
-          
-          if (self.isActive) {
+          if (message.sessionId !== cameraSessionId) return;
+
+          frameInFlight = false;
+          if (message.type === 'frame-error') {
+            console.warn('Erro ao processar quadro no worker:', message.message);
+            return;
+          }
+
+          const resultAt = performance.now();
+          self.inferenceLatencyMs = lastFrameStartedAt > 0
+            ? Math.round(resultAt - lastFrameStartedAt)
+            : Number(message.inferenceLatencyMs || 0);
+          if (lastResultAt > 0) {
+            const interval = resultAt - lastResultAt;
+            smoothedFrameInterval = smoothedFrameInterval === 0
+              ? interval
+              : smoothedFrameInterval * 0.8 + interval * 0.2;
+            self.inferenceFps = smoothedFrameInterval > 0
+              ? Math.round((1000 / smoothedFrameInterval) * 10) / 10
+              : 0;
+          }
+          lastResultAt = resultAt;
+
+          processResults(
+            {
+              image: videoElement,
+              multiHandLandmarks: message.landmarks || [],
+              multiHandedness: message.handedness || []
+            },
+            resultAt,
+            Math.round(performance.timeOrigin + Number(message.timestampMs || 0))
+          );
+        };
+
+        const scheduleNextFrame = () => {
+          if (!self.isActive || !videoElement) return;
+          if (typeof videoElement.requestVideoFrameCallback === 'function') {
+            videoFrameCallbackId =
+              videoElement.requestVideoFrameCallback(processFrameLoop);
+          } else {
             animationFrameId = requestAnimationFrame(processFrameLoop);
+          }
+        };
+
+        // A captura continua na UI, mas toda inferência síncrona ocorre no
+        // worker. Se ele ainda estiver ocupado, o quadro novo é descartado em
+        // vez de entrar em uma fila que aumentaria o atraso dos movimentos.
+        async function processFrameLoop(now) {
+          if (!self.isActive) return;
+          scheduleNextFrame();
+
+          if (!videoElement ||
+              videoElement.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+              frameInFlight ||
+              !handWorker) {
+            return;
+          }
+
+          const sessionId = cameraSessionId;
+          frameInFlight = true;
+          lastFrameStartedAt = performance.now();
+          const timestampMs = Math.max(
+            lastSubmittedTimestamp + 1,
+            Math.round(Number(now || lastFrameStartedAt))
+          );
+          lastSubmittedTimestamp = timestampMs;
+
+          try {
+            const bitmap = await createImageBitmap(videoElement);
+            if (!self.isActive || sessionId !== cameraSessionId) {
+              bitmap.close();
+              return;
+            }
+            handWorker.postMessage(
+              { type: 'frame', bitmap, timestampMs, sessionId },
+              [bitmap]
+            );
+          } catch (error) {
+            if (sessionId === cameraSessionId) frameInFlight = false;
+            console.warn('Erro ao transferir quadro para o worker:', error);
           }
         }
 
@@ -344,14 +453,25 @@
         self.start = async function() {
           if (self.isActive) return;
           self.isActive = true;
+          cameraSessionId++;
+          frameInFlight = false;
+          lastSubmittedTimestamp = 0;
 
           try {
+            if (typeof createImageBitmap !== 'function') {
+              throw new Error(
+                'Este navegador não oferece transferência de vídeo para Web Worker.'
+              );
+            }
+
             // Garantir que o elemento de vídeo esteja no body
             if (videoElement && !document.body.contains(videoElement)) {
               document.body.appendChild(videoElement);
             }
 
-            // Solicitar fluxo de câmera de forma estável usando WebRTC nativo
+            // Inicializa modelo e câmera em paralelo. A prévia aparece assim
+            // que o WebRTC abre; o aquecimento da IA termina em segundo plano.
+            const workerPromise = ensureWorker();
             const stream = await navigator.mediaDevices.getUserMedia({
               video: {
                 facingMode: { ideal: "user" },
@@ -370,15 +490,27 @@
               await videoElement.play().catch(e => console.warn("Erro no play inicial:", e));
             }
 
+            await workerPromise;
             // Iniciar loop de frames
-            processFrameLoop();
+            scheduleNextFrame();
           } catch (err) {
             console.error("Erro ao acessar câmera física:", err);
+            self.isActive = false;
+            if (activeStream) {
+              activeStream.getTracks().forEach(track => track.stop());
+              activeStream = null;
+            }
+            if (videoElement) {
+              videoElement.srcObject = null;
+              videoElement.style.display = 'none';
+            }
           }
         };
 
         self.stop = function() {
           self.isActive = false;
+          cameraSessionId++;
+          frameInFlight = false;
           self.handsDetected = false;
           self.handsCount = 0;
           self.trackingQuality = 'waiting';
@@ -396,6 +528,12 @@
           if (animationFrameId) {
             cancelAnimationFrame(animationFrameId);
             animationFrameId = null;
+          }
+          if (videoFrameCallbackId !== null &&
+              videoElement &&
+              typeof videoElement.cancelVideoFrameCallback === 'function') {
+            videoElement.cancelVideoFrameCallback(videoFrameCallbackId);
+            videoFrameCallbackId = null;
           }
 
           // Fechar hardware da câmera completamente
@@ -421,6 +559,12 @@
             }
           }
         };
+
+        // Deixa o modelo pronto antes de o usuário abrir o tradutor. Todo o
+        // carregamento e a compilação WASM acontecem fora da thread da UI.
+        ensureWorker().catch((error) => {
+          console.warn('Pré-inicialização do MediaPipe adiada:', error);
+        });
       }
     };
 
