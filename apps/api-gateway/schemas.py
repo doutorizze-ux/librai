@@ -135,7 +135,7 @@ class TrainerLoginRequest(BaseModel):
 class TrainerTokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    expires_in_seconds: int = 28800
+    expires_in_seconds: int = 604800
 
 
 class TrainingLandmark(BaseModel):
@@ -242,6 +242,59 @@ class TrainingBatchCreateV2(BaseModel):
     sign_name: str = Field(min_length=1, max_length=64)
     format_version: int = Field(default=2, ge=2, le=2)
     repetitions: List[TrainingRepetitionV2] = Field(min_length=5, max_length=5)
+
+
+class TrainingCaptureContextV3(BaseModel):
+    platform: str = Field(
+        pattern="^(android|ios|web|windows|macos|linux|other)$"
+    )
+    camera_facing: str = Field(
+        pattern="^(front|back|external|unknown)$"
+    )
+    app_version: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=32,
+    )
+
+
+class TrainingRepetitionV3(BaseModel):
+    frames: List[TrainingFrame] = Field(min_length=24, max_length=180)
+
+    @field_validator("frames")
+    @classmethod
+    def validate_timestamps(cls, value):
+        timestamps = [frame.timestamp_ms for frame in value]
+        if (
+            timestamps != sorted(timestamps)
+            or len(timestamps) != len(set(timestamps))
+        ):
+            raise ValueError(
+                "timestamps dos quadros devem ser únicos e crescentes"
+            )
+        return value
+
+
+class TrainingBatchCreateV3(BaseModel):
+    sign_name: str = Field(
+        min_length=1,
+        max_length=40,
+        pattern=(
+            r"^[A-Za-zÀ-ÖØ-öø-ÿ0-9]+"
+            r"(?:[-'][A-Za-zÀ-ÖØ-öø-ÿ0-9]+)*$"
+        ),
+    )
+    format_version: int = Field(default=3, ge=3, le=3)
+    capture_context: TrainingCaptureContextV3
+    repetitions: List[TrainingRepetitionV3] = Field(
+        min_length=5,
+        max_length=5,
+    )
+
+    @field_validator("sign_name")
+    @classmethod
+    def normalize_isolated_sign_name(cls, value: str) -> str:
+        return value.strip().upper()
 
 
 class TrainingSampleResponse(BaseModel):

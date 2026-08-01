@@ -8,6 +8,7 @@ class MockSignInterpreter implements SignInterpreter {
   final double confidenceThreshold = 0.75;
   final List<List<Map<String, double>>> _sequenceFrames = [];
   final List<Map<String, dynamic>> _structuredSequenceFrames = [];
+  int _structuredFramesSincePrediction = 0;
 
   final Dio _dio = Dio(BaseOptions(
     baseUrl: AppConfig.apiUrl,
@@ -26,20 +27,24 @@ class MockSignInterpreter implements SignInterpreter {
   void resetSequence() {
     _sequenceFrames.clear();
     _structuredSequenceFrames.clear();
+    _structuredFramesSincePrediction = 0;
   }
 
   void addHandFrame(Map<String, dynamic> frame) {
     final hands = frame['hands'];
     if (hands is! List || hands.isEmpty) return;
     _structuredSequenceFrames.add(Map<String, dynamic>.from(frame));
+    _structuredFramesSincePrediction++;
     if (_structuredSequenceFrames.length > 64) {
       _structuredSequenceFrames.removeAt(0);
     }
   }
 
-  // O servidor temporal já consegue normalizar sequências a partir de 12
-  // quadros. Esperar 20 atrasava desnecessariamente a primeira tentativa.
-  bool get hasEnoughHandFrames => _structuredSequenceFrames.length >= 12;
+  // Menos de 24 quadros representa apenas o início de muitos sinais e pode
+  // coincidir com outro gesto. Depois disso, analisamos a cada seis quadros.
+  bool get hasEnoughHandFrames =>
+      _structuredSequenceFrames.length >= 24 &&
+      _structuredFramesSincePrediction >= 6;
 
   Future<PredictionResult> predictBufferedSequence() async {
     if (_loadedModelPath == null) {
@@ -56,6 +61,7 @@ class MockSignInterpreter implements SignInterpreter {
     final snapshot = _structuredSequenceFrames
         .map((frame) => Map<String, dynamic>.from(frame))
         .toList(growable: false);
+    _structuredFramesSincePrediction = 0;
     try {
       final response = await _dio.post(
         '/v1/translation/predict-sequence-v2',

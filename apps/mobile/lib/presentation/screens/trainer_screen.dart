@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
 import '../../platform/mediapipe_interop.dart';
 import '../../platform/tts_service.dart';
+import '../../platform/client_platform.dart';
 import '../../domain/sign_phrase_composer.dart';
+import '../../domain/isolated_sign_label.dart';
+import '../../data/quality_training_batch_payload.dart';
 import '../../data/trainer_session_store.dart';
 
 class TrainerScreen extends StatefulWidget {
@@ -20,7 +22,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
   final TtsService _ttsService = TtsService();
   final TrainerSessionStore _sessionStore = TrainerSessionStore();
   final Dio _dio = Dio(BaseOptions(
-    baseUrl: const String.fromEnvironment('API_URL', defaultValue: 'https://api.tvcatolica.site'),
+    baseUrl: const String.fromEnvironment('API_URL',
+        defaultValue: 'https://api.tvcatolica.site'),
     connectTimeout: const Duration(seconds: 5),
     receiveTimeout: const Duration(seconds: 5),
   ));
@@ -50,7 +53,6 @@ class _TrainerScreenState extends State<TrainerScreen> {
   String? _trainerName;
   bool _trainerServicesStarted = false;
   int _validCapturedFrames = 0;
-  int _attemptedCapturedFrames = 0;
   int _lastCapturedRevision = -1;
   String _trackingQuality = 'waiting';
   int _handsCount = 0;
@@ -73,7 +75,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
     // visualização criada sem factory como uma superfície preta.
     _visionService.registerVideoView();
     _signNameController.addListener(_onSignNameChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreTrainerAccess());
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _restoreTrainerAccess());
   }
 
   Future<void> _restoreTrainerAccess() async {
@@ -176,7 +179,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
                   if (_trainerToken == null) throw StateError('Token ausente');
                   final expiresInSeconds =
                       (response.data['expires_in_seconds'] as num?)?.toInt() ??
-                          28800;
+                          604800;
                   await _sessionStore.save(
                     TrainerSession(
                       token: _trainerToken!,
@@ -191,8 +194,9 @@ class _TrainerScreenState extends State<TrainerScreen> {
                   }
                 } on DioException catch (error) {
                   setDialogState(() {
-                    errorMessage = error.response?.data?['detail']?.toString() ??
-                        'Não foi possível autenticar.';
+                    errorMessage =
+                        error.response?.data?['detail']?.toString() ??
+                            'Não foi possível autenticar.';
                   });
                 }
               },
@@ -207,7 +211,10 @@ class _TrainerScreenState extends State<TrainerScreen> {
     codeController.dispose();
     if (!mounted) return;
     if (authenticated != true) {
-      context.pop();
+      setState(() {
+        _statusMessage =
+            'Entre como professor para começar ou use a seta para voltar.';
+      });
       return;
     }
     _startTrainerServices();
@@ -320,15 +327,28 @@ class _TrainerScreenState extends State<TrainerScreen> {
   }
 
   // Iniciar fluxo de gravação com contagem regressiva
-  void _startRecordingFlow() {
+  Future<void> _startRecordingFlow() async {
+    if (_trainerToken == null) {
+      await _requestTrainerAccess();
+      if (_trainerToken == null) return;
+    }
     final signName = _signNameController.text.trim().toUpperCase();
     if (signName.isEmpty) {
-      _showSnackBar("Por favor, digite o nome do sinal (ex: OBRIGADO)", Colors.redAccent);
+      _showSnackBar(
+          "Por favor, digite o nome do sinal (ex: OBRIGADO)", Colors.redAccent);
       return;
     }
 
-    final requiredSigns =
-        SignPhraseComposer.trainingComponentsFor(signName);
+    if (!IsolatedSignLabel.isValid(signName)) {
+      _showSnackBar(
+        "Grave somente uma palavra por vez, sem espaços ou pontuação. "
+        "Exemplo: BOM e depois DIA.",
+        Colors.orange,
+      );
+      return;
+    }
+
+    final requiredSigns = SignPhraseComposer.trainingComponentsFor(signName);
     if (requiredSigns != null) {
       _showSnackBar(
         "Grave separadamente: ${requiredSigns.join(' e ')}. "
@@ -384,7 +404,6 @@ class _TrainerScreenState extends State<TrainerScreen> {
       _recordedLandmarks.clear();
       _recordedHandFrames.clear();
       _validCapturedFrames = 0;
-      _attemptedCapturedFrames = 0;
       _lastCapturedRevision = _visionService.getLandmarkRevision();
       _statusMessage = "Gravando sinal: $signName";
     });
@@ -396,7 +415,6 @@ class _TrainerScreenState extends State<TrainerScreen> {
         return;
       }
 
-      _attemptedCapturedFrames++;
       final revision = _visionService.getLandmarkRevision();
       if (revision == _lastCapturedRevision) {
         frameCount++;
@@ -437,14 +455,14 @@ class _TrainerScreenState extends State<TrainerScreen> {
       _statusMessage = "Validando repetição...";
     });
 
-    if (_validCapturedFrames < 10) {
+    if (_validCapturedFrames < 24) {
       setState(() {
         _statusMessage =
             "Captura insuficiente: mantenha a mão visível durante a gravação.";
       });
       _showSnackBar(
         "Gravação recusada: somente $_validCapturedFrames quadro(s) útil(eis). "
-        "São necessários pelo menos 10.",
+        "São necessários pelo menos 24.",
         Colors.redAccent,
       );
       return;
@@ -470,8 +488,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
     final completed = _pendingRepetitions.length;
     if (completed < _requiredRepetitions) {
       setState(() {
-        _statusMessage =
-            "Repetição $completed/$_requiredRepetitions válida. "
+        _statusMessage = "Repetição $completed/$_requiredRepetitions válida. "
             "Repita ${SignPhraseComposer.displayLabel(signName)}.";
       });
       _ttsService.speak(
@@ -491,24 +508,21 @@ class _TrainerScreenState extends State<TrainerScreen> {
 
     try {
       final response = await _dio.post(
-        '/v1/training/batches-v2',
+        '/v1/training/batches-v3',
         options: _authorizedOptions,
-        data: {
-          'sign_name': signName,
-          'format_version': 2,
-          'repetitions': _pendingRepetitions
-              .map((frames) => {'frames': frames})
-              .toList(growable: false),
-        },
+        data: QualityTrainingBatchPayload.build(
+          signName: signName,
+          repetitions: _pendingRepetitions,
+          platform: currentClientPlatform(),
+        ),
       );
 
       if (response.statusCode == 201) {
         setState(() {
           _statusMessage =
               "Sinal '${SignPhraseComposer.displayLabel(signName)}' concluído "
-              "com 5 repetições.";
-          _signNameController.clear();
-          _existingSamplesCount = 0;
+              "com mais 5 repetições. Você pode gravar outro lote agora.";
+          _existingSamplesCount += _requiredRepetitions;
           _isLoadingCount = false;
           _pendingRepetitions.clear();
           _activeTrainingSign = null;
@@ -523,15 +537,25 @@ class _TrainerScreenState extends State<TrainerScreen> {
       }
     } on DioException catch (error) {
       debugPrint("Erro ao enviar dados de treino: $error");
+      final sessionExpired = error.response?.statusCode == 401;
       setState(() {
         if (_pendingRepetitions.length == _requiredRepetitions) {
           _pendingRepetitions.removeLast();
         }
-        _statusMessage = error.response?.data?['detail']?.toString() ??
-            "Falha ao enviar. As 4 primeiras repetições foram mantidas; "
-                "grave a quinta novamente.";
+        _statusMessage = sessionExpired
+            ? 'Sua sessão expirou. Entre novamente; as 4 primeiras '
+                'repetições continuam nesta tela.'
+            : error.response?.data?['detail']?.toString() ??
+                "Falha ao enviar. As 4 primeiras repetições foram mantidas; "
+                    "grave a quinta novamente.";
       });
       _showSnackBar(_statusMessage, Colors.redAccent);
+      if (sessionExpired) {
+        await _sessionStore.clear();
+        _trainerToken = null;
+        _trainerName = null;
+        if (mounted) await _requestTrainerAccess();
+      }
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
@@ -744,7 +768,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
                                 } on DioException catch (error) {
                                   if (!mounted) return;
                                   _showSnackBar(
-                                    error.response?.data?['detail']?.toString() ??
+                                    error.response?.data?['detail']
+                                            ?.toString() ??
                                         'Não foi possível excluir a captura.',
                                     Colors.redAccent,
                                   );
@@ -786,7 +811,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
   void _showSnackBar(String message, Color bgColor) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message, style: const TextStyle(fontWeight: FontWeight.bold)),
+        content:
+            Text(message, style: const TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: bgColor,
         behavior: SnackBarBehavior.floating,
       ),
@@ -820,493 +846,538 @@ class _TrainerScreenState extends State<TrainerScreen> {
                       height: (MediaQuery.sizeOf(context).height * 0.68)
                           .clamp(460.0, 720.0),
                       child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.black,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: _isRecording 
-                          ? Colors.redAccent 
-                          : (_handsDetected ? Colors.green : Colors.grey.shade800),
-                      width: 3,
-                    ),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      if (kIsWeb)
-                        const Positioned.fill(
-                          child: HtmlElementView(
-                            viewType: 'mediapipe-video-view',
+                        decoration: BoxDecoration(
+                          color: Colors.black,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: _isRecording
+                                ? Colors.redAccent
+                                : (_handsDetected
+                                    ? Colors.green
+                                    : Colors.grey.shade800),
+                            width: 3,
                           ),
-                        )
-                      else
-                        const Center(child: Text("Câmera disponível no Web", style: TextStyle(color: Colors.white))),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            if (kIsWeb)
+                              const Positioned.fill(
+                                child: HtmlElementView(
+                                  viewType: 'mediapipe-video-view',
+                                ),
+                              )
+                            else
+                              const Center(
+                                  child: Text("Câmera disponível no Web",
+                                      style: TextStyle(color: Colors.white))),
 
-                      Positioned(
-                        top: 16,
-                        left: 16,
-                        child: Semantics(
-                          liveRegion: true,
-                          label: _trackingQuality == 'good'
-                              ? 'Captura válida. $_handsCount mão detectada.'
-                              : _trackingQuality == 'edge'
-                                  ? 'Mão próxima da borda. Centralize as mãos.'
-                                  : _trackingQuality == 'far'
-                                      ? 'Mãos distantes. Aproxime-se da câmera.'
-                                  : 'Aguardando detecção das mãos.',
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 9,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.72),
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                color: _trackingQuality == 'good'
-                                    ? const Color(0xFF00FFD1)
+                            Positioned(
+                              top: 16,
+                              left: 16,
+                              child: Semantics(
+                                liveRegion: true,
+                                label: _trackingQuality == 'good'
+                                    ? 'Captura válida. $_handsCount mão detectada.'
                                     : _trackingQuality == 'edge'
-                                        ? const Color(0xFFFFD740)
+                                        ? 'Mão próxima da borda. Centralize as mãos.'
                                         : _trackingQuality == 'far'
-                                            ? const Color(0xFF40C4FF)
-                                        : Colors.white70,
-                                width: 2,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: (_trackingQuality == 'good'
+                                            ? 'Mãos distantes. Aproxime-se da câmera.'
+                                            : 'Aguardando detecção das mãos.',
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 9,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.72),
+                                    borderRadius: BorderRadius.circular(999),
+                                    border: Border.all(
+                                      color: _trackingQuality == 'good'
                                           ? const Color(0xFF00FFD1)
                                           : _trackingQuality == 'edge'
                                               ? const Color(0xFFFFD740)
                                               : _trackingQuality == 'far'
                                                   ? const Color(0xFF40C4FF)
-                                              : Colors.white)
-                                      .withOpacity(0.35),
-                                  blurRadius: 12,
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  _trackingQuality == 'good'
-                                      ? Icons.check_circle
-                                      : _trackingQuality == 'edge'
-                                          ? Icons.warning_amber_rounded
-                                          : _trackingQuality == 'far'
-                                              ? Icons.zoom_in
-                                          : Icons.pan_tool_alt_outlined,
-                                  size: 20,
-                                  color: _trackingQuality == 'good'
-                                      ? const Color(0xFF00FFD1)
-                                      : _trackingQuality == 'edge'
-                                          ? const Color(0xFFFFD740)
-                                          : _trackingQuality == 'far'
-                                              ? const Color(0xFF40C4FF)
-                                          : Colors.white,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  _trackingQuality == 'good'
-                                      ? 'CAPTURA VÁLIDA • $_handsCount MÃO${_handsCount == 1 ? '' : 'S'}'
-                                      : _trackingQuality == 'edge'
-                                          ? 'CENTRALIZE AS MÃOS'
-                                          : _trackingQuality == 'far'
-                                              ? 'APROXIME AS MÃOS'
-                                          : 'MOSTRE AS MÃOS',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 12,
+                                                  : Colors.white70,
+                                      width: 2,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: (_trackingQuality == 'good'
+                                                ? const Color(0xFF00FFD1)
+                                                : _trackingQuality == 'edge'
+                                                    ? const Color(0xFFFFD740)
+                                                    : _trackingQuality == 'far'
+                                                        ? const Color(
+                                                            0xFF40C4FF)
+                                                        : Colors.white)
+                                            .withOpacity(0.35),
+                                        blurRadius: 12,
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        _trackingQuality == 'good'
+                                            ? Icons.check_circle
+                                            : _trackingQuality == 'edge'
+                                                ? Icons.warning_amber_rounded
+                                                : _trackingQuality == 'far'
+                                                    ? Icons.zoom_in
+                                                    : Icons
+                                                        .pan_tool_alt_outlined,
+                                        size: 20,
+                                        color: _trackingQuality == 'good'
+                                            ? const Color(0xFF00FFD1)
+                                            : _trackingQuality == 'edge'
+                                                ? const Color(0xFFFFD740)
+                                                : _trackingQuality == 'far'
+                                                    ? const Color(0xFF40C4FF)
+                                                    : Colors.white,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        _trackingQuality == 'good'
+                                            ? 'CAPTURA VÁLIDA • $_handsCount MÃO${_handsCount == 1 ? '' : 'S'}'
+                                            : _trackingQuality == 'edge'
+                                                ? 'CENTRALIZE AS MÃOS'
+                                                : _trackingQuality == 'far'
+                                                    ? 'APROXIME AS MÃOS'
+                                                    : 'MOSTRE AS MÃOS',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      Positioned(
-                        left: 16,
-                        bottom: 16,
-                        child: Semantics(
-                          label:
-                              'Desempenho da câmera: ${_inferenceFps.toStringAsFixed(1)} '
-                              'quadros por segundo, $_inferenceLatencyMs milissegundos.',
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 7,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.68),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              '${_inferenceFps.toStringAsFixed(1)} FPS'
-                              '  •  $_inferenceLatencyMs ms'
-                              '${_handScreenRatio > 0 ? '  •  Mão $_handScreenRatio%' : ''}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
                               ),
                             ),
-                          ),
+
+                            Positioned(
+                              left: 16,
+                              bottom: 16,
+                              child: Semantics(
+                                label:
+                                    'Desempenho da câmera: ${_inferenceFps.toStringAsFixed(1)} '
+                                    'quadros por segundo, $_inferenceLatencyMs milissegundos.',
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 7,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.68),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    '${_inferenceFps.toStringAsFixed(1)} FPS'
+                                    '  •  $_inferenceLatencyMs ms'
+                                    '${_handScreenRatio > 0 ? '  •  Mão $_handScreenRatio%' : ''}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            // Indicador de Gravação / Contagem
+                            if (_isCountingDown)
+                              CircleAvatar(
+                                radius: 50,
+                                backgroundColor: Colors.black54,
+                                child: Text(
+                                  "$_countdown",
+                                  style: const TextStyle(
+                                      fontSize: 48,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white),
+                                ),
+                              ),
+                            if (_isRecording)
+                              Positioned(
+                                top: 16,
+                                right: 16,
+                                child: Row(
+                                  children: const [
+                                    Icon(Icons.fiber_manual_record,
+                                        color: Colors.redAccent, size: 24),
+                                    SizedBox(width: 8),
+                                    Text("GRAVANDO",
+                                        style: TextStyle(
+                                            color: Colors.redAccent,
+                                            fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              ),
+                          ],
                         ),
-                      ),
-                      
-                      // Indicador de Gravação / Contagem
-                      if (_isCountingDown)
-                        CircleAvatar(
-                          radius: 50,
-                          backgroundColor: Colors.black54,
-                          child: Text(
-                            "$_countdown",
-                            style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.white),
-                          ),
-                        ),
-                      if (_isRecording)
-                        Positioned(
-                          top: 16,
-                          right: 16,
-                          child: Row(
-                            children: const [
-                              Icon(Icons.fiber_manual_record, color: Colors.redAccent, size: 24),
-                              SizedBox(width: 8),
-                              Text("GRAVANDO", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
                       ),
                     ),
                   ),
-              ),
-              const SizedBox(height: 20),
-
-              // Status / Dica de Enquadramento
-              Text(
-                _statusMessage,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: _isRecording ? Colors.redAccent : theme.colorScheme.primary,
                 ),
-              ),
-              const SizedBox(height: 20),
+                const SizedBox(height: 20),
 
-              // Campo de Texto para nomear o Sinal
-              TextField(
-                controller: _signNameController,
-                enabled: !_isRecording &&
-                    !_isUploading &&
-                    !_isCountingDown &&
-                    _activeTrainingSign == null,
-                decoration: InputDecoration(
-                  labelText: 'Nome do sinal (ex.: Obrigado)',
-                  hintText: 'Digite a palavra correspondente',
-                  prefixIcon: const Icon(Icons.label),
-                  helperText: _isLoadingCount
-                      ? 'Verificando banco de dados...'
-                      : (SignPhraseComposer.trainingComponentsFor(
-                                  _signNameController.text) !=
-                              null
-                          ? 'Expressão com dois sinais: grave cada palavra separadamente.'
-                      : (SignPhraseComposer.normalizeLabel(
-                                  _signNameController.text) ==
-                              'BOA'
-                          ? 'BOA usa o mesmo gesto de BOM: treine somente BOM.'
-                      : (_signNameController.text.trim().isNotEmpty
-                          ? (_activeTrainingSign != null
-                              ? 'Sessão em andamento: ${_pendingRepetitions.length}/$_requiredRepetitions repetições. O nome fica travado até concluir.'
-                              : (_existingSamplesCount >= 30
-                              ? 'Meta atingida! $_existingSamplesCount/30 sessões gravadas.'
-                              : 'Sessões gravadas: $_existingSamplesCount/30. Cada professor fará 5 repetições sem redigitar o nome.'))
-                          : 'Digite o nome do sinal para ver o progresso do treino.'))),
-                  helperStyle: TextStyle(
-                    color: _existingSamplesCount >= 30 ? Colors.green : theme.colorScheme.primary,
-                    fontWeight: FontWeight.w500,
+                // Status / Dica de Enquadramento
+                Text(
+                  _statusMessage,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: _isRecording
+                        ? Colors.redAccent
+                        : theme.colorScheme.primary,
                   ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  filled: true,
-                  fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
                 ),
-                textCapitalization: TextCapitalization.sentences,
-              ),
-              const SizedBox(height: 20),
+                const SizedBox(height: 20),
 
-              // Botões de Ação
-              if (_isUploading)
-                const Center(child: CircularProgressIndicator())
-              else
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 60),
-                    backgroundColor: _isRecording ? Colors.redAccent : theme.colorScheme.primary,
-                    foregroundColor: theme.colorScheme.onPrimary,
-                    shape: RoundedRectangleBorder(
+                // Campo de Texto para nomear o Sinal
+                TextField(
+                  controller: _signNameController,
+                  enabled: !_isRecording &&
+                      !_isUploading &&
+                      !_isCountingDown &&
+                      _activeTrainingSign == null,
+                  decoration: InputDecoration(
+                    labelText: 'Nome do sinal (ex.: Obrigado)',
+                    hintText: 'Digite a palavra correspondente',
+                    prefixIcon: const Icon(Icons.label),
+                    helperText: _isLoadingCount
+                        ? 'Verificando banco de dados...'
+                        : (SignPhraseComposer.trainingComponentsFor(
+                                    _signNameController.text) !=
+                                null
+                            ? 'Expressão com dois sinais: grave cada palavra separadamente.'
+                            : (SignPhraseComposer.normalizeLabel(
+                                        _signNameController.text) ==
+                                    'BOA'
+                                ? 'BOA usa o mesmo gesto de BOM: treine somente BOM.'
+                                : (_signNameController.text.trim().isNotEmpty
+                                    ? (_activeTrainingSign != null
+                                        ? 'Sessão em andamento: ${_pendingRepetitions.length}/$_requiredRepetitions repetições. O nome fica travado até concluir.'
+                                        : (_existingSamplesCount >= 30
+                                            ? 'Meta atingida! $_existingSamplesCount/30 sessões gravadas.'
+                                            : 'Sessões gravadas: $_existingSamplesCount/30. Cada professor fará 5 repetições sem redigitar o nome.'))
+                                    : 'Digite o nome do sinal para ver o progresso do treino.'))),
+                    helperStyle: TextStyle(
+                      color: _existingSamplesCount >= 30
+                          ? Colors.green
+                          : theme.colorScheme.primary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
+                    filled: true,
+                    fillColor:
+                        theme.colorScheme.surfaceVariant.withOpacity(0.3),
                   ),
-                  icon: Icon(_isRecording ? Icons.stop : Icons.videocam),
-                  label: Text(
-                    _isRecording
-                        ? "Parar Gravação"
-                        : (_activeTrainingSign == null
-                            ? "Começar 5 repetições"
-                            : "Gravar repetição ${_pendingRepetitions.length + 1}/$_requiredRepetitions"),
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  onPressed: (_isCountingDown || _isUploading)
-                      ? null 
-                      : (_isRecording ? () => setState(() => _isRecording = false) : _startRecordingFlow),
+                  textCapitalization: TextCapitalization.sentences,
                 ),
-              const SizedBox(height: 24),
+                const SizedBox(height: 20),
 
-              // Seção do Painel de Palavras Treinadas
-              Card(
-                elevation: 0,
-                color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  side: BorderSide(color: theme.colorScheme.outline.withOpacity(0.2)),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.style, color: theme.colorScheme.primary),
-                              const SizedBox(width: 8),
-                              const Text(
-                                "Sinais Gravados na IA",
-                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          ),
-                          IconButton(
-                            icon: _isLoadingSummary
-                                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                                : const Icon(Icons.refresh),
-                            onPressed: _fetchSummary,
-                          ),
-                        ],
+                // Botões de Ação
+                if (_isUploading)
+                  const Center(child: CircularProgressIndicator())
+                else
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 60),
+                      backgroundColor: _isRecording
+                          ? Colors.redAccent
+                          : theme.colorScheme.primary,
+                      foregroundColor: theme.colorScheme.onPrimary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      const SizedBox(height: 12),
-                      if (_trainedSignsSummary.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 12.0),
-                          child: Text(
-                            "Nenhum sinal gravado ainda. Digite o nome acima e clique em Começar Captura para registrar o primeiro sinal!",
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                        )
-                      else
-                        ListView.separated(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _trainedSignsSummary.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final item = _trainedSignsSummary[index];
-                            final String name = item['sign_name'] ?? 'SEU_SINAL';
-                            final int count = item['count'] ?? 0;
-                            final bool isComplete = count >= 30;
+                    ),
+                    icon: Icon(_isRecording ? Icons.stop : Icons.videocam),
+                    label: Text(
+                      _isRecording
+                          ? "Parar Gravação"
+                          : (_activeTrainingSign == null
+                              ? (_existingSamplesCount >= _requiredRepetitions
+                                  ? "Gravar mais 5 repetições"
+                                  : "Começar 5 repetições")
+                              : "Gravar repetição ${_pendingRepetitions.length + 1}/$_requiredRepetitions"),
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: (_isCountingDown || _isUploading)
+                        ? null
+                        : (_isRecording
+                            ? () => setState(() => _isRecording = false)
+                            : _startRecordingFlow),
+                  ),
+                const SizedBox(height: 24),
 
-                            return ListTile(
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                              title: Text(
-                                SignPhraseComposer.displayLabel(name),
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                              ),
-                              subtitle: Text(
-                                isComplete
-                                    ? "$count/30 sessões (meta atingida)"
-                                    : "$count/30 sessões",
-                                style: TextStyle(
-                                  color: isComplete ? Colors.green : Colors.orange,
-                                  fontWeight: FontWeight.w500,
+                // Seção do Painel de Palavras Treinadas
+                Card(
+                  elevation: 0,
+                  color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: BorderSide(
+                        color: theme.colorScheme.outline.withOpacity(0.2)),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.style,
+                                    color: theme.colorScheme.primary),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  "Sinais Gravados na IA",
+                                  style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold),
                                 ),
-                              ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: isComplete ? Colors.green.withOpacity(0.15) : Colors.orange.withOpacity(0.15),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      "$count",
-                                      style: TextStyle(
-                                        color: isComplete ? Colors.green : Colors.orange,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Card(
-                elevation: 0,
-                color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  side: BorderSide(
-                    color: theme.colorScheme.outline.withOpacity(0.2),
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.person_pin_outlined,
-                            color: theme.colorScheme.primary,
-                          ),
-                          const SizedBox(width: 8),
-                          const Expanded(
-                            child: Text(
-                              'Minhas sessões',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
+                              ],
                             ),
-                          ),
-                          Semantics(
-                            button: true,
-                            label: 'Atualizar minhas sessões de treinamento',
-                            child: IconButton(
-                              onPressed:
-                                  _isLoadingMySamples ? null : _fetchMySamples,
-                              icon: _isLoadingMySamples
+                            IconButton(
+                              icon: _isLoadingSummary
                                   ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
+                                      width: 18,
+                                      height: 18,
                                       child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
+                                          strokeWidth: 2))
                                   : const Icon(Icons.refresh),
+                              onPressed: _fetchSummary,
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Você pode excluir somente as capturas enviadas '
-                        'pela sua sessão de professor.',
-                        style: TextStyle(
-                          color: theme.colorScheme.onSurfaceVariant,
+                          ],
                         ),
-                      ),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          onPressed: _manageLegacySamples,
-                          icon: const Icon(Icons.history),
-                          label: const Text('Gerenciar todas as capturas'),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (_mySamples.isEmpty && !_isLoadingMySamples)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          child: Text(
-                            'Você ainda não enviou nenhuma sessão nesta conta.',
+                        const SizedBox(height: 12),
+                        if (_trainedSignsSummary.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 12.0),
+                            child: Text(
+                              "Nenhum sinal gravado ainda. Digite o nome acima e clique em Começar Captura para registrar o primeiro sinal!",
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          )
+                        else
+                          ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: _trainedSignsSummary.length,
+                            separatorBuilder: (_, __) =>
+                                const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final item = _trainedSignsSummary[index];
+                              final String name =
+                                  item['sign_name'] ?? 'SEU_SINAL';
+                              final int count = item['count'] ?? 0;
+                              final bool isComplete = count >= 30;
+
+                              return ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 4, vertical: 2),
+                                title: Text(
+                                  SignPhraseComposer.displayLabel(name),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16),
+                                ),
+                                subtitle: Text(
+                                  isComplete
+                                      ? "$count/30 sessões (meta atingida)"
+                                      : "$count/30 sessões",
+                                  style: TextStyle(
+                                    color: isComplete
+                                        ? Colors.green
+                                        : Colors.orange,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isComplete
+                                            ? Colors.green.withOpacity(0.15)
+                                            : Colors.orange.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        "$count",
+                                        style: TextStyle(
+                                          color: isComplete
+                                              ? Colors.green
+                                              : Colors.orange,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
                           ),
-                        )
-                      else
-                        ListView.separated(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _mySamples.length,
-                          separatorBuilder: (_, __) =>
-                              const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final sample = _mySamples[index];
-                            final id = sample['id'] as String;
-                            final name = sample['sign_name'] as String;
-                            final frames = sample['frame_count'] as int;
-                            final deleting = _deletingSampleIds.contains(id);
-                            return ListTile(
-                              minTileHeight: 64,
-                              contentPadding:
-                                  const EdgeInsets.symmetric(horizontal: 4),
-                              title: Text(
-                                SignPhraseComposer.displayLabel(name),
-                                style: const TextStyle(
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Card(
+                  elevation: 0,
+                  color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: BorderSide(
+                      color: theme.colorScheme.outline.withOpacity(0.2),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.person_pin_outlined,
+                              color: theme.colorScheme.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            const Expanded(
+                              child: Text(
+                                'Minhas sessões',
+                                style: TextStyle(
+                                  fontSize: 18,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              subtitle: Text(
-                                '$frames quadros • '
-                                '${_formatCaptureDate(
-                                  sample['created_at'] as String,
-                                )}',
-                              ),
-                              trailing: Semantics(
-                                button: true,
-                                label:
-                                    'Excluir minha sessão de treinamento de '
-                                    '${SignPhraseComposer.displayLabel(name)}',
-                                child: IconButton(
-                                  tooltip: 'Excluir esta sessão',
-                                  onPressed: deleting
-                                      ? null
-                                      : () => _confirmDeleteMySample(sample),
-                                  icon: deleting
-                                      ? const SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                      : Icon(
-                                          Icons.delete_outline,
-                                          color: theme.colorScheme.error,
+                            ),
+                            Semantics(
+                              button: true,
+                              label: 'Atualizar minhas sessões de treinamento',
+                              child: IconButton(
+                                onPressed: _isLoadingMySamples
+                                    ? null
+                                    : _fetchMySamples,
+                                icon: _isLoadingMySamples
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
                                         ),
-                                ),
+                                      )
+                                    : const Icon(Icons.refresh),
                               ),
-                            );
-                          },
+                            ),
+                          ],
                         ),
-                    ],
+                        const SizedBox(height: 4),
+                        Text(
+                          'Você pode excluir somente as capturas enviadas '
+                          'pela sua sessão de professor.',
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: _manageLegacySamples,
+                            icon: const Icon(Icons.history),
+                            label: const Text('Gerenciar todas as capturas'),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        if (_mySamples.isEmpty && !_isLoadingMySamples)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                            child: Text(
+                              'Você ainda não enviou nenhuma sessão nesta conta.',
+                            ),
+                          )
+                        else
+                          ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: _mySamples.length,
+                            separatorBuilder: (_, __) =>
+                                const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final sample = _mySamples[index];
+                              final id = sample['id'] as String;
+                              final name = sample['sign_name'] as String;
+                              final frames = sample['frame_count'] as int;
+                              final deleting = _deletingSampleIds.contains(id);
+                              return ListTile(
+                                minTileHeight: 64,
+                                contentPadding:
+                                    const EdgeInsets.symmetric(horizontal: 4),
+                                title: Text(
+                                  SignPhraseComposer.displayLabel(name),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  '$frames quadros • '
+                                  '${_formatCaptureDate(
+                                    sample['created_at'] as String,
+                                  )}',
+                                ),
+                                trailing: Semantics(
+                                  button: true,
+                                  label:
+                                      'Excluir minha sessão de treinamento de '
+                                      '${SignPhraseComposer.displayLabel(name)}',
+                                  child: IconButton(
+                                    tooltip: 'Excluir esta sessão',
+                                    onPressed: deleting
+                                        ? null
+                                        : () => _confirmDeleteMySample(sample),
+                                    icon: deleting
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : Icon(
+                                            Icons.delete_outline,
+                                            color: theme.colorScheme.error,
+                                          ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }

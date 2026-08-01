@@ -1,4 +1,5 @@
 import hashlib
+import math
 import os
 import secrets
 from datetime import datetime, timedelta
@@ -79,12 +80,12 @@ def authenticate_trainer(request: schemas.TrainerLoginRequest):
             "trainer": request.trainer_name,
             "trainer_code_version": _credential_version(request.access_code),
         },
-        expires_delta=timedelta(hours=8),
+        expires_delta=timedelta(days=7),
     )
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "expires_in_seconds": 28800,
+        "expires_in_seconds": 604800,
     }
 
 
@@ -221,6 +222,228 @@ def create_training_batch_v2(
     return {
         "sign_name": sign_name,
         "repetitions_created": len(created),
+        "samples": created,
+    }
+
+
+def _repetition_fingerprint(
+    frames: list[schemas.TrainingFrame],
+) -> str:
+    coordinates = []
+    for frame in frames:
+        hands = sorted(
+            frame.hands,
+            key=lambda hand: hand.handedness,
+        )
+        coordinates.append(tuple(
+            (
+                hand.handedness,
+                tuple(
+                    (
+                        round(point.x, 5),
+                        round(point.y, 5),
+                        round(point.z, 5),
+                    )
+                    for point in hand.landmarks
+                ),
+            )
+            for hand in hands
+        ))
+    return hashlib.sha256(repr(coordinates).encode("utf-8")).hexdigest()
+
+
+def _repetition_quality(
+    frames: list[schemas.TrainingFrame],
+) -> dict[str, float | int]:
+    timestamps = [frame.timestamp_ms for frame in frames]
+    duration_ms = timestamps[-1] - timestamps[0]
+    if duration_ms < 800 or duration_ms > 5000:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Cada repetição deve durar entre 0,8 e 5 segundos "
+                "com as mãos visíveis."
+            ),
+        )
+    largest_gap_ms = max(
+        later - earlier
+        for earlier, later in zip(timestamps, timestamps[1:])
+    )
+    if largest_gap_ms > 250:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "A captura contém uma interrupção longa no rastreamento "
+                "das mãos."
+            ),
+        )
+
+    scores = []
+    hand_spans = []
+    in_frame_points = 0
+    point_count = 0
+    frame_signatures = set()
+    two_hand_frames = 0
+    motion_total = 0.0
+    motion_comparisons = 0
+    previous_hands = {}
+    tracked_indices = (0, 4, 8, 12, 16, 20)
+
+    for frame in frames:
+        two_hand_frames += int(len(frame.hands) == 2)
+        signature = []
+        current_hands = {}
+        for hand_index, hand in enumerate(frame.hands):
+            scores.append(hand.score)
+            xs = [point.x for point in hand.landmarks]
+            ys = [point.y for point in hand.landmarks]
+            hand_spans.append(max(max(xs) - min(xs), max(ys) - min(ys)))
+            for point in hand.landmarks:
+                point_count += 1
+                in_frame_points += int(
+                    0.0 <= point.x <= 1.0 and 0.0 <= point.y <= 1.0
+                )
+            signature.extend(
+                (
+                    round(point.x, 4),
+                    round(point.y, 4),
+                    round(point.z, 4),
+                )
+                for point in hand.landmarks
+            )
+            slot = (
+                hand.handedness
+                if hand.handedness != "Unknown"
+                else f"Unknown-{hand_index}"
+            )
+            current_hands[slot] = hand.landmarks
+            if slot in previous_hands:
+                previous = previous_hands[slot]
+                for point_index in tracked_indices:
+                    before = previous[point_index]
+                    after = hand.landmarks[point_index]
+                    motion_total += math.sqrt(
+                        (after.x - before.x) ** 2
+                        + (after.y - before.y) ** 2
+                        + (after.z - before.z) ** 2
+                    )
+                    motion_comparisons += 1
+        frame_signatures.add(tuple(signature))
+        previous_hands = current_hands
+
+    mean_score = sum(scores) / len(scores)
+    if mean_score < 0.55:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A confiança média do rastreamento ficou abaixo de 55%.",
+        )
+    in_frame_ratio = in_frame_points / point_count
+    if in_frame_ratio < 0.95:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Mantenha pelo menos 95% dos pontos das mãos dentro da câmera.",
+        )
+    sorted_spans = sorted(hand_spans)
+    median_span = sorted_spans[len(sorted_spans) // 2]
+    if median_span < 0.04:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="As mãos ficaram pequenas demais; aproxime-se da câmera.",
+        )
+    if median_span > 0.75:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="As mãos ficaram próximas demais; afaste-se da câmera.",
+        )
+    distinct_frame_ratio = len(frame_signatures) / len(frames)
+    if distinct_frame_ratio < 0.25:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "A captura repetiu os mesmos quadros; grave novamente "
+                "com a câmera ativa."
+            ),
+        )
+
+    return {
+        "frame_count": len(frames),
+        "duration_ms": duration_ms,
+        "largest_gap_ms": largest_gap_ms,
+        "mean_hand_score": round(mean_score, 6),
+        "in_frame_ratio": round(in_frame_ratio, 6),
+        "median_hand_span": round(median_span, 6),
+        "distinct_frame_ratio": round(distinct_frame_ratio, 6),
+        "two_hand_frame_ratio": round(two_hand_frames / len(frames), 6),
+        "motion_energy": round(
+            motion_total / max(motion_comparisons, 1),
+            6,
+        ),
+    }
+
+
+@router.post("/training/batches-v3", status_code=status.HTTP_201_CREATED)
+def create_training_batch_v3(
+    batch: schemas.TrainingBatchCreateV3,
+    db: Session = Depends(get_db),
+    trainer_name: str = Depends(get_current_trainer),
+):
+    """Coleta isolada com qualidade para o reconhecedor temporal."""
+    sign_name = canonical_visual_label(batch.sign_name)
+    qualities = [
+        _repetition_quality(repetition.frames)
+        for repetition in batch.repetitions
+    ]
+    fingerprints = [
+        _repetition_fingerprint(repetition.frames)
+        for repetition in batch.repetitions
+    ]
+    if len(set(fingerprints)) != len(fingerprints):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "As cinco repetições precisam ser novas; uma captura "
+                "idêntica foi enviada mais de uma vez."
+            ),
+        )
+
+    context = batch.capture_context.model_dump(exclude_none=True)
+    created = []
+    for repetition_number, (repetition, quality) in enumerate(
+        zip(batch.repetitions, qualities),
+        start=1,
+    ):
+        sequence = {
+            "format_version": 3,
+            "capture_context": context,
+            "quality": quality,
+            "frames": [frame.model_dump() for frame in repetition.frames],
+        }
+        db_sample = models.TrainingSample(
+            sign_name=sign_name,
+            landmarks=sequence,
+            trainer_name=trainer_name,
+            frame_count=len(repetition.frames),
+        )
+        db.add(db_sample)
+        db.flush()
+        created.append({
+            "id": db_sample.id,
+            "frame_count": db_sample.frame_count,
+            "repetition": repetition_number,
+            "quality": quality,
+        })
+
+    db.add(models.AuditLog(
+        user_id=trainer_name,
+        action="TRAINING_BATCH_CREATE_V3",
+        target=f"{sign_name}:5_quality_checked_repetitions",
+    ))
+    db.commit()
+    return {
+        "sign_name": sign_name,
+        "format_version": 3,
+        "repetitions_created": len(created),
+        "used_by_current_translator": True,
         "samples": created,
     }
 

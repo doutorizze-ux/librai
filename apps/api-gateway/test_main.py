@@ -85,6 +85,7 @@ def test_administrator_code_can_open_trainer_panel():
     )
 
     assert response.status_code == 200
+    assert response.json()["expires_in_seconds"] == 604800
     token = response.json()["access_token"]
     listed = client.get(
         "/v1/training/my-samples",
@@ -277,6 +278,7 @@ def test_vlibras_reference_composition_reports_unknown_words():
     data = response.json()
     assert data["unresolved"] == ["PALAVRAQUEINEXISTE"]
     assert [sign["label"] for sign in data["signs"]] == ["BOM"]
+
 
 def test_auth_register_and_login():
     # Registrar novo usuário
@@ -659,17 +661,30 @@ def test_temporal_prediction_requires_a_real_sequence():
 
 def test_two_hand_v2_preserves_hands_and_distinguishes_motion():
     headers = trainer_headers()
-    together = structured_hand_frames(left_movement=0.003, right_movement=0.003)
-    right_only = structured_hand_frames(left_movement=0, right_movement=0.008)
+    together = structured_hand_frames(
+        left_movement=0.003,
+        right_movement=0.003,
+        frame_count=32,
+    )
+    right_only = structured_hand_frames(
+        left_movement=0,
+        right_movement=0.008,
+        frame_count=32,
+    )
 
     for label, frames in (("JUNTOS", together), ("DIREITA", right_only)):
-        created = client.post(
-            "/v1/training/samples-v2",
-            json={"sign_name": label, "format_version": 2, "frames": frames},
-            headers=headers,
-        )
-        assert created.status_code == 201, created.text
-        assert created.json()["frame_count"] == 16
+        for _ in range(5):
+            created = client.post(
+                "/v1/training/samples-v2",
+                json={
+                    "sign_name": label,
+                    "format_version": 2,
+                    "frames": frames,
+                },
+                headers=headers,
+            )
+            assert created.status_code == 201, created.text
+            assert created.json()["frame_count"] == 32
 
     prediction = client.post(
         "/v1/translation/predict-sequence-v2",
@@ -679,6 +694,7 @@ def test_two_hand_v2_preserves_hands_and_distinguishes_motion():
     assert prediction.json()["label"] == "DIREITA"
     assert prediction.json()["model"] == "two_hand_sequence_v2"
     assert prediction.json()["confidence"] >= 0.72
+    assert prediction.json()["support"] == 3
 
 
 def test_two_hand_v2_rejects_short_or_unordered_sequence():
@@ -690,6 +706,95 @@ def test_two_hand_v2_rejects_short_or_unordered_sequence():
         headers=headers,
     )
     assert rejected.status_code == 422
+
+
+def test_two_hand_v2_abstains_when_labels_are_too_similar():
+    headers = trainer_headers()
+    first = structured_hand_frames(right_movement=0.006, frame_count=32)
+    second = structured_hand_frames(right_movement=0.008, frame_count=32)
+    halfway = structured_hand_frames(right_movement=0.007, frame_count=32)
+
+    for label, frames in (("OLA", first), ("BEM", second)):
+        for _ in range(5):
+            created = client.post(
+                "/v1/training/samples-v2",
+                json={
+                    "sign_name": label,
+                    "format_version": 2,
+                    "frames": frames,
+                },
+                headers=headers,
+            )
+            assert created.status_code == 201
+
+    prediction = client.post(
+        "/v1/translation/predict-sequence-v2",
+        json={"format_version": 2, "frames": halfway},
+    )
+
+    assert prediction.status_code == 200
+    assert prediction.json()["label"] == "SINAL_AMBIGUO"
+    assert prediction.json()["confidence"] == 0
+
+
+def test_two_hand_v2_ignores_an_isolated_accidental_match():
+    headers = trainer_headers()
+    expected = structured_hand_frames(right_movement=0.006, frame_count=32)
+    accidental = structured_hand_frames(right_movement=0.0061, frame_count=32)
+
+    for _ in range(5):
+        created = client.post(
+            "/v1/training/samples-v2",
+            json={
+                "sign_name": "OLA",
+                "format_version": 2,
+                "frames": expected,
+            },
+            headers=headers,
+        )
+        assert created.status_code == 201
+    created = client.post(
+        "/v1/training/samples-v2",
+        json={
+            "sign_name": "BEM",
+            "format_version": 2,
+            "frames": accidental,
+        },
+        headers=headers,
+    )
+    assert created.status_code == 201
+
+    prediction = client.post(
+        "/v1/translation/predict-sequence-v2",
+        json={"format_version": 2, "frames": expected},
+    )
+
+    assert prediction.status_code == 200
+    assert prediction.json()["label"] == "OLA"
+
+
+def test_two_hand_v2_ignores_old_compound_training_labels():
+    headers = trainer_headers()
+    frames = structured_hand_frames(right_movement=0.006, frame_count=32)
+    for _ in range(5):
+        created = client.post(
+            "/v1/training/samples-v2",
+            json={
+                "sign_name": "TUDO BEM",
+                "format_version": 2,
+                "frames": frames,
+            },
+            headers=headers,
+        )
+        assert created.status_code == 201
+
+    prediction = client.post(
+        "/v1/translation/predict-sequence-v2",
+        json={"format_version": 2, "frames": frames},
+    )
+
+    assert prediction.status_code == 200
+    assert prediction.json()["label"] == "SINAL_DESCONHECIDO"
 
 
 def test_training_batch_requires_and_creates_exactly_five_repetitions():
@@ -720,12 +825,176 @@ def test_training_batch_requires_and_creates_exactly_five_repetitions():
     assert complete.json()["sign_name"] == "OBRIGADO"
     assert complete.json()["repetitions_created"] == 5
 
+    more_training = client.post(
+        "/v1/training/batches-v2",
+        json={
+            "sign_name": "Obrigado",
+            "format_version": 2,
+            "repetitions": [{"frames": frames} for _ in range(5)],
+        },
+        headers=headers,
+    )
+    assert more_training.status_code == 201, more_training.text
+
     with TestingSessionLocal() as db:
         stored = db.query(models.TrainingSample).filter(
             models.TrainingSample.sign_name == "OBRIGADO",
             models.TrainingSample.trainer_name == "Professora Cinco",
         ).all()
+        assert len(stored) == 10
+
+
+def test_quality_training_batch_accepts_only_isolated_checked_repetitions():
+    headers = trainer_headers("Professora Qualidade")
+    repetitions = [
+        {
+            "frames": structured_hand_frames(
+                right_movement=0.001 + repetition * 0.0001,
+                frame_count=32,
+            )
+        }
+        for repetition in range(5)
+    ]
+
+    compound = client.post(
+        "/v1/training/batches-v3",
+        json={
+            "sign_name": "BOM DIA",
+            "format_version": 3,
+            "capture_context": {
+                "platform": "android",
+                "camera_facing": "front",
+            },
+            "repetitions": repetitions,
+        },
+        headers=headers,
+    )
+    assert compound.status_code == 422
+
+    created = client.post(
+        "/v1/training/batches-v3",
+        json={
+            "sign_name": "Obrigado",
+            "format_version": 3,
+            "capture_context": {
+                "platform": "android",
+                "camera_facing": "front",
+                "app_version": "1.0.0",
+            },
+            "repetitions": repetitions,
+        },
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+    payload = created.json()
+    assert payload["sign_name"] == "OBRIGADO"
+    assert payload["format_version"] == 3
+    assert payload["repetitions_created"] == 5
+    assert payload["used_by_current_translator"] is True
+    assert all(
+        sample["quality"]["duration_ms"] == 1023
+        for sample in payload["samples"]
+    )
+
+    with TestingSessionLocal() as db:
+        stored = db.query(models.TrainingSample).filter(
+            models.TrainingSample.sign_name == "OBRIGADO",
+            models.TrainingSample.trainer_name == "Professora Qualidade",
+        ).all()
         assert len(stored) == 5
+        assert all(sample.landmarks["format_version"] == 3 for sample in stored)
+    assert all(
+        sample.landmarks["capture_context"]["platform"] == "android"
+        for sample in stored
+    )
+
+    prediction = client.post(
+        "/v1/translation/predict-sequence-v2",
+        json={
+            "format_version": 2,
+            "frames": repetitions[0]["frames"],
+        },
+    )
+    assert prediction.status_code == 200
+    assert prediction.json()["label"] == "OBRIGADO"
+
+    more_repetitions = [
+        {
+            "frames": structured_hand_frames(
+                right_movement=0.002 + repetition * 0.0001,
+                frame_count=32,
+            )
+        }
+        for repetition in range(5)
+    ]
+    more_training = client.post(
+        "/v1/training/batches-v3",
+        json={
+            "sign_name": "Obrigado",
+            "format_version": 3,
+            "capture_context": {
+                "platform": "android",
+                "camera_facing": "front",
+            },
+            "repetitions": more_repetitions,
+        },
+        headers=headers,
+    )
+    assert more_training.status_code == 201, more_training.text
+
+    with TestingSessionLocal() as db:
+        assert db.query(models.TrainingSample).filter(
+            models.TrainingSample.sign_name == "OBRIGADO",
+            models.TrainingSample.trainer_name == "Professora Qualidade",
+        ).count() == 10
+
+
+def test_quality_training_batch_rejects_replayed_or_short_capture():
+    headers = trainer_headers("Professor Auditoria")
+    repeated_frames = structured_hand_frames(
+        right_movement=0.002,
+        frame_count=32,
+    )
+    request = {
+        "sign_name": "AJUDA",
+        "format_version": 3,
+        "capture_context": {
+            "platform": "web",
+            "camera_facing": "front",
+        },
+        "repetitions": [{"frames": repeated_frames} for _ in range(5)],
+    }
+    replayed = client.post(
+        "/v1/training/batches-v3",
+        json=request,
+        headers=headers,
+    )
+    assert replayed.status_code == 422
+    assert "idêntica" in replayed.json()["detail"]
+
+    short_frames = structured_hand_frames(
+        right_movement=0.002,
+        frame_count=24,
+    )
+    request["repetitions"] = [
+        {
+            "frames": [
+                {
+                    **frame,
+                    "timestamp_ms": 1_000 + index * 20,
+                }
+                for index, frame in enumerate(short_frames)
+            ]
+        }
+        for _ in range(5)
+    ]
+    too_short = client.post(
+        "/v1/training/batches-v3",
+        json=request,
+        headers=headers,
+    )
+    assert too_short.status_code == 422
+    assert "0,8 e 5 segundos" in too_short.json()["detail"]
 
 
 def test_two_hand_v2_finds_sign_inside_continuous_camera_buffer():
@@ -735,12 +1004,17 @@ def test_two_hand_v2_finds_sign_inside_continuous_camera_buffer():
         right_movement=0.006,
         frame_count=28,
     )
-    created = client.post(
-        "/v1/training/samples-v2",
-        json={"sign_name": "MOVIMENTO", "format_version": 2, "frames": trained},
-        headers=headers,
-    )
-    assert created.status_code == 201
+    for _ in range(5):
+        created = client.post(
+            "/v1/training/samples-v2",
+            json={
+                "sign_name": "MOVIMENTO",
+                "format_version": 2,
+                "frames": trained,
+            },
+            headers=headers,
+        )
+        assert created.status_code == 201
 
     neutral = structured_hand_frames(frame_count=20)
     live_sign = structured_hand_frames(

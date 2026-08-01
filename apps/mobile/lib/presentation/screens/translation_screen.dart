@@ -10,6 +10,7 @@ import '../../platform/tts_service.dart';
 import '../../platform/local_translator.dart';
 import '../../domain/sign_phrase_composer.dart';
 import '../../domain/recognition_policy.dart';
+import '../../domain/prediction_consensus.dart';
 
 class TranslationScreen extends StatefulWidget {
   const TranslationScreen({super.key});
@@ -29,7 +30,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
   final List<String> _spellingBuffer = [];
   Timer? _spellingEndTimer;
   Timer? _handsReleaseTimer;
-  final List<String> _predictionHistory = [];
+  final PredictionConsensus _predictionConsensus = PredictionConsensus();
   int _lastLandmarkRevision = -1;
   int _sequenceGeneration = 0;
   bool _handsWereReleased = true;
@@ -171,113 +172,98 @@ class _TranslationScreenState extends State<TranslationScreen> {
           return;
         }
 
-        if (prediction.label != "SINAL_DESCONHECIDO" &&
-            prediction.label != "DADOS_INSUFICIENTES" &&
-            prediction.confidence >= 0.70) {
-          // Histórico rápido de 2 predições para eliminar pequenas cintilações instantaneamente
-          _predictionHistory.add(prediction.label);
-          if (_predictionHistory.length > 2) {
-            _predictionHistory.removeAt(0);
+        final votedLabel = _predictionConsensus.accept(
+          label: prediction.label,
+          confidence: prediction.confidence,
+        );
+        if (votedLabel != null) {
+          // Um sinal confirmado encerra a janela temporal atual. Manter os
+          // quadros anteriores fazia o próximo sinal da frase ser comparado
+          // com uma mistura dos dois movimentos, obrigando o usuário a
+          // retirar as mãos da câmera entre palavras.
+          _interpreter.resetSequence();
+          _predictionConsensus.reset();
+          _sequenceGeneration++;
+
+          if (RecognitionPolicy.isUnsupportedStaticAlphabetPrediction(
+            votedLabel,
+          )) {
+            setState(() {
+              _partialText =
+                  'Sinal com movimento ainda não confirmado pelo modelo temporal';
+              _confidence = 0;
+            });
+            return;
           }
 
-          // Uma correspondência muito forte pode ser aceita imediatamente.
-          // Resultados limítrofes ainda precisam de confirmação consecutiva.
-          final bool isConsistent = prediction.confidence >= 0.86 ||
-              (_predictionHistory.length >= 2 &&
-                  _predictionHistory[0] == _predictionHistory[1]);
+          if (_isSpellingUnit(votedLabel)) {
+            // Evitar duplicar a mesma sílaba se for detectada repetida muito rápido
+            if (_spellingBuffer.isEmpty || _spellingBuffer.last != votedLabel) {
+              // Cancelar timer de finalização anterior apenas ao entrar nova sílaba
+              _spellingEndTimer?.cancel();
 
-          if (isConsistent) {
-            final votedLabel = prediction.label;
+              _spellingBuffer.add(votedLabel);
 
-            // Um sinal confirmado encerra a janela temporal atual. Manter os
-            // quadros anteriores fazia o próximo sinal da frase ser comparado
-            // com uma mistura dos dois movimentos, obrigando o usuário a
-            // retirar as mãos da câmera entre palavras.
-            _interpreter.resetSequence();
-            _predictionHistory.clear();
-            _sequenceGeneration++;
-
-            if (RecognitionPolicy.isUnsupportedStaticAlphabetPrediction(
-              votedLabel,
-            )) {
+              // Mostrar progresso (ex: F-R-E ou FRE-DE)
+              final separator = votedLabel.length == 1 ? "" : "-";
+              final progressText = _spellingBuffer.join(separator);
               setState(() {
-                _partialText =
-                    'Sinal com movimento ainda não confirmado pelo modelo temporal';
-                _confidence = 0;
+                _partialText = "Soletrando: $progressText";
+                _confidence = prediction.confidence;
+              });
+
+              // Agendar a finalização da palavra soletrada (1.5 segundos sem novos sinais)
+              _spellingEndTimer =
+                  Timer(const Duration(milliseconds: 1500), () async {
+                if (_spellingBuffer.isNotEmpty) {
+                  final fullWord = _spellingBuffer.join("");
+                  setState(() {
+                    _partialText = "Palavra soletrada";
+                    _finalText = fullWord;
+                  });
+                  await _ttsService.speak(fullWord);
+                  _spellingBuffer.clear();
+                }
+              });
+            }
+          } else {
+            // Se tinha alguma soletragem em andamento, finaliza ela primeiro
+            if (_spellingBuffer.isNotEmpty) {
+              _spellingEndTimer?.cancel();
+              final fullWord = _spellingBuffer.join("");
+              setState(() {
+                _finalText = fullWord;
+              });
+              await _ttsService.speak(fullWord);
+              _spellingBuffer.clear();
+            }
+
+            final composition = _phraseComposer.accept(votedLabel);
+            if (composition == null) return;
+
+            if (!composition.isFinal) {
+              setState(() {
+                _partialText = "Continue a expressão";
+                _finalText = composition.text;
+                _confidence = prediction.confidence;
               });
               return;
             }
 
-            if (_isSpellingUnit(votedLabel)) {
-              // Evitar duplicar a mesma sílaba se for detectada repetida muito rápido
-              if (_spellingBuffer.isEmpty ||
-                  _spellingBuffer.last != votedLabel) {
-                // Cancelar timer de finalização anterior apenas ao entrar nova sílaba
-                _spellingEndTimer?.cancel();
+            final translation = await _translator.translate(
+              composition.glosses,
+              sessionId: "session_live",
+            );
 
-                _spellingBuffer.add(votedLabel);
+            if (translation.isNotEmpty) {
+              setState(() {
+                _partialText =
+                    "Sinais detectados: ${composition.glosses.join(' + ')}";
+                _finalText = translation;
+                _confidence = prediction.confidence;
+              });
 
-                // Mostrar progresso (ex: F-R-E ou FRE-DE)
-                final separator = votedLabel.length == 1 ? "" : "-";
-                final progressText = _spellingBuffer.join(separator);
-                setState(() {
-                  _partialText = "Soletrando: $progressText";
-                  _confidence = prediction.confidence;
-                });
-
-                // Agendar a finalização da palavra soletrada (1.5 segundos sem novos sinais)
-                _spellingEndTimer =
-                    Timer(const Duration(milliseconds: 1500), () async {
-                  if (_spellingBuffer.isNotEmpty) {
-                    final fullWord = _spellingBuffer.join("");
-                    setState(() {
-                      _partialText = "Palavra soletrada";
-                      _finalText = fullWord;
-                    });
-                    await _ttsService.speak(fullWord);
-                    _spellingBuffer.clear();
-                  }
-                });
-              }
-            } else {
-              // Se tinha alguma soletragem em andamento, finaliza ela primeiro
-              if (_spellingBuffer.isNotEmpty) {
-                _spellingEndTimer?.cancel();
-                final fullWord = _spellingBuffer.join("");
-                setState(() {
-                  _finalText = fullWord;
-                });
-                await _ttsService.speak(fullWord);
-                _spellingBuffer.clear();
-              }
-
-              final composition = _phraseComposer.accept(votedLabel);
-              if (composition == null) return;
-
-              if (!composition.isFinal) {
-                setState(() {
-                  _partialText = "Continue a expressão";
-                  _finalText = composition.text;
-                  _confidence = prediction.confidence;
-                });
-                return;
-              }
-
-              final translation = await _translator.translate(
-                composition.glosses,
-                sessionId: "session_live",
-              );
-
-              if (translation.isNotEmpty) {
-                setState(() {
-                  _partialText =
-                      "Sinais detectados: ${composition.glosses.join(' + ')}";
-                  _finalText = translation;
-                  _confidence = prediction.confidence;
-                });
-
-                await _ttsService.speak(translation);
-              }
+              await _ttsService.speak(translation);
             }
           }
         }
@@ -295,7 +281,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
       _handsReleaseTimer = null;
       _handsWereReleased = true;
       _sequenceGeneration++;
-      _predictionHistory.clear();
+      _predictionConsensus.reset();
       _interpreter.resetSequence();
       _phraseComposer.releaseCurrentSign();
 
@@ -323,7 +309,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
     _processingTimer?.cancel();
     _spellingEndTimer?.cancel();
     _handsReleaseTimer?.cancel();
-    _predictionHistory.clear();
+    _predictionConsensus.reset();
     _interpreter.resetSequence();
     _phraseComposer.reset();
     _visionService.stop();

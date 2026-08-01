@@ -182,7 +182,8 @@ void main() {
       expect(result.confidence, lessThan(0.75));
     });
 
-    test('Inicia a tentativa temporal após doze quadros úteis', () async {
+    test('Inicia a tentativa temporal após vinte e quatro quadros úteis',
+        () async {
       final interpreter = MockSignInterpreter();
       await interpreter.loadModel('weights.json');
 
@@ -200,12 +201,12 @@ void main() {
             ],
           };
 
-      for (var index = 0; index < 11; index++) {
+      for (var index = 0; index < 23; index++) {
         interpreter.addHandFrame(frame(index));
       }
       expect(interpreter.hasEnoughHandFrames, isFalse);
 
-      interpreter.addHandFrame(frame(11));
+      interpreter.addHandFrame(frame(23));
       expect(interpreter.hasEnoughHandFrames, isTrue);
     });
   });

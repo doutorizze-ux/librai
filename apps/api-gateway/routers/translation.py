@@ -10,7 +10,7 @@ import models
 import schemas
 from assisted_recognition import get_assisted_recognizer
 from routers.auth import get_current_user, get_current_user_helper
-from sign_labels import canonical_visual_label
+from sign_labels import canonical_visual_label, is_isolated_sign_label
 from temporal_recognition import (
     extract_temporal_signature,
     extract_two_hand_signature,
@@ -31,6 +31,10 @@ _temporal_index_fingerprint = None
 _temporal_index = []
 _temporal_v2_index_fingerprint = None
 _temporal_v2_index = []
+
+MIN_V2_LABEL_SAMPLES = 3
+MAX_V2_LABEL_DISTANCE = 0.16
+MIN_V2_LABEL_MARGIN = 0.012
 
 
 def extract_hand_angles(landmarks):
@@ -161,14 +165,39 @@ def get_temporal_v2_training_index(db: Session):
         models.TrainingSample.landmarks,
     ).filter(models.TrainingSample.deleted_at.is_(None)).all()
     for sign_name, payload in samples:
-        if not isinstance(payload, dict) or payload.get("format_version") != 2:
+        canonical_label = canonical_visual_label(sign_name)
+        if (
+            not is_isolated_sign_label(canonical_label)
+            or not isinstance(payload, dict)
+            or payload.get("format_version") not in {2, 3}
+        ):
             continue
         signature = extract_two_hand_signature(payload.get("frames"))
         if signature:
-            rebuilt.append((canonical_visual_label(sign_name), signature))
+            rebuilt.append((canonical_label, signature))
     _temporal_v2_index = rebuilt
     _temporal_v2_index_fingerprint = fingerprint
     return rebuilt
+
+
+def _rank_v2_labels(signatures, index):
+    """Agrupa repetições por sinal para não confiar em uma amostra isolada."""
+    distances_by_label = {}
+    for label, trained in index:
+        distance = min(
+            two_hand_temporal_distance(signature, trained)
+            for signature in signatures
+        )
+        distances_by_label.setdefault(label, []).append(distance)
+
+    ranked = []
+    for label, distances in distances_by_label.items():
+        finite = sorted(value for value in distances if math.isfinite(value))
+        if len(finite) < MIN_V2_LABEL_SAMPLES:
+            continue
+        support = finite[:MIN_V2_LABEL_SAMPLES]
+        ranked.append((sum(support) / len(support), label, support))
+    return sorted(ranked, key=lambda item: item[0])
 
 
 @router.post("/translation/predict")
@@ -268,10 +297,10 @@ def predict_sign_sequence_v2(
     if not isinstance(frames, list):
         return {"label": "DADOS_INSUFICIENTES", "confidence": 0.0}
     candidate_frames = []
-    for window_size in (20, 28, 36, 48, 64):
+    for window_size in (24, 32, 40, 48, 64):
         if len(frames) >= window_size:
             candidate_frames.append(frames[-window_size:])
-    if len(frames) >= 12:
+    if len(frames) >= 24 and len(frames) not in {24, 32, 40, 48, 64}:
         candidate_frames.append(frames)
     signatures = [
         signature
@@ -283,40 +312,35 @@ def predict_sign_sequence_v2(
     index = get_temporal_v2_training_index(db)
     if not index:
         return {"label": "SINAL_DESCONHECIDO", "confidence": 0.0}
-    ranked = sorted(
-        (
-            (
-                min(
-                    two_hand_temporal_distance(signature, trained)
-                    for signature in signatures
-                ),
-                label,
-            )
-            for label, trained in index
-        ),
-        key=lambda item: item[0],
-    )
-    best_distance, best_label = ranked[0]
-    # Conservador: não emite tradução quando a sequência não se parece
-    # suficientemente com uma amostra completa.
-    if best_distance > 0.28:
+    ranked = _rank_v2_labels(signatures, index)
+    if not ranked:
         return {"label": "SINAL_DESCONHECIDO", "confidence": 0.0}
-    second = next(
-        (distance for distance, label in ranked[1:] if label != best_label),
-        1.0,
-    )
+
+    best_distance, best_label, support = ranked[0]
+    # O limiar antigo (0,28) aceitava movimentos muito diferentes. A decisão
+    # agora precisa concordar com três repetições do mesmo sinal.
+    if best_distance > MAX_V2_LABEL_DISTANCE:
+        return {"label": "SINAL_DESCONHECIDO", "confidence": 0.0}
+    second = ranked[1][0] if len(ranked) > 1 else math.inf
     margin = max(0.0, second - best_distance)
-    # Sinais visualmente próximos exigem separação real do segundo colocado.
-    if second < 0.40 and margin < 0.01:
+    required_margin = MIN_V2_LABEL_MARGIN + best_distance * 0.08
+    # Se dois sinais explicam o movimento quase igualmente, é melhor não
+    # traduzir do que pronunciar uma palavra errada.
+    if math.isfinite(second) and margin < required_margin:
         return {"label": "SINAL_AMBIGUO", "confidence": 0.0}
+    quality = max(0.0, 1.0 - best_distance / MAX_V2_LABEL_DISTANCE)
+    separation = (
+        1.0 if not math.isfinite(second) else min(1.0, margin / 0.08)
+    )
     confidence = min(
         0.99,
-        0.72 + (1.0 - best_distance / 0.28) * 0.22 + min(margin, 0.2) * 0.2,
+        0.75 + quality * 0.20 + separation * 0.04,
     )
     return {
         "label": best_label,
         "confidence": round(float(confidence), 2),
         "model": "two_hand_sequence_v2",
+        "support": len(support),
     }
 
 

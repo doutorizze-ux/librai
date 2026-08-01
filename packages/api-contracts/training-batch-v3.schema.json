@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://librai.app/contracts/training-batch-v3.schema.json",
+  "title": "Librai Research-Quality Training Batch v3",
+  "type": "object",
+  "required": [
+    "sign_name",
+    "format_version",
+    "capture_context",
+    "repetitions"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "sign_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40,
+      "pattern": "^[A-Za-zÀ-ÖØ-öø-ÿ0-9]+(?:[-'][A-Za-zÀ-ÖØ-öø-ÿ0-9]+)*$"
+    },
+    "format_version": {
+      "const": 3
+    },
+    "capture_context": {
+      "type": "object",
+      "required": ["platform", "camera_facing"],
+      "additionalProperties": false,
+      "properties": {
+        "platform": {
+          "enum": ["android", "ios", "web", "windows", "macos", "linux", "other"]
+        },
+        "camera_facing": {
+          "enum": ["front", "back", "external", "unknown"]
+        },
+        "app_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        }
+      }
+    },
+    "repetitions": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["frames"],
+        "additionalProperties": false,
+        "properties": {
+          "frames": {
+            "type": "array",
+            "minItems": 24,
+            "maxItems": 180,
+            "items": {
+              "$ref": "two-hand-sequence-v2.schema.json#/$defs/trainingFrame"
+            }
+          }
+        }
+      }
+    }
+  }
+}
