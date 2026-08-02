@@ -302,17 +302,43 @@
             self.handsDetected = true;
             self.handsCount = results.multiHandLandmarks.length;
             currentHands = results.multiHandLandmarks.flat();
-            currentHandFrame = {
-              timestampMs: capturedTimestampMs,
-              hands: results.multiHandLandmarks.map((landmarks, index) => {
+            const detectedHands = results.multiHandLandmarks.map(
+              (landmarks, index) => {
                 const classification =
                   results.multiHandedness?.[index]?.[0] || {};
+                const rawLabel = classification.label;
                 return {
-                  handedness: classification.label || 'Unknown',
+                  landmarks,
+                  handedness:
+                    rawLabel === 'Left' || rawLabel === 'Right'
+                      ? rawLabel
+                      : 'Unknown',
                   score: Number(classification.score || 0),
-                  landmarks: landmarks.map(({ x, y, z }) => ({ x, y, z }))
                 };
-              })
+              },
+            );
+            if (
+              detectedHands.length === 2 &&
+              detectedHands[0].handedness === detectedHands[1].handedness
+            ) {
+              // A lateralidade pode oscilar em celulares mesmo quando os 21
+              // pontos das duas mãos estão corretos. A posição dos pulsos
+              // mantém dois slots estáveis sem descartar a captura inteira.
+              const byWristX = [...detectedHands].sort(
+                (a, b) => a.landmarks[0].x - b.landmarks[0].x,
+              );
+              byWristX[0].handedness = 'Left';
+              byWristX[1].handedness = 'Right';
+            }
+            currentHandFrame = {
+              timestampMs: capturedTimestampMs,
+              hands: detectedHands.map((hand) => ({
+                handedness: hand.handedness,
+                score: hand.score,
+                landmarks: hand.landmarks.map(
+                  ({ x, y, z }) => ({ x, y, z }),
+                ),
+              })),
             };
             const closeToEdge = currentHands.some(
               point => point.x < 0.055 || point.x > 0.945 ||
