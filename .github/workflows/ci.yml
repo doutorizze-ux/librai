@@ -9,6 +9,22 @@ on:
 jobs:
   backend-test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: sinaliza_user
+          POSTGRES_PASSWORD: sinaliza_secure_pass123
+          POSTGRES_DB: sinaliza_guard_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sinaliza_user -d sinaliza_guard_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_POSTGRES_URL: postgresql://sinaliza_user:sinaliza_secure_pass123@127.0.0.1:5432/sinaliza_guard_test
     steps:
       - uses: actions/checkout@v4
 
@@ -26,6 +42,49 @@ jobs:
       - name: Run pytest
         run: |
           pytest apps/api-gateway/
+
+      - name: Validate backup image and restore a dump
+        run: |
+          docker build -f ops/postgres-backup/Dockerfile -t librai-postgres-backup:test .
+          mkdir -p "$RUNNER_TEMP/librai-backups"
+          docker run --rm --network host \
+            -e PGPASSWORD=sinaliza_secure_pass123 \
+            postgres:15-alpine \
+            psql -h 127.0.0.1 -U sinaliza_user -d sinaliza_guard_test \
+            -c "CREATE TABLE IF NOT EXISTS training_samples (id varchar primary key, deleted_at timestamp); INSERT INTO training_samples VALUES ('restore-check', NULL) ON CONFLICT DO NOTHING;"
+          backup_id=$(docker run -d --network host \
+            -v "$RUNNER_TEMP/librai-backups:/backups" \
+            -e POSTGRES_HOST=127.0.0.1 \
+            -e POSTGRES_USER=sinaliza_user \
+            -e POSTGRES_PASSWORD=sinaliza_secure_pass123 \
+            -e POSTGRES_DB=sinaliza_guard_test \
+            -e BACKUP_INTERVAL_SECONDS=86400 \
+            librai-postgres-backup:test)
+          for attempt in $(seq 1 30); do
+            test -n "$(find "$RUNNER_TEMP/librai-backups" -name '*.dump' -print -quit)" && break
+            sleep 2
+          done
+          docker stop "$backup_id"
+          test -n "$(find "$RUNNER_TEMP/librai-backups" -name '*.dump' -print -quit)"
+          dump_file=$(find "$RUNNER_TEMP/librai-backups" -name '*.dump' -print -quit)
+          docker run --rm --network host \
+            -e PGPASSWORD=sinaliza_secure_pass123 \
+            postgres:15-alpine \
+            psql -h 127.0.0.1 -U sinaliza_user -d postgres \
+            -c "DROP DATABASE IF EXISTS sinaliza_restore_test;" \
+            -c "CREATE DATABASE sinaliza_restore_test;"
+          docker run --rm --network host \
+            -e PGPASSWORD=sinaliza_secure_pass123 \
+            -v "$dump_file:/backup.dump:ro" \
+            postgres:15-alpine \
+            pg_restore -h 127.0.0.1 -U sinaliza_user \
+            -d sinaliza_restore_test /backup.dump
+          restored=$(docker run --rm --network host \
+            -e PGPASSWORD=sinaliza_secure_pass123 \
+            postgres:15-alpine \
+            psql -h 127.0.0.1 -U sinaliza_user -d sinaliza_restore_test \
+            -Atc "SELECT count(*) FROM training_samples WHERE id='restore-check';")
+          test "$restored" = "1"
 
       - name: Validate VLibras importer
         run: |

@@ -218,7 +218,16 @@ def test_assisted_prediction_loads_packaged_model():
 def test_health():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "healthy"}
+    payload = response.json()
+    assert payload["status"] == "healthy"
+    assert payload["training_storage"] == {
+        "total_samples": 0,
+        "active_samples": 0,
+        "archived_samples": 0,
+        "integrity": "ok",
+        "last_backup_at": None,
+        "external_backup": False,
+    }
 
 
 def test_vlibras_reference_catalog_search():

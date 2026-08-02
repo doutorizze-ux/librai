@@ -1,6 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from database import engine, Base, ensure_training_sample_columns
+from database import (
+    engine,
+    Base,
+    ensure_training_sample_columns,
+    ensure_training_data_guards,
+    get_db,
+    get_training_integrity_status,
+)
 from routers import (
     admin,
     auth,
@@ -15,6 +22,7 @@ from routers import (
 # Inicializar Tabelas do Banco de Dados local (SQLite)
 Base.metadata.create_all(bind=engine)
 ensure_training_sample_columns()
+ensure_training_data_guards()
 
 app = FastAPI(
     title="Sinaliza AI API Gateway",
@@ -23,7 +31,8 @@ app = FastAPI(
 )
 
 import os
-from fastapi import Request
+from fastapi import Depends, Request
+from sqlalchemy.orm import Session
 
 # Configuração de CORS Dinâmico para Produção
 allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "*")
@@ -67,8 +76,16 @@ def read_root():
     }
 
 @app.get("/health")
-def health_check():
-    return {"status": "healthy"}
+def health_check(db: Session = Depends(get_db)):
+    training_storage = get_training_integrity_status(db)
+    return {
+        "status": (
+            "healthy"
+            if training_storage["integrity"] == "ok"
+            else "degraded"
+        ),
+        "training_storage": training_storage,
+    }
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
