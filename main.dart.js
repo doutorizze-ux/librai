@@ -96260,7 +96260,7 @@ A.a0j.prototype={}
 A.vO.prototype={
 J(a){var s=null,r=this.c
 r=r==null?s:"GoException: "+r.a
-return A.le(!0,A.fj(A.et(A.b([B.Z3,B.m_,A.c1(r==null?"page not found":r,s,s,s,s,s,s,s),B.m_,new A.GL(new A.aaJ(a),B.YP,s)],t.p),B.M,B.fi,B.a2),s,s),B.Y,!0)}}
+return A.le(!0,A.fj(A.et(A.b([B.Z6,B.m_,A.c1(r==null?"page not found":r,s,s,s,s,s,s,s),B.m_,new A.GL(new A.aaJ(a),B.YQ,s)],t.p),B.M,B.fi,B.a2),s,s),B.Y,!0)}}
 A.aaJ.prototype={
 $0(){return A.acv(this.a).OO(0,"/",null)},
 $S:0}
@@ -96310,7 +96310,7 @@ A.wp.prototype={
 J(a){var s=null,r=A.Mg(s,s,s,s,s,s,s,B.Zg,s),q=this.c
 q=q==null?s:"GoException: "+q.a
 if(q==null)q="page not found"
-return A.Sp(r,s,A.fj(A.et(A.b([new A.EV(q,s),A.n8(B.Z2,s,s,new A.ah7(a),s,s)],t.p),B.M,B.fi,B.a2),s,s),!1)}}
+return A.Sp(r,s,A.fj(A.et(A.b([new A.EV(q,s),A.n8(B.Z5,s,s,new A.ah7(a),s,s)],t.p),B.M,B.fi,B.a2),s,s),!1)}}
 A.ah7.prototype={
 $0(){return A.acv(this.a).OO(0,"/",null)},
 $S:0}
@@ -98875,9 +98875,9 @@ o=A.a2(new A.Y(B.pe,new A.awz(),o),o.h("ap.E"))
 o.$flags=1
 s=this.a
 r=t.p
-o=A.aJy(A.et(A.b([B.YW,B.Ax,A.ej(new A.xe(o,A.c0([s.c],t.mu),new A.awA(s,b),!0,p,t.DQ),p,1/0),B.e8,B.o4,B.dh,B.YQ,B.m0,A.b2E(B.Jb,s.a,new A.awB(s)),B.e8,A.c1("Velocidade da voz: "+B.d.ae(s.b,1)+"x",p,p,p,p,B.bl,p,p),new A.Ff(s.b,new A.awC(s,b),0.5,2,15,p)],r),B.bs,B.F,B.aG),p,B.a_,p,p,B.aq)
+o=A.aJy(A.et(A.b([B.YY,B.Ax,A.ej(new A.xe(o,A.c0([s.c],t.mu),new A.awA(s,b),!0,p,t.DQ),p,1/0),B.e8,B.o4,B.dh,B.YS,B.m0,A.b2E(B.Jb,s.a,new A.awB(s)),B.e8,A.c1("Velocidade da voz: "+B.d.ae(s.b,1)+"x",p,p,p,p,B.bl,p,p),new A.Ff(s.b,new A.awC(s,b),0.5,2,15,p)],r),B.bs,B.F,B.aG),p,B.a_,p,p,B.aq)
 q=this.c
-return A.A_(A.b([A.n8(B.fG,p,p,new A.awD(q),p,p),A.aIA(B.YV,new A.awE(s,this.b,q))],r),o,B.QZ)},
+return A.A_(A.b([A.n8(B.fG,p,p,new A.awD(q),p,p),A.aIA(B.YX,new A.awE(s,this.b,q))],r),o,B.QZ)},
 $S:130}
 A.awz.prototype={
 $1(a){var s=null,r=a.d
@@ -98923,7 +98923,7 @@ return A.F($async$$0,r)},
 $S:11}
 A.awJ.prototype={
 $2(a,b){var s,r,q,p,o,n,m=null,l=b.d,k=A.f0(999),j=A.aI_(B.Fz,1),i=t.p
-k=A.iZ(m,A.f6(A.b([A.iZ(m,m,B.z,m,m,B.Cr,m,9,m,m,m,m,9),B.ck,B.Z_],i),B.M,B.F,B.aG,0),B.z,m,m,new A.dG(B.Ex,m,j,k,m,m,B.aX),m,m,m,B.od,m,m,m)
+k=A.iZ(m,A.f6(A.b([A.iZ(m,m,B.z,m,m,B.Cr,m,9,m,m,m,m,9),B.ck,B.Z1],i),B.M,B.F,B.aG,0),B.z,m,m,new A.dG(B.Ex,m,j,k,m,m,B.aX),m,m,m,B.od,m,m,m)
 j=l<650
 s=A.ej(m,j?42:72,m)
 r=b.b<420
@@ -98931,12 +98931,12 @@ q=r?170:205
 r=r?170:205
 q=A.fj(A.ej(A.a7i(A.f0(48),A.aJP(A.aNY("assets/branding/librai-icon.png",B.n1),1.18)),r,q),m,m)
 r=A.ej(m,j?42:74,m)
-p=A.b5(!0,A.aNo(B.IJ,B.YT,new A.awH(a),A.aNq(m,m,B.FL,m,m,m,0,m,m,B.k,m,B.SZ,m,m,new A.cK(A.f0(22),B.r),m,m,m,m,m)),!1,m,m,!1,!1,m,m,m,m,m,m,m,m,m,"Abrir tradu\xe7\xe3o autom\xe1tica de Libras",m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,B.n,m)
+p=A.b5(!0,A.aNo(B.IJ,B.YV,new A.awH(a),A.aNq(m,m,B.FL,m,m,m,0,m,m,B.k,m,B.SZ,m,m,new A.cK(A.f0(22),B.r),m,m,m,m,m)),!1,m,m,!1,!1,m,m,m,m,m,m,m,m,m,"Abrir tradu\xe7\xe3o autom\xe1tica de Libras",m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,B.n,m)
 o=A.b0n(m,m,m,m,m,m,m,m,m,B.Ek,m,B.T_,m,m,new A.cK(A.f0(20),B.r),B.Ch,m,m,m,m)
-j=A.b5(!0,new A.QO(!0,new A.awI(a),m,m,m,o,m,m,!1,m,!0,m,new A.Zn(B.YU,B.IA,o,m,m),m),!1,m,m,!1,!1,m,m,m,m,m,m,m,m,m,"Traduzir texto ou voz para Libras e abrir o dicion\xe1rio",m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,B.n,m)
+j=A.b5(!0,new A.QO(!0,new A.awI(a),m,m,m,o,m,m,!1,m,!0,m,new A.Zn(B.YW,B.IA,o,m,m),m),!1,m,m,!1,!1,m,m,m,m,m,m,m,m,m,"Traduzir texto ou voz para Libras e abrir o dicion\xe1rio",m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,m,B.n,m)
 o=this.a.ax
 n=o.rx
-return A.aJy(new A.eM(new A.al(0,1/0,l,1/0),new A.bI(B.Ho,A.et(A.b([new A.f_(B.X,m,m,k,m),s,q,B.Ta,B.Zc,B.lZ,B.Zf,r,p,B.lZ,j,B.lZ,A.c1("Tradu\xe7\xe3o por texto, voz e mais de 22 mil sinais oficiais.",m,m,m,m,A.eF(m,m,n==null?o.k3:n,m,m,m,m,m,m,m,m,13,m,m,m,m,m,!0,m,m,m,m,m,m,m,m),B.bN,m)],i),B.bS,B.F,B.a2),m),m),m,B.a_,m,m,B.aq)},
+return A.aJy(new A.eM(new A.al(0,1/0,l,1/0),new A.bI(B.Ho,A.et(A.b([new A.f_(B.X,m,m,k,m),s,q,B.Ta,B.Ze,B.lZ,B.Zf,r,p,B.lZ,j,B.lZ,A.c1("Tradu\xe7\xe3o por texto, voz e mais de 22 mil sinais oficiais.",m,m,m,m,A.eF(m,m,n==null?o.k3:n,m,m,m,m,m,m,m,m,13,m,m,m,m,m,!0,m,m,m,m,m,m,m,m),B.bN,m)],i),B.bS,B.F,B.a2),m),m),m,B.a_,m,m,B.aq)},
 $S:632}
 A.awH.prototype={
 $0(){new A.Gj().aCF(0)
@@ -99036,7 +99036,7 @@ s.U$=$.ak()
 s.Y$=0
 this.aD()},
 J(a){var s=null
-return new A.Bi(2,A.Sp(A.Mg(s,s,B.TP,s,s,s,s,B.YS,s),s,new A.FD(A.b([this.ac_(a),B.a0O],t.p),s),!1),s)},
+return new A.Bi(2,A.Sp(A.Mg(s,s,B.TP,s,s,s,s,B.YU,s),s,new A.FD(A.b([this.ac_(a),B.a0O],t.p),s),!1),s)},
 ac_(a){var s,r,q,p=this,o=null,n=A.U(a),m=p.gqb().ED($.a4P(),t.mu),l=p.z,k=l?"Parar de ouvir":"Falar uma mensagem em portugu\xeas",j=p.y
 if(j)s=l?"Parar":"Usar microfone"
 else s="Microfone indispon\xedvel"
@@ -99110,7 +99110,7 @@ $1(a){return this.a.rB()},
 $S:27}
 A.a2t.prototype={
 J(a){var s=null,r=A.hH(B.Ih,A.U(a).ax.b,s,76),q=A.U(a).ok.r
-return A.fj(new A.bI(B.Hp,A.et(A.b([r,B.T8,A.c1("A mensagem aparecer\xe1 aqui com o avatar Librai.",s,s,s,s,q==null?s:q.KL(B.cB),B.bN,s),B.Ax,B.YY],t.p),B.M,B.F,B.aG),s),s,s)}}
+return A.fj(new A.bI(B.Hp,A.et(A.b([r,B.T8,A.c1("A mensagem aparecer\xe1 aqui com o avatar Librai.",s,s,s,s,q==null?s:q.KL(B.cB),B.bN,s),B.Ax,B.Z_],t.p),B.M,B.F,B.aG),s),s,s)}}
 A.HZ.prototype={
 al(){return new A.I_(new A.hV(B.cI,$.ak()),A.SD(null,null),B.LB)}}
 A.I_.prototype={
@@ -99185,7 +99185,7 @@ r.U$=$.ak()
 r.Y$=0
 s.aD()},
 J(a){var s,r,q,p,o,n,m,l,k=this,j=null,i=A.U(a),h=k.gqb().ED($.a4P(),t.mu),g=k.w,f=t.p
-g=A.b([new A.bI(B.Hg,A.et(A.b([A.tZ(j,B.bI,!1,j,!0,B.H,j,A.zN(),g,j,j,j,j,j,2,A.adM(j,B.i3,j,j,j,j,j,j,!0,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,"Ex.: nome, ajuda, prefeitura",j,j,j,j,j,j,j,j,"Pesquisar sinal",!0,!0,!1,j,B.IC,j,j,j,j,j,j,g.a.a.length===0?j:A.kU(j,j,B.Iw,j,j,new A.axT(k),j,j,"Limpar pesquisa"),j,j,j,j,j),B.a_,!0,j,!0,j,!1,j,B.bp,j,j,j,j,j,j,j,j,1,j,j,!1,"\u2022",j,k.gam5(),j,j,j,!1,j,j,!1,j,!0,j,B.bH,j,j,j,j,j,j,j,j,j,j,j,j,!0,B.ad,j,B.ea,j,B.B0,j,j),B.m0,B.YR],f),B.bS,B.F,B.a2),j)],f)
+g=A.b([new A.bI(B.Hg,A.et(A.b([A.tZ(j,B.bI,!1,j,!0,B.H,j,A.zN(),g,j,j,j,j,j,2,A.adM(j,B.i3,j,j,j,j,j,j,!0,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,"Ex.: nome, ajuda, prefeitura",j,j,j,j,j,j,j,j,"Pesquisar sinal",!0,!0,!1,j,B.IC,j,j,j,j,j,j,g.a.a.length===0?j:A.kU(j,j,B.Iw,j,j,new A.axT(k),j,j,"Limpar pesquisa"),j,j,j,j,j),B.a_,!0,j,!0,j,!1,j,B.bp,j,j,j,j,j,j,j,j,1,j,j,!1,"\u2022",j,k.gam5(),j,j,j,!1,j,j,!1,j,!0,j,B.bH,j,j,j,j,j,j,j,j,j,j,j,j,!0,B.ad,j,B.ea,j,B.B0,j,j),B.m0,B.YT],f),B.bS,B.F,B.a2),j)],f)
 s=k.ay
 if(s!=null){r=i.ax
 q=A.f0(22)
@@ -99673,7 +99673,7 @@ s=new A.aDn()
 return A.l(s.$1(A.aJg(r)))+"/"+A.l(s.$1(A.aJj(r)))+" "+A.l(s.$1(A.aJh(r)))+":"+A.l(s.$1(A.aJi(r)))},
 ib(a,b){var s=null
 this.c.aj(t.Pu).f.Pr(A.aPW(s,s,s,b,B.m4,B.H,s,A.c1(a,s,s,s,s,B.bl,s,s),s,B.o8,s,s,s,s,s,s,s,s,s,s))},
-J(a0){var s,r,q,p,o,n,m,l,k,j,i,h,g,f=this,e=null,d=A.U(a0),c=A.Mg(e,e,e,!0,e,e,e,B.Zb,e),b=t.w,a=A.bm(a0,B.dr,b).w.a.a<600?12:24
+J(a0){var s,r,q,p,o,n,m,l,k,j,i,h,g,f=this,e=null,d=A.U(a0),c=A.Mg(e,e,e,!0,e,e,e,B.Zd,e),b=t.w,a=A.bm(a0,B.dr,b).w.a.a<600?12:24
 b=B.d.e0(A.bm(a0,B.dr,b).w.a.b*0.68,460,720)
 s=A.f0(20)
 if(f.z)r=B.bw
@@ -99765,7 +99765,7 @@ if(o){n=l.q
 if(n==null)n=l.k3}else n=r
 n=n.aF(0.2)
 m=l.b
-i=A.f6(A.b([A.hH(B.I9,m,e,e),B.ck,B.YM],q),B.M,B.F,B.a2,0)
+i=A.f6(A.b([A.hH(B.I9,m,e,e),B.ck,B.YN],q),B.M,B.F,B.a2,0)
 g=f.dy?B.Te:B.oT
 g=A.b([A.f6(A.b([i,A.kU(e,e,g,e,e,f.gaeK(),e,e,e)],q),B.M,B.fj,B.a2,0),B.dh],q)
 i=f.dx.length
@@ -99785,7 +99785,7 @@ o=r?e:f.gaeJ()
 o=A.f6(A.b([m,B.ck,B.HC,A.b5(!0,A.kU(e,e,r?B.Aw:B.oT,e,e,o,e,e,e),!1,e,e,!1,!1,e,e,e,e,e,e,e,e,e,"Atualizar minhas sess\xf5es de treinamento",e,e,e,e,e,e,e,e,e,e,e,e,e,e,e,e,e,e,e,e,e,e,e,e,B.n,e)],q),B.M,B.F,B.a2,0)
 n=l.rx
 r=A.c1("Voc\xea pode excluir somente as capturas enviadas pela sua sess\xe3o de professor.",e,e,e,e,A.eF(e,e,n==null?l.k3:n,e,e,e,e,e,e,e,e,e,e,e,e,e,e,!0,e,e,e,e,e,e,e,e),e,e)
-r=A.b([o,B.Tb,r,new A.f_(B.jg,e,e,new A.FN(!0,f.gakH(),e,e,e,e,B.z,e,!1,e,!0,e,new A.a1D(B.Zd,B.IE,e,e,e),e),e),B.dh],q)
+r=A.b([o,B.Tb,r,new A.f_(B.jg,e,e,new A.FN(!0,f.gakH(),e,e,e,e,B.z,e,!1,e,!0,e,new A.a1D(B.Z2,B.IE,e,e,e),e),e),B.dh],q)
 q=f.fr.length
 if(q===0&&!f.fx)r.push(B.Pq)
 else r.push(A.aeF(e,new A.aE8(f,d),q,e,B.vz,new A.aE9(),!0))
@@ -100087,7 +100087,7 @@ $0(){return this.a.fx=!1},
 $S:0}
 A.aDb.prototype={
 $1(a){var s=null,r=A.c1("Somente esta sess\xe3o de "+this.a+" ser\xe1 removida. As grava\xe7\xf5es dos outros professores ser\xe3o preservadas.",s,s,s,s,s,s,s)
-return A.A_(A.b([A.n8(B.fG,s,s,new A.aD9(a),s,s),A.aNy(B.oU,B.YL,new A.aDa(a))],t.p),r,B.YK)},
+return A.A_(A.b([A.n8(B.fG,s,s,new A.aD9(a),s,s),A.aNy(B.oU,B.YM,new A.aDa(a))],t.p),r,B.YK)},
 $S:132}
 A.aD9.prototype={
 $0(){A.ft(this.a,!1).ir(!1)
@@ -100111,7 +100111,7 @@ $0(){return this.a.fy.F(0,this.b)},
 $S:0}
 A.aDw.prototype={
 $1(a){var s=null,r=this.a,q=A.tZ(s,B.bI,!1,s,!0,B.H,s,A.zN(),r,s,s,s,s,s,2,B.Jd,B.a_,!0,s,!0,s,!1,s,B.bp,s,s,s,s,s,s,s,s,1,s,s,!0,"\u2022",s,s,s,s,s,!1,s,s,!1,s,!0,s,B.bH,s,s,s,s,s,s,s,s,s,s,s,s,!0,B.ad,s,B.ea,s,s,s,s)
-return A.A_(A.b([A.n8(B.fG,s,s,new A.aDu(a),s,s),A.aIA(B.Z1,new A.aDv(a,r))],t.p),q,B.Z9)},
+return A.A_(A.b([A.n8(B.fG,s,s,new A.aDu(a),s,s),A.aIA(B.Z4,new A.aDv(a,r))],t.p),q,B.Zb)},
 $S:132}
 A.aDu.prototype={
 $0(){A.ft(this.a,!1).ir(null)
@@ -100127,8 +100127,8 @@ $1(a){return new A.n3(new A.aDt(this.a,this.b,this.c,a),null)},
 $S:129}
 A.aDt.prototype={
 $2(a,b){var s=this,r=null,q=s.b,p=q.length
-q=A.ej(p===0?B.Z5:A.aeF(r,new A.aDq(s.a,q,s.c,s.d,b),p,r,r,new A.aDr(),!0),r,480)
-return A.A_(A.b([A.n8(B.YI,r,r,new A.aDs(s.d),r,r)],t.p),q,B.Ze)},
+q=A.ej(p===0?B.YL:A.aeF(r,new A.aDq(s.a,q,s.c,s.d,b),p,r,r,new A.aDr(),!0),r,480)
+return A.A_(A.b([A.n8(B.YI,r,r,new A.aDs(s.d),r,r)],t.p),q,B.YR)},
 $S:130}
 A.aDr.prototype={
 $2(a,b){return B.o4},
@@ -100369,7 +100369,7 @@ case 4:return"Ilumina\xe7\xe3o insuficiente"
 case 5:return"M\xe3os fora do enquadramento"
 case 6:return"Rosto fora do enquadramento"
 case 7:return"Enquadramento Correto"}},
-J(a){var s,r,q,p,o,n,m,l,k=this,j=null,i="Pausar tradu\xe7\xe3o",h="Retomar tradu\xe7\xe3o",g="Encerrar tradu\xe7\xe3o",f=A.U(a),e=A.bm(a,B.bq,t.w).w,d=t.p,c=A.Mg(A.b([A.kU(j,j,A.b5(j,A.hH(B.HZ,j,j,j),!1,j,j,!1,!1,j,j,j,j,j,j,j,j,j,"Alternar c\xe2mera frontal ou traseira",j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,B.n,j),j,j,new A.aEv(),j,j,"Alternar c\xe2mera")],d),B.C,j,j,0,B.k,B.C,B.YZ,j),b=A.AZ(B.oK,B.Fv,!0)
+J(a){var s,r,q,p,o,n,m,l,k=this,j=null,i="Pausar tradu\xe7\xe3o",h="Retomar tradu\xe7\xe3o",g="Encerrar tradu\xe7\xe3o",f=A.U(a),e=A.bm(a,B.bq,t.w).w,d=t.p,c=A.Mg(A.b([A.kU(j,j,A.b5(j,A.hH(B.HZ,j,j,j),!1,j,j,!1,!1,j,j,j,j,j,j,j,j,j,"Alternar c\xe2mera frontal ou traseira",j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,B.n,j),j,j,new A.aEv(),j,j,"Alternar c\xe2mera")],d),B.C,j,j,0,B.k,B.C,B.Z0,j),b=A.AZ(B.oK,B.Fv,!0)
 e=e.r.b+56
 s=A.tf(j,A.f6(A.b([k.G4("M\xe3os",k.dx),B.Au,k.G4("Rosto",k.dy),B.Au,k.G4("Tronco",k.fr)],d),B.M,B.F,B.a2,0),j,j,16,j,e+8,j)
 r=k.Tv(k.fx)
@@ -100399,7 +100399,7 @@ p=A.aNW(A.b5(j,A.hH(m?B.I4:B.I6,j,j,j),!1,j,j,!1,!1,j,j,j,j,j,j,j,j,j,l,j,j,j,j,
 n=A.aNA(B.k,B.Q,B.SS,j,j)
 m=f.ax
 m=A.ok(j,m.fy,j,j,j,j,j,m.go,j,j,j,j,B.Ar,j,j,j,j)
-return A.Sp(c,B.l,A.po(B.cv,A.b([b,B.Gg,s,e,new A.f_(B.jf,j,j,A.le(!0,A.et(A.b([r,B.Tc,q,B.dh,o,B.m0,A.f6(A.b([p,new A.vQ(B.a0w,!0,k.gapt(),j,j,j,n,B.z,j,!1,j,!0,j,new A.Ht(B.YX,B.IM,n,j,j),j),A.aNW(A.b5(j,A.hH(B.oO,j,j,j),!1,j,j,!1,!1,j,j,j,j,j,j,j,j,j,g,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,B.n,j),new A.aEy(a),m,g)],d),B.M,B.fj,B.a2,0)],d),B.bS,B.F,B.aG),B.Hj,!1),j)],d),B.H,B.AD),!0)},
+return A.Sp(c,B.l,A.po(B.cv,A.b([b,B.Gg,s,e,new A.f_(B.jf,j,j,A.le(!0,A.et(A.b([r,B.Tc,q,B.dh,o,B.m0,A.f6(A.b([p,new A.vQ(B.a0w,!0,k.gapt(),j,j,j,n,B.z,j,!1,j,!0,j,new A.Ht(B.YZ,B.IM,n,j,j),j),A.aNW(A.b5(j,A.hH(B.oO,j,j,j),!1,j,j,!1,!1,j,j,j,j,j,j,j,j,j,g,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,j,B.n,j),new A.aEy(a),m,g)],d),B.M,B.fj,B.a2,0)],d),B.bS,B.F,B.aG),B.Hj,!1),j)],d),B.H,B.AD),!0)},
 G4(a,b){var s=null,r=b?A.ar(204,B.bh.u()>>>16&255,B.bh.u()>>>8&255,B.bh.u()&255):A.ar(204,B.hY.u()>>>16&255,B.hY.u()>>>8&255,B.hY.u()&255),q=A.f0(12),p=b?"Ok":"Ausente"
 return A.iZ(s,A.c1(a+": "+p,s,s,s,s,B.B4,s,s),B.z,s,s,new A.dG(r,s,s,q,s,s,B.aX),s,s,s,B.oc,s,s,s)}}
 A.aEA.prototype={
@@ -100502,8 +100502,8 @@ s.cx="Aguardando sinaliza\xe7\xe3o..."
 s.db=0},
 $S:0}
 A.aEt.prototype={
-$1(a){var s=null,r=this.b,q=t.p,p=A.et(A.b([B.Za,B.dh,A.tZ(s,B.bI,!1,s,!0,B.H,s,A.zN(),r,s,s,s,s,s,2,B.J9,B.a_,!0,s,!0,s,!1,s,B.bp,s,s,s,s,s,s,s,s,3,s,s,!1,"\u2022",s,s,s,s,s,!1,s,s,!1,s,!0,s,B.bH,s,s,s,s,s,s,s,s,s,s,s,s,!0,B.ad,s,B.ea,s,s,s,s)],q),B.bs,B.F,B.aG)
-return A.A_(A.b([A.n8(B.fG,s,s,new A.aEr(a),s,s),new A.BG(!1,new A.aEs(this.a,r,a),s,s,s,s,s,s,!1,s,!0,s,B.Z0,s)],q),p,B.QY)},
+$1(a){var s=null,r=this.b,q=t.p,p=A.et(A.b([B.Zc,B.dh,A.tZ(s,B.bI,!1,s,!0,B.H,s,A.zN(),r,s,s,s,s,s,2,B.J9,B.a_,!0,s,!0,s,!1,s,B.bp,s,s,s,s,s,s,s,s,3,s,s,!1,"\u2022",s,s,s,s,s,!1,s,s,!1,s,!0,s,B.bH,s,s,s,s,s,s,s,s,s,s,s,s,!0,B.ad,s,B.ea,s,s,s,s)],q),B.bs,B.F,B.aG)
+return A.A_(A.b([A.n8(B.fG,s,s,new A.aEr(a),s,s),new A.BG(!1,new A.aEs(this.a,r,a),s,s,s,s,s,s,!1,s,!0,s,B.Z3,s)],q),p,B.QY)},
 $S:132}
 A.aEr.prototype={
 $0(){A.ft(this.a,!1).ir(null)
@@ -106445,8 +106445,8 @@ B.bw=new A.D3(B.NI,1,1,0.3215686274509804,0.3215686274509804,B.e)
 B.IK=new A.d5(B.HY,24,B.bw,null,null)
 B.ck=new A.d6(8,null,null,null)
 B.WT=new A.r(!0,B.bw,null,null,null,null,null,B.bn,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null)
-B.Z7=new A.bM("GRAVANDO",null,B.WT,null,null,null,null,null,null,null)
-B.LT=s([B.IK,B.ck,B.Z7],t.p)
+B.Z9=new A.bM("GRAVANDO",null,B.WT,null,null,null,null,null,null,null)
+B.LT=s([B.IK,B.ck,B.Z9],t.p)
 B.Kw=s([0.001200833568784504,0.002389694492170889,0.0002795742885861124],t.n)
 B.Ln=s([0.0005891086651375999,0.0029785502573438758,0.0003270666104008398],t.n)
 B.KI=s([0.00010146692491640572,0.0005364214359186694,0.0032979401770712076],t.n)
@@ -107533,8 +107533,8 @@ B.O5=new A.mx(B.NJ,1,0.6196078431372549,0.6196078431372549,0.6196078431372549,B.
 B.Y5=new A.r(!0,B.O5,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null)
 B.Zi=new A.bM("Nenhum sinal gravado ainda. Digite o nome acima e clique em Come\xe7ar Captura para registrar o primeiro sinal!",null,B.Y5,null,null,null,null,null,null,null)
 B.Pp=new A.bI(B.ob,B.Zi,null)
-B.Z8=new A.bM("Voc\xea ainda n\xe3o enviou nenhuma sess\xe3o nesta conta.",null,null,null,null,null,null,null,null,null)
-B.Pq=new A.bI(B.ob,B.Z8,null)
+B.Za=new A.bM("Voc\xea ainda n\xe3o enviou nenhuma sess\xe3o nesta conta.",null,null,null,null,null,null,null,null,null)
+B.Pq=new A.bI(B.ob,B.Za,null)
 B.vJ=new A.wF(null)
 B.ce=new A.R_(0,"fill")
 B.bx=new A.R_(1,"stroke")
@@ -107636,17 +107636,17 @@ B.bB=new A.as0(1,"down")
 B.Im=new A.bJ(63421,"MaterialIcons",null,!1)
 B.IB=new A.d5(B.Im,null,B.hY,null,null)
 B.bl=new A.r(!0,null,null,null,null,null,null,B.bn,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null)
-B.Z6=new A.bM("Ouvindo\u2026 toque no bot\xe3o vermelho para parar.",null,B.bl,null,null,null,null,null,null,null)
-B.HB=new A.r0(1,B.eY,B.Z6,null)
+B.Z8=new A.bM("Ouvindo\u2026 toque no bot\xe3o vermelho para parar.",null,B.bl,null,null,null,null,null,null,null)
+B.HB=new A.r0(1,B.eY,B.Z8,null)
 B.LU=s([B.IB,B.ck,B.HB],t.p)
 B.QX=new A.tv(B.ag,B.F,B.a2,B.M,null,B.bB,null,0,B.LU,null)
 B.HX=new A.bJ(57882,"MaterialIcons",null,!1)
 B.Iy=new A.d5(B.HX,null,null,null,null)
-B.YO=new A.bM("Corrigir Tradu\xe7\xe3o",null,null,null,null,null,null,null,null,null)
-B.L9=s([B.Iy,B.ck,B.YO],t.p)
+B.YP=new A.bM("Corrigir Tradu\xe7\xe3o",null,null,null,null,null,null,null,null,null)
+B.L9=s([B.Iy,B.ck,B.YP],t.p)
 B.QY=new A.tv(B.ag,B.F,B.a2,B.M,null,B.bB,null,0,B.L9,null)
-B.Z4=new A.bM("Configura\xe7\xf5es",null,null,null,null,null,null,null,null,null)
-B.LR=s([B.oS,B.ck,B.Z4],t.p)
+B.Z7=new A.bM("Configura\xe7\xf5es",null,null,null,null,null,null,null,null,null)
+B.LR=s([B.oS,B.ck,B.Z7],t.p)
 B.QZ=new A.tv(B.ag,B.F,B.a2,B.M,null,B.bB,null,0,B.LR,null)
 B.R_=new A.EG(1333)
 B.lu=new A.EG(2222)
@@ -107921,8 +107921,8 @@ B.Tj=new A.lj(3,"hide")
 B.a23=new A.lj(4,"remove")
 B.Tk=new A.lj(5,"timeout")
 B.Tl=new A.xu(null,null,null,null,null,null,null,null,null,null,null,null,null,null)
-B.YN=new A.bM("Tradu\xe7\xe3o corrigida com sucesso!",null,null,null,null,null,null,null,null,null)
-B.Tm=new A.tQ(B.YN,B.bh,null,null,null,null,null,null,null,null,null,null,null,B.o8,!1,null,null,null,B.H,null)
+B.YO=new A.bM("Tradu\xe7\xe3o corrigida com sucesso!",null,null,null,null,null,null,null,null,null)
+B.Tm=new A.tQ(B.YO,B.bh,null,null,null,null,null,null,null,null,null,null,null,B.o8,!1,null,null,null,B.H,null)
 B.AC=new A.Fj(0,"permissive")
 B.Tn=new A.Fj(1,"normal")
 B.To=new A.Fj(2,"forced")
@@ -108305,37 +108305,37 @@ B.YG=new A.bM("Entrar",null,null,null,null,null,null,null,null,null)
 B.YI=new A.bM("Fechar",null,null,null,null,null,null,null,null,null)
 B.YJ=new A.bM("Acesso do professor",null,null,null,null,null,null,null,null,null)
 B.YK=new A.bM("Excluir esta captura?",null,null,null,null,null,null,null,null,null)
-B.YL=new A.bM("Excluir sess\xe3o",null,null,null,null,null,null,null,null,null)
-B.YM=new A.bM("Sinais Gravados na IA",null,B.mf,null,null,null,null,null,null,null)
-B.YP=new A.bM("Go to home page",null,B.B3,null,null,null,null,null,null,null)
-B.YQ=new A.bM("URL da API do servidor:",null,B.bl,null,null,null,null,null,null,null)
-B.YR=new A.bM("Mais de 22 mil sinais oficiais \u2022 pesquise pelo nome",null,B.bl,null,null,null,null,null,null,null)
-B.YS=new A.bM("Portugu\xeas para Libras",null,null,null,null,null,null,null,null,null)
+B.YL=new A.bM("N\xe3o existem capturas antigas ativas.",null,null,null,null,null,null,null,null,null)
+B.YM=new A.bM("Excluir sess\xe3o",null,null,null,null,null,null,null,null,null)
+B.YN=new A.bM("Sinais Gravados na IA",null,B.mf,null,null,null,null,null,null,null)
+B.YQ=new A.bM("Go to home page",null,B.B3,null,null,null,null,null,null,null)
+B.YR=new A.bM("Capturas do sistema antigo",null,null,null,null,null,null,null,null,null)
+B.YS=new A.bM("URL da API do servidor:",null,B.bl,null,null,null,null,null,null,null)
+B.YT=new A.bM("Mais de 22 mil sinais oficiais \u2022 pesquise pelo nome",null,B.bl,null,null,null,null,null,null,null)
+B.YU=new A.bM("Portugu\xeas para Libras",null,null,null,null,null,null,null,null,null)
 B.Vs=new A.r(!0,null,null,null,null,null,20,B.cB,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null)
-B.YT=new A.bM("Traduzir Libras",null,B.Vs,null,null,null,null,null,null,null)
+B.YV=new A.bM("Traduzir Libras",null,B.Vs,null,null,null,null,null,null,null)
 B.Vc=new A.r(!0,null,null,null,null,null,18,B.cB,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null)
-B.YU=new A.bM("Portugu\xeas para Libras",null,B.Vc,null,null,null,null,null,null,null)
-B.YV=new A.bM("Salvar",null,null,null,null,null,null,null,null,null)
-B.YW=new A.bM("Avatar de Libras:",null,B.bl,null,null,null,null,null,null,null)
-B.YX=new A.bM("Corrigir",null,null,null,null,null,null,null,null,null)
-B.YY=new A.bM("O Librai n\xe3o armazena o \xe1udio. A transcri\xe7\xe3o ou o texto digitado \xe9 enviada ao servi\xe7o oficial VLibras para preparar os sinais.",null,null,B.bN,null,null,null,null,null,null)
-B.YZ=new A.bM("Tradu\xe7\xe3o ao vivo",null,B.bl,null,null,null,null,null,null,null)
+B.YW=new A.bM("Portugu\xeas para Libras",null,B.Vc,null,null,null,null,null,null,null)
+B.YX=new A.bM("Salvar",null,null,null,null,null,null,null,null,null)
+B.YY=new A.bM("Avatar de Libras:",null,B.bl,null,null,null,null,null,null,null)
+B.YZ=new A.bM("Corrigir",null,null,null,null,null,null,null,null,null)
+B.Z_=new A.bM("O Librai n\xe3o armazena o \xe1udio. A transcri\xe7\xe3o ou o texto digitado \xe9 enviada ao servi\xe7o oficial VLibras para preparar os sinais.",null,null,B.bN,null,null,null,null,null,null)
+B.Z0=new A.bM("Tradu\xe7\xe3o ao vivo",null,B.bl,null,null,null,null,null,null,null)
 B.Et=new A.x(1,0.3176470588235294,0.23529411764705882,0.47058823529411764,B.e)
 B.VJ=new A.r(!0,B.Et,null,null,null,null,null,B.bn,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null)
-B.Z_=new A.bM("Piloto de atendimento de energia",null,B.VJ,null,null,null,null,null,null,null)
-B.Z0=new A.bM("Confirmar",null,null,null,null,null,null,null,null,null)
-B.Z1=new A.bM("Continuar",null,null,null,null,null,null,null,null,null)
-B.Z2=new A.bM("Home",null,null,null,null,null,null,null,null,null)
-B.Z3=new A.bM("Page Not Found",null,B.bl,null,null,null,null,null,null,null)
-B.Z5=new A.bM("N\xe3o existem capturas ativas.",null,null,null,null,null,null,null,null,null)
-B.Z9=new A.bM("Gerenciamento administrativo",null,null,null,null,null,null,null,null,null)
-B.Za=new A.bM("Ajuste o texto traduzido abaixo:",null,null,null,null,null,null,null,null,null)
-B.Zb=new A.bM("Painel do Treinador - LibrAI",null,null,null,null,null,null,null,null,null)
+B.Z1=new A.bM("Piloto de atendimento de energia",null,B.VJ,null,null,null,null,null,null,null)
+B.Z2=new A.bM("Gerenciar capturas antigas",null,null,null,null,null,null,null,null,null)
+B.Z3=new A.bM("Confirmar",null,null,null,null,null,null,null,null,null)
+B.Z4=new A.bM("Continuar",null,null,null,null,null,null,null,null,null)
+B.Z5=new A.bM("Home",null,null,null,null,null,null,null,null,null)
+B.Z6=new A.bM("Page Not Found",null,B.bl,null,null,null,null,null,null,null)
+B.Zb=new A.bM("Gerenciamento administrativo",null,null,null,null,null,null,null,null,null)
+B.Zc=new A.bM("Ajuste o texto traduzido abaixo:",null,null,null,null,null,null,null,null,null)
+B.Zd=new A.bM("Painel do Treinador - LibrAI",null,null,null,null,null,null,null,null,null)
 B.FC=new A.x(1,0.1450980392156863,0.10980392156862745,0.19607843137254902,B.e)
 B.WZ=new A.r(!0,B.FC,null,null,null,null,38,B.kN,null,-1.2,null,null,1,null,null,null,null,null,null,null,null,null,null,null,null,null)
-B.Zc=new A.bM("Librai",null,B.WZ,B.bN,null,null,null,null,null,null)
-B.Zd=new A.bM("Gerenciar todas as capturas",null,null,null,null,null,null,null,null,null)
-B.Ze=new A.bM("Todas as capturas",null,null,null,null,null,null,null,null,null)
+B.Ze=new A.bM("Librai",null,B.WZ,B.bN,null,null,null,null,null,null)
 B.Eg=new A.x(1,0.396078431372549,0.35294117647058826,0.4392156862745098,B.e)
 B.Un=new A.r(!0,B.Eg,null,null,null,null,18,B.a0,null,null,null,null,1.4,null,null,null,null,null,null,null,null,null,null,null,null,null)
 B.Zf=new A.bM("Libras em movimento.\nComunica\xe7\xe3o sem barreiras.",null,B.Un,B.bN,null,null,null,null,null,null)
