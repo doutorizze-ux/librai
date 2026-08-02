@@ -1248,7 +1248,7 @@ def test_training_draft_capture_is_idempotent_and_locks_sign_name():
         assert len(draft.repetitions) == 1
 
 
-def test_quality_training_batch_rejects_replayed_or_short_capture():
+def test_quality_training_batch_rejects_replayed_capture_but_keeps_short_capture():
     headers = trainer_headers("Professor Auditoria")
     repeated_frames = structured_hand_frames(
         right_movement=0.002,
@@ -1271,10 +1271,6 @@ def test_quality_training_batch_rejects_replayed_or_short_capture():
     assert replayed.status_code == 422
     assert "idêntica" in replayed.json()["detail"]
 
-    short_frames = structured_hand_frames(
-        right_movement=0.002,
-        frame_count=24,
-    )
     request["repetitions"] = [
         {
             "frames": [
@@ -1282,18 +1278,59 @@ def test_quality_training_batch_rejects_replayed_or_short_capture():
                     **frame,
                     "timestamp_ms": 1_000 + index * 20,
                 }
-                for index, frame in enumerate(short_frames)
+                for index, frame in enumerate(structured_hand_frames(
+                    right_movement=0.002 + repetition * 0.0001,
+                    frame_count=24,
+                ))
             ]
         }
-        for _ in range(5)
+        for repetition in range(5)
     ]
-    too_short = client.post(
+    accepted_with_quality_metadata = client.post(
         "/v1/training/batches-v3",
         json=request,
         headers=headers,
     )
-    assert too_short.status_code == 422
-    assert "0,8 e 5 segundos" in too_short.json()["detail"]
+    assert accepted_with_quality_metadata.status_code == 201
+    assert all(
+        "short_duration" in sample["quality"]["warnings"]
+        for sample in accepted_with_quality_metadata.json()["samples"]
+    )
+
+
+def test_training_draft_accepts_mobile_timing_and_duplicate_handedness_labels():
+    headers = trainer_headers("Professora Celular")
+    frames = structured_hand_frames(
+        right_movement=0.002,
+        frame_count=24,
+    )
+    for frame in frames:
+        frame["hands"][1]["handedness"] = "Left"
+
+    response = client.post(
+        "/v1/training/drafts/repetitions",
+        json={
+            "capture_id": "mobile_capture_timing_0001",
+            "sign_name": "OLA",
+            "format_version": 3,
+            "capture_context": {
+                "platform": "web",
+                "camera_facing": "front",
+            },
+            "frames": frames,
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["repetitions_saved"] == 1
+    with TestingSessionLocal() as db:
+        draft = db.query(models.TrainingDraft).filter_by(
+            trainer_name="Professora Celular",
+        ).one()
+        quality = draft.repetitions[0]["quality"]
+        assert quality["duration_ms"] == 759
+        assert quality["warnings"] == ["short_duration"]
 
 
 def test_two_hand_v2_finds_sign_inside_continuous_camera_buffer():

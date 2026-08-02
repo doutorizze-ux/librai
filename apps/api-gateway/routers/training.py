@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import math
 import os
 import secrets
@@ -15,6 +16,7 @@ from routers.translation import extract_hand_angles
 from sign_labels import canonical_visual_label, is_isolated_sign_label
 
 router = APIRouter(prefix="/v1", tags=["training"])
+logger = logging.getLogger(__name__)
 
 TRAINER_ACCESS_CODE = os.getenv("TRAINER_ACCESS_CODE", "")
 TRAINER_DELETE_SECRET = os.getenv("TRAINER_DELETE_SECRET", "")
@@ -267,29 +269,20 @@ def _repetition_fingerprint(
 
 def _repetition_quality(
     frames: list[schemas.TrainingFrame],
-) -> dict[str, float | int]:
+) -> dict[str, float | int | list[str]]:
+    """Calcula qualidade sem descartar uma captura estruturalmente válida.
+
+    A tela de treinamento já exige 24 quadros novos, mãos rastreadas e
+    enquadramento bom. Duração, latência entre quadros e pequenas oscilações
+    de confiança dependem do aparelho; são metadados para auditoria e para o
+    modelo, não motivos para perder o trabalho do professor.
+    """
     timestamps = [frame.timestamp_ms for frame in frames]
     duration_ms = timestamps[-1] - timestamps[0]
-    if duration_ms < 800 or duration_ms > 5000:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "Cada repetição deve durar entre 0,8 e 5 segundos "
-                "com as mãos visíveis."
-            ),
-        )
     largest_gap_ms = max(
         later - earlier
         for earlier, later in zip(timestamps, timestamps[1:])
     )
-    if largest_gap_ms > 250:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "A captura contém uma interrupção longa no rastreamento "
-                "das mãos."
-            ),
-        )
 
     scores = []
     hand_spans = []
@@ -345,38 +338,28 @@ def _repetition_quality(
         previous_hands = current_hands
 
     mean_score = sum(scores) / len(scores)
-    if mean_score < 0.55:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="A confiança média do rastreamento ficou abaixo de 55%.",
-        )
     in_frame_ratio = in_frame_points / point_count
-    if in_frame_ratio < 0.95:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Mantenha pelo menos 95% dos pontos das mãos dentro da câmera.",
-        )
     sorted_spans = sorted(hand_spans)
     median_span = sorted_spans[len(sorted_spans) // 2]
-    if median_span < 0.04:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="As mãos ficaram pequenas demais; aproxime-se da câmera.",
-        )
-    if median_span > 0.75:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="As mãos ficaram próximas demais; afaste-se da câmera.",
-        )
     distinct_frame_ratio = len(frame_signatures) / len(frames)
+
+    warnings = []
+    if duration_ms < 800:
+        warnings.append("short_duration")
+    elif duration_ms > 5000:
+        warnings.append("long_duration")
+    if largest_gap_ms > 250:
+        warnings.append("tracking_gap")
+    if mean_score < 0.55:
+        warnings.append("low_tracking_confidence")
+    if in_frame_ratio < 0.95:
+        warnings.append("partial_out_of_frame")
+    if median_span < 0.04:
+        warnings.append("small_hand_span")
+    elif median_span > 0.75:
+        warnings.append("large_hand_span")
     if distinct_frame_ratio < 0.25:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "A captura repetiu os mesmos quadros; grave novamente "
-                "com a câmera ativa."
-            ),
-        )
+        warnings.append("low_frame_variation")
 
     return {
         "frame_count": len(frames),
@@ -391,6 +374,7 @@ def _repetition_quality(
             motion_total / max(motion_comparisons, 1),
             6,
         ),
+        "warnings": warnings,
     }
 
 
@@ -451,6 +435,19 @@ def save_training_draft_repetition(
             detail="Grave somente um sinal por vez, sem espaços ou pontuação.",
         )
     quality = _repetition_quality(repetition.frames)
+    if quality["warnings"]:
+        logger.warning(
+            "training_capture_quality_warning trainer=%s sign=%s "
+            "capture_id=%s warnings=%s frame_count=%s duration_ms=%s "
+            "largest_gap_ms=%s",
+            trainer_name,
+            sign_name,
+            repetition.capture_id,
+            ",".join(quality["warnings"]),
+            quality["frame_count"],
+            quality["duration_ms"],
+            quality["largest_gap_ms"],
+        )
     fingerprint = _repetition_fingerprint(repetition.frames)
     frames = [frame.model_dump() for frame in repetition.frames]
     context = repetition.capture_context.model_dump(exclude_none=True)

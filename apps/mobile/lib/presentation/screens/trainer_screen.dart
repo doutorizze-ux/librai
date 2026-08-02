@@ -412,7 +412,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
     });
   }
 
-  // Captura dos frames de landmarks durante 2 segundos
+  // Captura por pelo menos 2 segundos. Em aparelhos mais lentos, estende até
+  // 4 segundos para atingir 24 quadros realmente novos sem penalizar o professor.
   void _startCapture(String signName) {
     setState(() {
       _isRecording = true;
@@ -423,6 +424,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
       _statusMessage = "Gravando sinal: $signName";
     });
 
+    const minimumCaptureTicks = 60;
+    const maximumCaptureTicks = 120;
     int frameCount = 0;
     Timer.periodic(const Duration(milliseconds: 33), (timer) async {
       if (!mounted || !_isRecording) {
@@ -433,9 +436,15 @@ class _TrainerScreenState extends State<TrainerScreen> {
       final revision = _visionService.getLandmarkRevision();
       if (revision == _lastCapturedRevision) {
         frameCount++;
-        if (frameCount >= 60) {
+        if (frameCount >= maximumCaptureTicks ||
+            (frameCount >= minimumCaptureTicks && _validCapturedFrames >= 24)) {
           timer.cancel();
           _stopAndUploadCapture(signName);
+        } else if (frameCount == minimumCaptureTicks && mounted) {
+          setState(() {
+            _statusMessage =
+                'Continue o sinal: completando os quadros da repetição...';
+          });
         }
         return;
       }
@@ -456,9 +465,15 @@ class _TrainerScreenState extends State<TrainerScreen> {
       }
 
       frameCount++;
-      if (frameCount >= 60) {
+      if (frameCount >= maximumCaptureTicks ||
+          (frameCount >= minimumCaptureTicks && _validCapturedFrames >= 24)) {
         timer.cancel();
         _stopAndUploadCapture(signName);
+      } else if (frameCount == minimumCaptureTicks && mounted) {
+        setState(() {
+          _statusMessage =
+              'Continue o sinal: completando os quadros da repetição...';
+        });
       }
     });
   }

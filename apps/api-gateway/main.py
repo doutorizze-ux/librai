@@ -1,5 +1,12 @@
-from fastapi import FastAPI
+import logging
+import os
+
+from fastapi import Depends, FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 from database import (
     engine,
     Base,
@@ -29,10 +36,7 @@ app = FastAPI(
     description="Serviço principal de APIs e tradução em tempo real para o Sinaliza AI",
     version="1.0.0"
 )
-
-import os
-from fastapi import Depends, Request
-from sqlalchemy.orm import Session
+logger = logging.getLogger(__name__)
 
 # Configuração de CORS Dinâmico para Produção
 allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "*")
@@ -45,6 +49,32 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def log_request_validation_error(
+    request: Request,
+    exc: RequestValidationError,
+):
+    """Registra a causa de 422 de treino sem gravar landmarks ou biometria."""
+    if request.url.path.startswith("/v1/training"):
+        safe_errors = [
+            {
+                "location": ".".join(str(part) for part in error["loc"]),
+                "type": error["type"],
+                "message": error["msg"],
+            }
+            for error in exc.errors()
+        ]
+        logger.warning(
+            "training_request_validation_failed path=%s errors=%s",
+            request.url.path,
+            safe_errors,
+        )
+    return JSONResponse(
+        status_code=422,
+        content=jsonable_encoder({"detail": exc.errors()}),
+    )
 
 # Middleware de Segurança para Hardening de Headers
 @app.middleware("http")

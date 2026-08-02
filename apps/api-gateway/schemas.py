@@ -177,14 +177,6 @@ class TrainingFrame(BaseModel):
     timestamp_ms: int = Field(ge=0)
     hands: List[TrainingHand] = Field(min_length=1, max_length=2)
 
-    @field_validator("hands")
-    @classmethod
-    def validate_unique_handedness(cls, value):
-        known = [hand.handedness for hand in value if hand.handedness != "Unknown"]
-        if len(known) != len(set(known)):
-            raise ValueError("um quadro não pode conter duas mãos com a mesma lateralidade")
-        return value
-
 
 class AssistedPredictionRequest(BaseModel):
     format_version: int = Field(default=1, ge=1, le=1)
