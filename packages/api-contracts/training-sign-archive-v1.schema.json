@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://librai.app/contracts/training-sign-archive-v1.schema.json",
+  "title": "Librai Trainer Sign Archive Response v1",
+  "type": "object",
+  "required": ["sign_name", "archived_count"],
+  "properties": {
+    "sign_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "archived_count": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "additionalProperties": false
+}

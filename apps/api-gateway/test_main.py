@@ -465,6 +465,79 @@ def test_professor_lists_and_soft_deletes_only_own_session():
         assert audit.user_id == "Professora Ana"
 
 
+def test_professor_archives_all_own_sessions_for_sign_without_touching_others():
+    professor_a = trainer_headers("Professora Arquivadora")
+    professor_b = trainer_headers("Professor Preservado")
+    landmarks = valid_training_landmarks()
+
+    for _ in range(2):
+        created = client.post(
+            "/v1/training/samples",
+            json={"sign_name": "OLÁ", "landmarks": landmarks},
+            headers=professor_a,
+        )
+        assert created.status_code == 201
+    preserved = client.post(
+        "/v1/training/samples",
+        json={"sign_name": "OLÁ", "landmarks": landmarks},
+        headers=professor_b,
+    )
+    assert preserved.status_code == 201
+
+    archived = client.delete(
+        "/v1/training/my-signs",
+        params={"sign_name": "olá"},
+        headers=professor_a,
+    )
+    assert archived.status_code == 200
+    assert archived.json() == {"sign_name": "OLÁ", "archived_count": 2}
+
+    mine_a = client.get("/v1/training/my-samples", headers=professor_a)
+    mine_b = client.get("/v1/training/my-samples", headers=professor_b)
+    assert mine_a.json() == []
+    assert len(mine_b.json()) == 1
+    assert mine_b.json()[0]["id"] == preserved.json()["id"]
+
+    with TestingSessionLocal() as db:
+        archived_rows = db.query(models.TrainingSample).filter(
+            models.TrainingSample.trainer_name == "Professora Arquivadora"
+        ).all()
+        assert len(archived_rows) == 2
+        assert all(row.deleted_at is not None for row in archived_rows)
+        assert all(
+            row.deleted_by == "Professora Arquivadora"
+            for row in archived_rows
+        )
+        preserved_row = db.query(models.TrainingSample).filter_by(
+            id=preserved.json()["id"]
+        ).one()
+        assert preserved_row.deleted_at is None
+
+
+def test_professor_cannot_archive_sign_owned_only_by_another_professor():
+    owner = trainer_headers("Professora Dona")
+    outsider = trainer_headers("Professor Sem Permissão")
+    created = client.post(
+        "/v1/training/samples",
+        json={"sign_name": "AJUDA", "landmarks": valid_training_landmarks()},
+        headers=owner,
+    )
+    assert created.status_code == 201
+
+    response = client.delete(
+        "/v1/training/my-signs",
+        params={"sign_name": "AJUDA"},
+        headers=outsider,
+    )
+    assert response.status_code == 404
+
+    with TestingSessionLocal() as db:
+        stored = db.query(models.TrainingSample).filter_by(
+            id=created.json()["id"]
+        ).one()
+        assert stored.deleted_at is None
+
+
 def test_administrator_can_list_and_soft_delete_legacy_sample():
     with TestingSessionLocal() as db:
         legacy = models.TrainingSample(

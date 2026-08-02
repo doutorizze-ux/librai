@@ -582,6 +582,45 @@ def delete_my_training_sample(
     }
 
 
+@router.delete(
+    "/training/my-signs",
+    response_model=schemas.TrainingSignArchiveResponse,
+)
+def archive_my_training_sign(
+    sign_name: str,
+    db: Session = Depends(get_db),
+    trainer_name: str = Depends(get_current_trainer),
+):
+    """Arquiva todas as sessões de um sinal pertencentes ao professor atual."""
+    name = canonical_visual_label(sign_name)
+    aliases = ["BOM", "BOA"] if name == "BOM" else [name]
+    samples = db.query(models.TrainingSample).filter(
+        models.TrainingSample.trainer_name == trainer_name,
+        models.TrainingSample.sign_name.in_(aliases),
+        models.TrainingSample.deleted_at.is_(None),
+    ).all()
+    if not samples:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Nenhuma sessão ativa deste sinal foi encontrada na sua conta.",
+        )
+
+    archived_at = datetime.utcnow()
+    for sample in samples:
+        sample.deleted_at = archived_at
+        sample.deleted_by = trainer_name
+    db.add(models.AuditLog(
+        user_id=trainer_name,
+        action="TRAINING_SIGN_OWNER_SOFT_DELETE",
+        target=f"{name}:{len(samples)}_samples",
+    ))
+    db.commit()
+    return {
+        "sign_name": name,
+        "archived_count": len(samples),
+    }
+
+
 def _require_trainer_delete_secret(value: str) -> None:
     if not TRAINER_DELETE_SECRET or not secrets.compare_digest(
         value,

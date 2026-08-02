@@ -626,28 +626,37 @@ class _TrainerScreenState extends State<TrainerScreen> {
     final id = sample['id'] as String;
     final signName = sample['sign_name'] as String;
     final displayName = SignPhraseComposer.displayLabel(signName);
-    final confirmed = await showDialog<bool>(
+    final action = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Excluir esta captura?'),
+        title: const Text('Arquivar treinamento'),
         content: Text(
-          'Somente esta sessão de $displayName será removida. '
-          'As gravações dos outros professores serão preservadas.',
+          'Escolha se deseja arquivar somente esta captura ou todas as suas '
+          'sessões de $displayName. As gravações dos outros professores '
+          'sempre serão preservadas.',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancelar'),
           ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, 'one'),
+            child: const Text('Somente esta'),
+          ),
           FilledButton.icon(
-            onPressed: () => Navigator.pop(dialogContext, true),
+            onPressed: () => Navigator.pop(dialogContext, 'all'),
             icon: const Icon(Icons.delete_outline),
-            label: const Text('Excluir sessão'),
+            label: const Text('Todas deste sinal'),
           ),
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
+    if (action == null || !mounted) return;
+    if (action == 'all') {
+      await _archiveAllMySamplesForSign(signName, displayName);
+      return;
+    }
 
     setState(() => _deletingSampleIds.add(id));
     try {
@@ -675,6 +684,47 @@ class _TrainerScreenState extends State<TrainerScreen> {
       );
     } finally {
       if (mounted) setState(() => _deletingSampleIds.remove(id));
+    }
+  }
+
+  Future<void> _archiveAllMySamplesForSign(
+    String signName,
+    String displayName,
+  ) async {
+    final matchingIds = _mySamples
+        .where((item) => item['sign_name'] == signName)
+        .map((item) => item['id'] as String)
+        .toSet();
+    setState(() => _deletingSampleIds.addAll(matchingIds));
+    try {
+      final response = await _dio.delete(
+        '/v1/training/my-signs',
+        queryParameters: {'sign_name': signName},
+        options: _authorizedOptions,
+      );
+      if (!mounted || response.statusCode != 200) return;
+      final archivedCount =
+          (response.data?['archived_count'] as num?)?.toInt() ?? 0;
+      await Future.wait([_fetchMySamples(), _fetchSummary()]);
+      if (!mounted) return;
+      _showSnackBar(
+        '$archivedCount sessões suas de $displayName foram arquivadas. '
+        'Os outros professores foram preservados.',
+        Colors.green,
+      );
+      final currentSign = _signNameController.text.trim();
+      if (currentSign.isNotEmpty) _onSignNameChanged();
+    } on DioException catch (error) {
+      if (!mounted) return;
+      _showSnackBar(
+        error.response?.data?['detail']?.toString() ??
+            'Não foi possível arquivar este sinal.',
+        Colors.redAccent,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _deletingSampleIds.removeAll(matchingIds));
+      }
     }
   }
 
@@ -1292,8 +1342,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Você pode excluir somente as capturas enviadas '
-                          'pela sua sessão de professor.',
+                          'Toque na lixeira vermelha para arquivar uma captura '
+                          'ou todas as suas sessões daquele sinal.',
                           style: TextStyle(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
@@ -1303,7 +1353,9 @@ class _TrainerScreenState extends State<TrainerScreen> {
                           child: TextButton.icon(
                             onPressed: _manageLegacySamples,
                             icon: const Icon(Icons.history),
-                            label: const Text('Gerenciar capturas antigas'),
+                            label: const Text(
+                              'Administração: registros do sistema antigo',
+                            ),
                           ),
                         ),
                         const SizedBox(height: 12),

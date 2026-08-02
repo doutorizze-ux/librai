@@ -318,6 +318,11 @@ class TrainingSampleMetadataResponse(BaseModel):
         from_attributes = True
 
 
+class TrainingSignArchiveResponse(BaseModel):
+    sign_name: str
+    archived_count: int = Field(ge=1)
+
+
 class TrainingFeature(BaseModel):
     label: str
     angles: List[float]
