@@ -724,11 +724,11 @@ class _TrainerScreenState extends State<TrainerScreen> {
         context: context,
         builder: (dialogContext) => StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
-            title: const Text('Todas as capturas'),
+            title: const Text('Capturas do sistema antigo'),
             content: SizedBox(
               width: 480,
               child: samples.isEmpty
-                  ? const Text('Não existem capturas ativas.')
+                  ? const Text('Não existem capturas antigas ativas.')
                   : ListView.separated(
                       shrinkWrap: true,
                       itemCount: samples.length,
@@ -1303,7 +1303,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
                           child: TextButton.icon(
                             onPressed: _manageLegacySamples,
                             icon: const Icon(Icons.history),
-                            label: const Text('Gerenciar todas as capturas'),
+                            label: const Text('Gerenciar capturas antigas'),
                           ),
                         ),
                         const SizedBox(height: 12),

@@ -514,6 +514,61 @@ def test_administrator_can_delete_sample_from_old_automatic_professor():
     assert deleted.status_code == 200
 
 
+def test_legacy_management_never_lists_or_deletes_current_professor_samples():
+    with TestingSessionLocal() as db:
+        current = models.TrainingSample(
+            sign_name="OBRIGADO",
+            landmarks=valid_training_landmarks(),
+            frame_count=10,
+            trainer_name="Rozana",
+        )
+        db.add(current)
+        db.commit()
+        current_id = current.id
+
+    admin_headers = {
+        "X-Trainer-Delete-Secret": "segredo-admin-exclusao",
+    }
+    listed = client.get("/v1/training/legacy-samples", headers=admin_headers)
+    assert listed.status_code == 200
+    assert current_id not in {item["id"] for item in listed.json()}
+
+    deletion = client.delete(
+        f"/v1/training/legacy-samples/{current_id}",
+        headers=admin_headers,
+    )
+    assert deletion.status_code == 404
+
+    with TestingSessionLocal() as db:
+        stored = db.query(models.TrainingSample).filter_by(id=current_id).one()
+        assert stored.deleted_at is None
+
+
+def test_legacy_bulk_delete_soft_deletes_instead_of_erasing_samples():
+    with TestingSessionLocal() as db:
+        sample = models.TrainingSample(
+            sign_name="ARQUIVAVEL",
+            landmarks=valid_training_landmarks(),
+            frame_count=10,
+            trainer_name="Prof1",
+        )
+        db.add(sample)
+        db.commit()
+        sample_id = sample.id
+
+    response = client.delete(
+        "/v1/training/samples/ARQUIVAVEL",
+        headers={"X-Trainer-Delete-Secret": "segredo-admin-exclusao"},
+    )
+    assert response.status_code == 200
+    assert response.json()["deleted_count"] == 1
+
+    with TestingSessionLocal() as db:
+        stored = db.query(models.TrainingSample).filter_by(id=sample_id).one()
+        assert stored.deleted_at is not None
+        assert stored.deleted_by == "administrator"
+
+
 def test_training_rejects_incomplete_or_invalid_landmarks():
     headers = trainer_headers()
     incomplete = [{"x": 0.1, "y": 0.2, "z": 0.3}] * 21

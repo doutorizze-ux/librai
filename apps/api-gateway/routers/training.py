@@ -6,19 +6,32 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Header, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from database import get_db
 import models
 import schemas
 import security
 from routers.translation import extract_hand_angles
-from sign_labels import canonical_visual_label
+from sign_labels import canonical_visual_label, is_isolated_sign_label
 
 router = APIRouter(prefix="/v1", tags=["training"])
 
 TRAINER_ACCESS_CODE = os.getenv("TRAINER_ACCESS_CODE", "")
 TRAINER_DELETE_SECRET = os.getenv("TRAINER_DELETE_SECRET", "")
 trainer_bearer = HTTPBearer(auto_error=False)
+
+_LEGACY_TRAINER_NAMES = {"prof1"}
+
+
+def _legacy_training_filter():
+    """Identifica somente capturas anteriores às contas de professor atuais."""
+    normalized_trainer = func.lower(
+        func.trim(models.TrainingSample.trainer_name)
+    )
+    return or_(
+        models.TrainingSample.trainer_name.is_(None),
+        normalized_trainer.in_(_LEGACY_TRAINER_NAMES),
+    )
 
 
 def _credential_version(value: str) -> str:
@@ -389,6 +402,13 @@ def create_training_batch_v3(
 ):
     """Coleta isolada com qualidade para o reconhecedor temporal."""
     sign_name = canonical_visual_label(batch.sign_name)
+    if not is_isolated_sign_label(sign_name):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Grave somente um sinal por vez, sem espaços ou pontuação."
+            ),
+        )
     qualities = [
         _repetition_quality(repetition.frames)
         for repetition in batch.repetitions
@@ -585,6 +605,7 @@ def list_legacy_training_samples(
     _require_trainer_delete_secret(x_trainer_secret)
     samples = db.query(models.TrainingSample).filter(
         models.TrainingSample.deleted_at.is_(None),
+        _legacy_training_filter(),
     ).order_by(models.TrainingSample.created_at.desc()).limit(500).all()
     return [
         {
@@ -609,6 +630,7 @@ def delete_legacy_training_sample(
     sample = db.query(models.TrainingSample).filter(
         models.TrainingSample.id == sample_id,
         models.TrainingSample.deleted_at.is_(None),
+        _legacy_training_filter(),
     ).first()
     if not sample:
         raise HTTPException(
@@ -641,10 +663,20 @@ def delete_training_samples(
         )
     
     name = sign_name.upper().strip()
-    deleted_count = db.query(models.TrainingSample).filter(
-        models.TrainingSample.sign_name == name
-    ).delete(synchronize_session=False)
-    
+    samples = db.query(models.TrainingSample).filter(
+        models.TrainingSample.sign_name == name,
+        models.TrainingSample.deleted_at.is_(None),
+    ).all()
+    deleted_at = datetime.utcnow()
+    for sample in samples:
+        sample.deleted_at = deleted_at
+        sample.deleted_by = "administrator"
+    deleted_count = len(samples)
+    if deleted_count:
+        db.add(models.AuditLog(
+            action="TRAINING_SIGN_SOFT_DELETE",
+            target=f"{name}:{deleted_count}_samples",
+        ))
     db.commit()
     return {"sign_name": name, "deleted_count": deleted_count}
 
@@ -666,9 +698,15 @@ def delete_training_samples_by_query(
         )
 
     name = sign_name.upper().strip()
-    deleted_count = db.query(models.TrainingSample).filter(
-        models.TrainingSample.sign_name == name
-    ).delete(synchronize_session=False)
+    samples = db.query(models.TrainingSample).filter(
+        models.TrainingSample.sign_name == name,
+        models.TrainingSample.deleted_at.is_(None),
+    ).all()
+    deleted_at = datetime.utcnow()
+    for sample in samples:
+        sample.deleted_at = deleted_at
+        sample.deleted_by = "administrator"
+    deleted_count = len(samples)
 
     if deleted_count == 0:
         db.rollback()
@@ -677,5 +715,9 @@ def delete_training_samples_by_query(
             detail=f"Nenhuma amostra encontrada para o sinal '{name}'."
         )
 
+    db.add(models.AuditLog(
+        action="TRAINING_SIGN_SOFT_DELETE",
+        target=f"{name}:{deleted_count}_samples",
+    ))
     db.commit()
     return {"sign_name": name, "deleted_count": deleted_count}
