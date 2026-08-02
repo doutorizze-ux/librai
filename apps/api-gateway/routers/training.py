@@ -394,6 +394,163 @@ def _repetition_quality(
     }
 
 
+@router.get(
+    "/training/drafts/current",
+    response_model=schemas.TrainingDraftStatusResponse,
+)
+def get_current_training_draft(
+    db: Session = Depends(get_db),
+    trainer_name: str = Depends(get_current_trainer),
+):
+    draft = db.query(models.TrainingDraft).filter(
+        models.TrainingDraft.trainer_name == trainer_name,
+    ).first()
+    if not draft:
+        return {
+            "active": False,
+            "sign_name": None,
+            "repetitions_saved": 0,
+            "required_repetitions": 5,
+        }
+    return {
+        "active": True,
+        "sign_name": draft.sign_name,
+        "repetitions_saved": len(draft.repetitions or []),
+        "required_repetitions": 5,
+    }
+
+
+@router.post(
+    "/training/drafts/repetitions",
+    response_model=schemas.TrainingDraftRepetitionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def save_training_draft_repetition(
+    repetition: schemas.TrainingDraftRepetitionCreate,
+    db: Session = Depends(get_db),
+    trainer_name: str = Depends(get_current_trainer),
+):
+    """Persiste cada repetição imediatamente e conclui o lote na quinta."""
+    existing_receipt = db.query(models.TrainingCaptureReceipt).filter(
+        models.TrainingCaptureReceipt.capture_id == repetition.capture_id,
+    ).first()
+    if existing_receipt:
+        if existing_receipt.trainer_name != trainer_name:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Identificador de captura já utilizado.",
+            )
+        response = dict(existing_receipt.response)
+        response["duplicate"] = True
+        return response
+
+    sign_name = canonical_visual_label(repetition.sign_name)
+    if not is_isolated_sign_label(sign_name):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Grave somente um sinal por vez, sem espaços ou pontuação.",
+        )
+    quality = _repetition_quality(repetition.frames)
+    fingerprint = _repetition_fingerprint(repetition.frames)
+    frames = [frame.model_dump() for frame in repetition.frames]
+    context = repetition.capture_context.model_dump(exclude_none=True)
+
+    draft = db.query(models.TrainingDraft).filter(
+        models.TrainingDraft.trainer_name == trainer_name,
+    ).with_for_update().first()
+    if draft and draft.sign_name != sign_name:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Conclua as cinco repetições de {draft.sign_name} "
+                "antes de iniciar outro sinal."
+            ),
+        )
+    if not draft:
+        draft = models.TrainingDraft(
+            trainer_name=trainer_name,
+            sign_name=sign_name,
+            capture_context=context,
+            repetitions=[],
+        )
+        db.add(draft)
+        db.flush()
+
+    stored_repetitions = list(draft.repetitions or [])
+    if any(item.get("fingerprint") == fingerprint for item in stored_repetitions):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Esta repetição é idêntica a outra já salva. "
+                "Faça o sinal novamente."
+            ),
+        )
+    stored_repetitions.append({
+        "capture_id": repetition.capture_id,
+        "fingerprint": fingerprint,
+        "quality": quality,
+        "frames": frames,
+    })
+    draft.repetitions = stored_repetitions
+    draft.updated_at = datetime.utcnow()
+    saved_count = len(stored_repetitions)
+
+    response = {
+        "sign_name": sign_name,
+        "repetitions_saved": saved_count,
+        "required_repetitions": 5,
+        "completed": saved_count == 5,
+        "duplicate": False,
+    }
+    receipt = models.TrainingCaptureReceipt(
+        capture_id=repetition.capture_id,
+        trainer_name=trainer_name,
+        sign_name=sign_name,
+        response=response,
+    )
+    db.add(receipt)
+
+    if saved_count < 5:
+        db.add(models.AuditLog(
+            user_id=trainer_name,
+            action="TRAINING_DRAFT_REPETITION_SAVE",
+            target=f"{draft.id}:{sign_name}:{saved_count}/5",
+        ))
+        db.commit()
+        return response
+
+    for entry in stored_repetitions:
+        sequence = {
+            "format_version": 3,
+            "capture_context": draft.capture_context,
+            "quality": entry["quality"],
+            "frames": entry["frames"],
+        }
+        db.add(models.TrainingSample(
+            sign_name=sign_name,
+            landmarks=sequence,
+            trainer_name=trainer_name,
+            frame_count=len(entry["frames"]),
+        ))
+    db.flush()
+
+    final_response = dict(response)
+    for entry in stored_repetitions:
+        saved_receipt = db.query(models.TrainingCaptureReceipt).filter(
+            models.TrainingCaptureReceipt.capture_id == entry["capture_id"],
+        ).first()
+        if saved_receipt:
+            saved_receipt.response = final_response
+    db.delete(draft)
+    db.add(models.AuditLog(
+        user_id=trainer_name,
+        action="TRAINING_DRAFT_COMPLETE_V3",
+        target=f"{sign_name}:5_quality_checked_repetitions",
+    ))
+    db.commit()
+    return final_response
+
+
 @router.post("/training/batches-v3", status_code=status.HTTP_201_CREATED)
 def create_training_batch_v3(
     batch: schemas.TrainingBatchCreateV3,

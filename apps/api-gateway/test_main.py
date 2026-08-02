@@ -1086,6 +1086,168 @@ def test_quality_training_batch_accepts_only_isolated_checked_repetitions():
         ).count() == 10
 
 
+def test_training_draft_survives_interruption_and_completes_on_fifth_repetition():
+    trainer_name = "Professora Rascunho"
+    headers = trainer_headers(trainer_name)
+
+    for repetition in range(3):
+        response = client.post(
+            "/v1/training/drafts/repetitions",
+            json={
+                "capture_id": f"draft_capture_{repetition:02d}_unique",
+                "sign_name": "OLÁ",
+                "format_version": 3,
+                "capture_context": {
+                    "platform": "ios",
+                    "camera_facing": "front",
+                },
+                "frames": structured_hand_frames(
+                    right_movement=0.001 + repetition * 0.0001,
+                    frame_count=32,
+                ),
+            },
+            headers=headers,
+        )
+        assert response.status_code == 201, response.text
+        assert response.json()["repetitions_saved"] == repetition + 1
+        assert response.json()["completed"] is False
+
+    restored_headers = trainer_headers(trainer_name)
+    restored = client.get(
+        "/v1/training/drafts/current",
+        headers=restored_headers,
+    )
+    assert restored.status_code == 200
+    assert restored.json() == {
+        "active": True,
+        "sign_name": "OLÁ",
+        "repetitions_saved": 3,
+        "required_repetitions": 5,
+    }
+
+    with TestingSessionLocal() as db:
+        assert db.query(models.TrainingSample).filter(
+            models.TrainingSample.trainer_name == trainer_name,
+        ).count() == 0
+        draft = db.query(models.TrainingDraft).filter_by(
+            trainer_name=trainer_name,
+        ).one()
+        assert len(draft.repetitions) == 3
+
+    for repetition in range(3, 5):
+        response = client.post(
+            "/v1/training/drafts/repetitions",
+            json={
+                "capture_id": f"draft_capture_{repetition:02d}_unique",
+                "sign_name": "OLÁ",
+                "format_version": 3,
+                "capture_context": {
+                    "platform": "ios",
+                    "camera_facing": "front",
+                },
+                "frames": structured_hand_frames(
+                    right_movement=0.001 + repetition * 0.0001,
+                    frame_count=32,
+                ),
+            },
+            headers=restored_headers,
+        )
+        assert response.status_code == 201, response.text
+
+    assert response.json() == {
+        "sign_name": "OLÁ",
+        "repetitions_saved": 5,
+        "required_repetitions": 5,
+        "completed": True,
+        "duplicate": False,
+    }
+    current = client.get(
+        "/v1/training/drafts/current",
+        headers=restored_headers,
+    )
+    assert current.json()["active"] is False
+
+    # Se o celular perdeu a resposta da API, a reabertura reenvia o mesmo
+    # capture_id. O servidor deve confirmar o lote sem criar duplicatas.
+    retry_after_completion = client.post(
+        "/v1/training/drafts/repetitions",
+        json={
+            "capture_id": "draft_capture_00_unique",
+            "sign_name": "OLÁ",
+            "format_version": 3,
+            "capture_context": {
+                "platform": "ios",
+                "camera_facing": "front",
+            },
+            "frames": structured_hand_frames(
+                right_movement=0.001,
+                frame_count=32,
+            ),
+        },
+        headers=restored_headers,
+    )
+    assert retry_after_completion.status_code == 201
+    assert retry_after_completion.json()["completed"] is True
+    assert retry_after_completion.json()["duplicate"] is True
+
+    with TestingSessionLocal() as db:
+        assert db.query(models.TrainingDraft).filter_by(
+            trainer_name=trainer_name,
+        ).count() == 0
+        assert db.query(models.TrainingSample).filter(
+            models.TrainingSample.trainer_name == trainer_name,
+            models.TrainingSample.sign_name == "OLÁ",
+            models.TrainingSample.deleted_at.is_(None),
+        ).count() == 5
+
+
+def test_training_draft_capture_is_idempotent_and_locks_sign_name():
+    headers = trainer_headers("Professor Idempotente")
+    payload = {
+        "capture_id": "idempotent_capture_0001",
+        "sign_name": "AJUDA",
+        "format_version": 3,
+        "capture_context": {
+            "platform": "web",
+            "camera_facing": "front",
+        },
+        "frames": structured_hand_frames(
+            right_movement=0.001,
+            frame_count=32,
+        ),
+    }
+    first = client.post(
+        "/v1/training/drafts/repetitions",
+        json=payload,
+        headers=headers,
+    )
+    retry = client.post(
+        "/v1/training/drafts/repetitions",
+        json=payload,
+        headers=headers,
+    )
+    assert first.status_code == 201
+    assert retry.status_code == 201
+    assert retry.json()["duplicate"] is True
+    assert retry.json()["repetitions_saved"] == 1
+
+    other_sign = dict(payload)
+    other_sign["capture_id"] = "idempotent_capture_0002"
+    other_sign["sign_name"] = "PROVA"
+    blocked = client.post(
+        "/v1/training/drafts/repetitions",
+        json=other_sign,
+        headers=headers,
+    )
+    assert blocked.status_code == 409
+
+    with TestingSessionLocal() as db:
+        draft = db.query(models.TrainingDraft).filter_by(
+            trainer_name="Professor Idempotente",
+        ).one()
+        assert len(draft.repetitions) == 1
+
+
 def test_quality_training_batch_rejects_replayed_or_short_capture():
     headers = trainer_headers("Professor Auditoria")
     repeated_frames = structured_hand_frames(

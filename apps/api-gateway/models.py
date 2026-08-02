@@ -143,3 +143,30 @@ class TrainingSample(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     deleted_at = Column(DateTime, nullable=True, index=True)
     deleted_by = Column(String, nullable=True)
+
+
+class TrainingDraft(Base):
+    __tablename__ = "training_drafts"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    trainer_name = Column(String, unique=True, index=True, nullable=False)
+    sign_name = Column(String, nullable=False)
+    capture_context = Column(JSON, nullable=False)
+    repetitions = Column(JSON, nullable=False, default=list)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+
+class TrainingCaptureReceipt(Base):
+    __tablename__ = "training_capture_receipts"
+
+    capture_id = Column(String, primary_key=True)
+    trainer_name = Column(String, index=True, nullable=False)
+    sign_name = Column(String, nullable=False)
+    response = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

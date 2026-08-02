@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
@@ -7,7 +8,7 @@ import '../../platform/tts_service.dart';
 import '../../platform/client_platform.dart';
 import '../../domain/sign_phrase_composer.dart';
 import '../../domain/isolated_sign_label.dart';
-import '../../data/quality_training_batch_payload.dart';
+import '../../data/training_draft_store.dart';
 import '../../data/trainer_session_store.dart';
 
 class TrainerScreen extends StatefulWidget {
@@ -21,6 +22,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
   final MediaPipeService _visionService = MediaPipeService();
   final TtsService _ttsService = TtsService();
   final TrainerSessionStore _sessionStore = TrainerSessionStore();
+  final TrainingDraftStore _draftStore = TrainingDraftStore();
   final Dio _dio = Dio(BaseOptions(
     baseUrl: const String.fromEnvironment('API_URL',
         defaultValue: 'https://api.tvcatolica.site'),
@@ -60,7 +62,9 @@ class _TrainerScreenState extends State<TrainerScreen> {
   int _inferenceLatencyMs = 0;
   int _handScreenRatio = 0;
   static const int _requiredRepetitions = 5;
-  final List<List<Map<String, dynamic>>> _pendingRepetitions = [];
+  int _savedRepetitionsCount = 0;
+  bool _isRestoringDraft = false;
+  bool _hasPendingDraftUpload = false;
   String? _activeTrainingSign;
 
   Options get _authorizedOptions => Options(
@@ -226,6 +230,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
     _visionService.start();
     _fetchSummary();
     _fetchMySamples();
+    unawaited(_restoreTrainingDraft());
     _frameTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
       if (!mounted) return;
       final handsOk = _visionService.isHandsDetected();
@@ -331,6 +336,16 @@ class _TrainerScreenState extends State<TrainerScreen> {
     if (_trainerToken == null) {
       await _requestTrainerAccess();
       if (_trainerToken == null) return;
+    }
+    if (_hasPendingDraftUpload) {
+      final pending = await _draftStore.restore(_trainerName ?? '');
+      if (pending != null) {
+        await _uploadPendingRepetition(pending, isRecovery: true);
+        return;
+      }
+      if (mounted) {
+        setState(() => _hasPendingDraftUpload = false);
+      }
     }
     final signName = _signNameController.text.trim().toUpperCase();
     if (signName.isEmpty) {
@@ -480,74 +495,176 @@ class _TrainerScreenState extends State<TrainerScreen> {
       return;
     }
 
-    _pendingRepetitions.add(
-      _recordedHandFrames
+    setState(() {
+      _isUploading = true;
+      _statusMessage = "Salvando esta repetição...";
+    });
+
+    final pending = PendingTrainingRepetition(
+      captureId: _newCaptureId(),
+      trainerName: _trainerName!,
+      signName: signName,
+      platform: currentClientPlatform(),
+      cameraFacing: 'front',
+      frames: _recordedHandFrames
           .map((frame) => Map<String, dynamic>.from(frame))
           .toList(growable: false),
     );
-    final completed = _pendingRepetitions.length;
-    if (completed < _requiredRepetitions) {
-      setState(() {
-        _statusMessage = "Repetição $completed/$_requiredRepetitions válida. "
-            "Repita ${SignPhraseComposer.displayLabel(signName)}.";
-      });
-      _ttsService.speak(
-        "Repetição $completed de $_requiredRepetitions concluída.",
-      );
-      _showSnackBar(
-        "Repetição $completed/$_requiredRepetitions salva. Faça novamente.",
-        Colors.green,
-      );
+    try {
+      // A cópia local é criada antes da rede. Ela só é apagada depois que
+      // o PostgreSQL confirmar o mesmo capture_id.
+      await _draftStore.save(pending);
+      if (!mounted) return;
+      setState(() => _hasPendingDraftUpload = true);
+      await _uploadPendingRepetition(pending);
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  String _newCaptureId() {
+    final random = Random.secure();
+    return '${DateTime.now().microsecondsSinceEpoch}_'
+        '${random.nextInt(0x7fffffff)}_${random.nextInt(0x7fffffff)}';
+  }
+
+  Future<void> _restoreTrainingDraft() async {
+    if (_isRestoringDraft || _trainerToken == null || _trainerName == null) {
       return;
     }
+    _isRestoringDraft = true;
+    try {
+      final pending = await _draftStore.restore(_trainerName!);
+      if (pending != null) {
+        if (mounted) {
+          setState(() => _hasPendingDraftUpload = true);
+        }
+        await _uploadPendingRepetition(pending, isRecovery: true);
+      }
 
-    setState(() {
-      _isUploading = true;
-      _statusMessage = "Enviando as 5 repetições para o servidor...";
-    });
+      final response = await _dio.get(
+        '/v1/training/drafts/current',
+        options: _authorizedOptions,
+      );
+      if (!mounted || response.statusCode != 200) return;
+      final active = response.data['active'] == true;
+      final signName = response.data['sign_name']?.toString();
+      final saved = (response.data['repetitions_saved'] as num?)?.toInt() ?? 0;
+      setState(() {
+        _activeTrainingSign = active ? signName : null;
+        _savedRepetitionsCount = active ? saved : 0;
+        if (active && signName != null) {
+          _signNameController.text = signName;
+          _statusMessage = 'Sessão recuperada: $saved/$_requiredRepetitions '
+              'repetições de ${SignPhraseComposer.displayLabel(signName)}.';
+        }
+      });
+    } on DioException catch (error) {
+      debugPrint('Erro ao recuperar rascunho de treinamento: $error');
+    } finally {
+      _isRestoringDraft = false;
+    }
+  }
 
+  Future<void> _uploadPendingRepetition(
+    PendingTrainingRepetition pending, {
+    bool isRecovery = false,
+  }) async {
+    if (_trainerToken == null) return;
+    if (mounted) {
+      setState(() {
+        _isUploading = true;
+        _statusMessage = isRecovery
+            ? 'Recuperando a repetição interrompida...'
+            : 'Salvando esta repetição no servidor...';
+      });
+    }
     try {
       final response = await _dio.post(
-        '/v1/training/batches-v3',
-        options: _authorizedOptions,
-        data: QualityTrainingBatchPayload.build(
-          signName: signName,
-          repetitions: _pendingRepetitions,
-          platform: currentClientPlatform(),
+        '/v1/training/drafts/repetitions',
+        options: Options(
+          headers: {'Authorization': 'Bearer $_trainerToken'},
+          receiveTimeout: const Duration(seconds: 20),
+          sendTimeout: const Duration(seconds: 20),
         ),
+        data: {
+          'capture_id': pending.captureId,
+          'sign_name': pending.signName,
+          'format_version': 3,
+          'capture_context': {
+            'platform': pending.platform,
+            'camera_facing': pending.cameraFacing,
+          },
+          'frames': pending.frames,
+        },
       );
+      if (response.statusCode != 201 || !mounted) return;
 
-      if (response.statusCode == 201) {
-        setState(() {
+      await _draftStore.clear();
+      final saved = (response.data['repetitions_saved'] as num?)?.toInt() ?? 0;
+      final completed = response.data['completed'] == true;
+      _recordedHandFrames.clear();
+      _recordedLandmarks.clear();
+      setState(() {
+        _hasPendingDraftUpload = false;
+        if (completed) {
           _statusMessage =
-              "Sinal '${SignPhraseComposer.displayLabel(signName)}' concluído "
-              "com mais 5 repetições. Você pode gravar outro lote agora.";
+              "Sinal '${SignPhraseComposer.displayLabel(pending.signName)}' "
+              'concluído e salvo no servidor.';
           _existingSamplesCount += _requiredRepetitions;
-          _isLoadingCount = false;
-          _pendingRepetitions.clear();
+          _savedRepetitionsCount = 0;
           _activeTrainingSign = null;
-        });
-        _ttsService.speak("Cinco repetições concluídas. Sinal gravado!");
+        } else {
+          _activeTrainingSign = pending.signName;
+          _savedRepetitionsCount = saved;
+          _statusMessage = 'Repetição $saved/$_requiredRepetitions salva no '
+              'servidor. Repita ${SignPhraseComposer.displayLabel(pending.signName)}.';
+        }
+      });
+      if (completed) {
+        _ttsService.speak('Cinco repetições concluídas. Sinal gravado!');
         _showSnackBar(
-          "Sinal concluído: 5 repetições enviadas com sucesso.",
+          'Sinal concluído: as 5 repetições estão no servidor.',
           Colors.green,
         );
         _fetchSummary();
         _fetchMySamples();
+      } else {
+        _ttsService.speak(
+          'Repetição $saved de $_requiredRepetitions concluída.',
+        );
+        _showSnackBar(
+          'Repetição $saved/$_requiredRepetitions salva no servidor.',
+          Colors.green,
+        );
       }
     } on DioException catch (error) {
-      debugPrint("Erro ao enviar dados de treino: $error");
+      debugPrint('Erro ao salvar repetição de treino: $error');
+      if (!mounted) return;
       final sessionExpired = error.response?.statusCode == 401;
+      final rejected = error.response != null &&
+          error.response!.statusCode != null &&
+          error.response!.statusCode! >= 400 &&
+          error.response!.statusCode! < 500 &&
+          !sessionExpired;
+      final detail = error.response?.data?['detail']?.toString();
+      if (rejected) {
+        await _draftStore.clear();
+        _recordedHandFrames.clear();
+        _recordedLandmarks.clear();
+      }
+      if (!mounted) return;
       setState(() {
-        if (_pendingRepetitions.length == _requiredRepetitions) {
-          _pendingRepetitions.removeLast();
-        }
-        _statusMessage = sessionExpired
-            ? 'Sua sessão expirou. Entre novamente; as 4 primeiras '
-                'repetições continuam nesta tela.'
-            : error.response?.data?['detail']?.toString() ??
-                "Falha ao enviar. As 4 primeiras repetições foram mantidas; "
-                    "grave a quinta novamente.";
+        _hasPendingDraftUpload = !rejected;
+        _activeTrainingSign = pending.signName;
+        _statusMessage = rejected
+            ? detail ?? 'A repetição foi recusada. Grave novamente.'
+            : sessionExpired
+                ? 'Sua sessão expirou. A repetição está protegida neste aparelho; '
+                    'entre novamente para enviá-la.'
+                : detail ??
+                    'Sem confirmação do servidor. A repetição continua salva '
+                        'neste aparelho; toque no botão para tentar novamente.';
       });
       _showSnackBar(_statusMessage, Colors.redAccent);
       if (sessionExpired) {
@@ -1114,7 +1231,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
                                 ? 'BOA usa o mesmo gesto de BOM: treine somente BOM.'
                                 : (_signNameController.text.trim().isNotEmpty
                                     ? (_activeTrainingSign != null
-                                        ? 'Sessão em andamento: ${_pendingRepetitions.length}/$_requiredRepetitions repetições. O nome fica travado até concluir.'
+                                        ? 'Sessão em andamento: $_savedRepetitionsCount/$_requiredRepetitions repetições salvas no servidor. O nome fica travado até concluir.'
                                         : (_existingSamplesCount >= 30
                                             ? 'Meta atingida! $_existingSamplesCount/30 sessões gravadas.'
                                             : 'Sessões gravadas: $_existingSamplesCount/30. Cada professor fará 5 repetições sem redigitar o nome.'))
@@ -1159,7 +1276,9 @@ class _TrainerScreenState extends State<TrainerScreen> {
                               ? (_existingSamplesCount >= _requiredRepetitions
                                   ? "Gravar mais 5 repetições"
                                   : "Começar 5 repetições")
-                              : "Gravar repetição ${_pendingRepetitions.length + 1}/$_requiredRepetitions"),
+                              : (_hasPendingDraftUpload
+                                  ? 'Tentar enviar repetição pendente'
+                                  : "Gravar repetição ${_savedRepetitionsCount + 1}/$_requiredRepetitions")),
                       style: const TextStyle(
                           fontSize: 18, fontWeight: FontWeight.bold),
                     ),

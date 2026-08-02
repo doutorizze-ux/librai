@@ -297,6 +297,58 @@ class TrainingBatchCreateV3(BaseModel):
         return value.strip().upper()
 
 
+class TrainingDraftRepetitionCreate(BaseModel):
+    capture_id: str = Field(
+        min_length=16,
+        max_length=80,
+        pattern=r"^[A-Za-z0-9_-]+$",
+    )
+    sign_name: str = Field(
+        min_length=1,
+        max_length=40,
+        pattern=(
+            r"^[A-Za-zÀ-ÖØ-öø-ÿ0-9]+"
+            r"(?:[-'][A-Za-zÀ-ÖØ-öø-ÿ0-9]+)*$"
+        ),
+    )
+    format_version: int = Field(default=3, ge=3, le=3)
+    capture_context: TrainingCaptureContextV3
+    frames: List[TrainingFrame] = Field(min_length=24, max_length=180)
+
+    @field_validator("sign_name")
+    @classmethod
+    def normalize_draft_sign_name(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @field_validator("frames")
+    @classmethod
+    def validate_draft_timestamps(cls, value):
+        timestamps = [frame.timestamp_ms for frame in value]
+        if (
+            timestamps != sorted(timestamps)
+            or len(timestamps) != len(set(timestamps))
+        ):
+            raise ValueError(
+                "timestamps dos quadros devem ser únicos e crescentes"
+            )
+        return value
+
+
+class TrainingDraftRepetitionResponse(BaseModel):
+    sign_name: str
+    repetitions_saved: int = Field(ge=1, le=5)
+    required_repetitions: int = Field(default=5, ge=5, le=5)
+    completed: bool
+    duplicate: bool = False
+
+
+class TrainingDraftStatusResponse(BaseModel):
+    active: bool
+    sign_name: Optional[str] = None
+    repetitions_saved: int = Field(ge=0, le=4)
+    required_repetitions: int = Field(default=5, ge=5, le=5)
+
+
 class TrainingSampleResponse(BaseModel):
     id: str
     sign_name: str
