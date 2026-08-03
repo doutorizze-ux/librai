@@ -5,69 +5,41 @@ importScripts(
 
 const {
   FilesetResolver,
-  HandLandmarker,
-  PoseLandmarker,
-  FaceLandmarker,
+  HolisticLandmarker,
 } = self.exports;
 
 const POSE_INDICES = [0, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 23, 24];
 
-let handLandmarker = null;
-let poseLandmarker = null;
-let faceLandmarker = null;
+let holisticLandmarker = null;
 let delegate = "CPU";
 let isReady = false;
 
-async function closeLandmarkers() {
-  await handLandmarker?.close?.();
-  await poseLandmarker?.close?.();
-  await faceLandmarker?.close?.();
-  handLandmarker = null;
-  poseLandmarker = null;
-  faceLandmarker = null;
+async function closeLandmarker() {
+  await holisticLandmarker?.close?.();
+  holisticLandmarker = null;
 }
 
-async function createLandmarkers(vision, paths, requestedDelegate) {
-  handLandmarker = await HandLandmarker.createFromOptions(vision, {
+async function createLandmarker(vision, paths, requestedDelegate) {
+  holisticLandmarker = await HolisticLandmarker.createFromOptions(vision, {
     baseOptions: {
-      modelAssetPath: paths.handModelAssetPath,
+      modelAssetPath: paths.holisticModelAssetPath,
       delegate: requestedDelegate,
     },
     runningMode: "VIDEO",
-    numHands: 2,
-    minHandDetectionConfidence: 0.55,
-    minHandPresenceConfidence: 0.55,
-    minTrackingConfidence: 0.55,
-  });
-  poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
-    baseOptions: {
-      modelAssetPath: paths.poseModelAssetPath,
-      delegate: requestedDelegate,
-    },
-    runningMode: "VIDEO",
-    numPoses: 1,
+    minHandLandmarksConfidence: 0.5,
     minPoseDetectionConfidence: 0.5,
     minPosePresenceConfidence: 0.5,
-    minTrackingConfidence: 0.5,
-    outputSegmentationMasks: false,
-  });
-  faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
-    baseOptions: {
-      modelAssetPath: paths.faceModelAssetPath,
-      delegate: requestedDelegate,
-    },
-    runningMode: "VIDEO",
-    numFaces: 1,
+    minPoseSuppressionThreshold: 0.3,
     minFaceDetectionConfidence: 0.5,
     minFacePresenceConfidence: 0.5,
-    minTrackingConfidence: 0.5,
+    minFaceSuppressionThreshold: 0.3,
     outputFaceBlendshapes: false,
-    outputFacialTransformationMatrixes: false,
+    outputPoseSegmentationMasks: false,
   });
 }
 
 async function initialize(message) {
-  if (handLandmarker && poseLandmarker && faceLandmarker) {
+  if (holisticLandmarker) {
     self.postMessage({
       type: isReady ? "ready" : "warmup-request",
       delegate,
@@ -77,15 +49,15 @@ async function initialize(message) {
 
   const vision = await FilesetResolver.forVisionTasks(message.wasmRoot);
   try {
-    await createLandmarkers(vision, message, "GPU");
+    await createLandmarker(vision, message, "GPU");
     delegate = "GPU";
   } catch (gpuError) {
     console.warn(
       "MediaPipe holístico GPU indisponível; usando CPU dedicada.",
       gpuError,
     );
-    await closeLandmarkers();
-    await createLandmarkers(vision, message, "CPU");
+    await closeLandmarker();
+    await createLandmarker(vision, message, "CPU");
     delegate = "CPU";
   }
   self.postMessage({ type: "warmup-request", delegate });
@@ -134,22 +106,26 @@ function dynamicExpression(face) {
   };
 }
 
+function serializeHand(hand) {
+  return hand.map(({ x, y, z }) => ({ x, y, z }));
+}
+
 function serializeHands(result) {
-  return {
-    landmarks: (result.landmarks || []).map((hand) =>
-      hand.map(({ x, y, z }) => ({ x, y, z })),
-    ),
-    handedness: (result.handedness || []).map((categories) =>
-      categories.map((category) => ({
-        label: category.categoryName || category.displayName || "Unknown",
-        score: Number(category.score || 0),
-      })),
-    ),
-  };
+  const landmarks = [];
+  const handedness = [];
+  for (const hand of result.leftHandLandmarks || []) {
+    landmarks.push(serializeHand(hand));
+    handedness.push([{ label: "Left", score: 1 }]);
+  }
+  for (const hand of result.rightHandLandmarks || []) {
+    landmarks.push(serializeHand(hand));
+    handedness.push([{ label: "Right", score: 1 }]);
+  }
+  return { landmarks, handedness };
 }
 
 function serializePose(result) {
-  const pose = result.landmarks?.[0];
+  const pose = result.poseLandmarks?.[0];
   if (!pose) return [];
   return POSE_INDICES.map((index) => {
     const point = pose[index] || { x: 0, y: 0, z: 0 };
@@ -158,14 +134,12 @@ function serializePose(result) {
 }
 
 function runAll(bitmap, timestampMs) {
-  const hands = handLandmarker.detectForVideo(bitmap, timestampMs);
-  const pose = poseLandmarker.detectForVideo(bitmap, timestampMs);
-  const face = faceLandmarker.detectForVideo(bitmap, timestampMs);
-  const expression = dynamicExpression(face.faceLandmarks?.[0]);
+  const result = holisticLandmarker.detectForVideo(bitmap, timestampMs);
+  const expression = dynamicExpression(result.faceLandmarks?.[0]);
   return {
-    ...serializeHands(hands),
-    poseLandmarks: serializePose(pose),
-    poseDetected: Boolean(pose.landmarks?.length),
+    ...serializeHands(result),
+    poseLandmarks: serializePose(result),
+    poseDetected: Boolean(result.poseLandmarks?.length),
     faceDetected: expression.detected,
     expression: expression.values,
   };
@@ -206,7 +180,7 @@ self.onmessage = async (event) => {
   const { bitmap, timestampMs, sessionId } = message;
   const startedAt = performance.now();
   try {
-    if (!handLandmarker || !poseLandmarker || !faceLandmarker) {
+    if (!holisticLandmarker) {
       throw new Error("Rastreamento holístico ainda não foi inicializado.");
     }
     self.postMessage({
