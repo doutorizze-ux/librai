@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://librai.app/contracts/holistic-prediction-response-v4.schema.json",
+  "title": "Librai Holistic Temporal Prediction Response v4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["label", "confidence", "model", "support"],
+  "properties": {
+    "label": { "type": "string", "minLength": 1 },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "model": { "const": "holistic_sequence_v4" },
+    "support": { "type": "integer", "minimum": 0 }
+  }
+}

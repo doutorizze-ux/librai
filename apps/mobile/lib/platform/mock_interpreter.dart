@@ -8,7 +8,9 @@ class MockSignInterpreter implements SignInterpreter {
   final double confidenceThreshold = 0.75;
   final List<List<Map<String, double>>> _sequenceFrames = [];
   final List<Map<String, dynamic>> _structuredSequenceFrames = [];
+  final List<Map<String, dynamic>> _holisticSequenceFrames = [];
   int _structuredFramesSincePrediction = 0;
+  int _holisticFramesSincePrediction = 0;
 
   final Dio _dio = Dio(BaseOptions(
     baseUrl: AppConfig.apiUrl,
@@ -27,7 +29,9 @@ class MockSignInterpreter implements SignInterpreter {
   void resetSequence() {
     _sequenceFrames.clear();
     _structuredSequenceFrames.clear();
+    _holisticSequenceFrames.clear();
     _structuredFramesSincePrediction = 0;
+    _holisticFramesSincePrediction = 0;
   }
 
   void addHandFrame(Map<String, dynamic> frame) {
@@ -45,6 +49,63 @@ class MockSignInterpreter implements SignInterpreter {
   bool get hasEnoughHandFrames =>
       _structuredSequenceFrames.length >= 24 &&
       _structuredFramesSincePrediction >= 6;
+
+  void addHolisticFrame(Map<String, dynamic> frame) {
+    final hands = frame['hands'];
+    final pose = frame['pose'];
+    final expression = frame['expression'];
+    if (hands is! List || hands.isEmpty || pose is! Map || expression is! Map) {
+      return;
+    }
+    _holisticSequenceFrames.add(Map<String, dynamic>.from(frame));
+    _holisticFramesSincePrediction++;
+    if (_holisticSequenceFrames.length > 96) {
+      _holisticSequenceFrames.removeAt(0);
+    }
+  }
+
+  bool get hasEnoughHolisticFrames =>
+      _holisticSequenceFrames.length >= 24 &&
+      _holisticFramesSincePrediction >= 6;
+
+  Future<PredictionResult> predictBufferedHolisticSequence() async {
+    if (_loadedModelPath == null) {
+      throw StateError("Modelo não carregado. Chame loadModel() primeiro.");
+    }
+    if (!hasEnoughHolisticFrames) {
+      return PredictionResult(
+        label: "DADOS_INSUFICIENTES",
+        confidence: 0,
+        isTestFixture: false,
+        modelVersion: "holistic_sequence_v4",
+      );
+    }
+    final snapshot = _holisticSequenceFrames
+        .map((frame) => Map<String, dynamic>.from(frame))
+        .toList(growable: false);
+    _holisticFramesSincePrediction = 0;
+    try {
+      final response = await _dio.post(
+        '/v1/translation/predict-sequence-v4',
+        data: {'format_version': 4, 'frames': snapshot},
+      );
+      return PredictionResult(
+        label: response.data['label'] as String,
+        confidence: (response.data['confidence'] as num).toDouble(),
+        isTestFixture: false,
+        modelVersion:
+            response.data['model'] as String? ?? "holistic_sequence_v4",
+      );
+    } catch (e) {
+      debugPrint("[Remote Interpreter v4] Falha: $e");
+      return PredictionResult(
+        label: "SINAL_DESCONHECIDO",
+        confidence: 0,
+        isTestFixture: false,
+        modelVersion: "holistic_sequence_v4",
+      );
+    }
+  }
 
   Future<PredictionResult> predictBufferedSequence() async {
     if (_loadedModelPath == null) {

@@ -186,3 +186,134 @@ def two_hand_temporal_distance(first, second):
             sum((a - b) ** 2 for a, b in zip(frame_a, frame_b)) / 24
         )
     return total / len(first)
+
+
+def _point_dict(point):
+    if hasattr(point, "model_dump"):
+        return point.model_dump()
+    return point
+
+
+def _body_reference(pose):
+    """Retorna centro e escala do tronco para posições invariantes à distância."""
+    points = pose.get("landmarks") if isinstance(pose, dict) else None
+    if not isinstance(points, list) or len(points) != 13:
+        return None
+    points = [_point_dict(point) for point in points]
+    left_shoulder, right_shoulder = points[5], points[6]
+    left_hip, right_hip = points[11], points[12]
+    shoulder_center = {
+        axis: (left_shoulder.get(axis, 0.0) + right_shoulder.get(axis, 0.0)) / 2
+        for axis in ("x", "y", "z")
+    }
+    hip_center = {
+        axis: (left_hip.get(axis, 0.0) + right_hip.get(axis, 0.0)) / 2
+        for axis in ("x", "y", "z")
+    }
+    shoulder_width = _magnitude([
+        right_shoulder.get(axis, 0.0) - left_shoulder.get(axis, 0.0)
+        for axis in ("x", "y", "z")
+    ])
+    torso_height = _magnitude([
+        hip_center[axis] - shoulder_center[axis]
+        for axis in ("x", "y", "z")
+    ])
+    scale = max(shoulder_width, torso_height, 1e-3)
+    return points, shoulder_center, scale
+
+
+def _relative_point(point, origin, scale):
+    point = _point_dict(point)
+    return [
+        (point.get(axis, 0.0) - origin[axis]) / scale
+        for axis in ("x", "y", "z")
+    ]
+
+
+def extract_holistic_signature(frames):
+    """Assinatura v4 com mãos posicionadas em relação ao tronco e expressão.
+
+    A versão anterior removia a posição inicial do pulso. Isso tornava sinais
+    feitos em regiões diferentes do corpo artificialmente parecidos.
+    """
+    if not isinstance(frames, list):
+        return None
+    source_timestamps = [
+        frame.get("timestamp_ms") for frame in frames if isinstance(frame, dict)
+    ]
+    if (
+        len(source_timestamps) != len(frames)
+        or any(not isinstance(value, int) for value in source_timestamps)
+        or source_timestamps != sorted(source_timestamps)
+        or len(source_timestamps) != len(set(source_timestamps))
+    ):
+        return None
+    sampled = _resample(frames)
+    if not sampled:
+        return None
+
+    signature = []
+    for frame in sampled:
+        if not isinstance(frame, dict):
+            return None
+        body = _body_reference(frame.get("pose"))
+        hands = frame.get("hands")
+        expression = frame.get("expression")
+        if (
+            body is None
+            or not isinstance(hands, list)
+            or not isinstance(expression, dict)
+        ):
+            return None
+        pose_points, body_center, body_scale = body
+        by_side = {}
+        for index, hand in enumerate(hands[:2]):
+            if not isinstance(hand, dict):
+                return None
+            points = hand.get("landmarks")
+            if not isinstance(points, list) or len(points) != 21:
+                return None
+            by_side[_hand_slot(hand, index)] = [
+                _point_dict(point) for point in points
+            ]
+
+        features = []
+        for side in ("Left", "Right"):
+            points = by_side.get(side)
+            if points is None:
+                features.extend([0.0] * 12)
+                continue
+            features.append(1.0)
+            features.extend(angle / 180.0 for angle in _angles(points))
+            features.extend(_relative_point(points[0], body_center, body_scale))
+
+        # Cotovelos e pulsos mantêm a configuração dos braços, também
+        # normalizada pelo tronco (índices 13..16 no modelo MediaPipe).
+        for pose_index in (7, 8, 9, 10):
+            features.extend(
+                value * 0.55
+                for value in _relative_point(
+                    pose_points[pose_index], body_center, body_scale
+                )
+            )
+        features.extend([
+            float(expression.get("mouth_open", 0.0)) * 0.20,
+            float(expression.get("mouth_width", 0.0)) * 0.20,
+            float(expression.get("left_brow", 0.0)) * 0.20,
+            float(expression.get("right_brow", 0.0)) * 0.20,
+        ])
+        signature.append(features)
+    return signature
+
+
+def holistic_temporal_distance(first, second):
+    if not first or not second or len(first) != len(second):
+        return math.inf
+    total = 0.0
+    for frame_a, frame_b in zip(first, second):
+        if len(frame_a) != 40 or len(frame_b) != 40:
+            return math.inf
+        total += math.sqrt(
+            sum((a - b) ** 2 for a, b in zip(frame_a, frame_b)) / 40
+        )
+    return total / len(first)

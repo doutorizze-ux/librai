@@ -10,15 +10,21 @@ import models
 import schemas
 from assisted_recognition import get_assisted_recognizer
 from routers.auth import get_current_user, get_current_user_helper
-from sign_labels import canonical_visual_label, is_isolated_sign_label
+from sign_labels import (
+    canonical_lexical_unit_label,
+    canonical_visual_label,
+    is_isolated_sign_label,
+    is_lexical_unit_label,
+)
 from temporal_recognition import (
+    extract_holistic_signature,
     extract_temporal_signature,
     extract_two_hand_signature,
+    holistic_temporal_distance,
     split_flat_landmarks,
     temporal_distance,
     two_hand_temporal_distance,
 )
-
 router = APIRouter(prefix="/v1", tags=["translation"])
 logger = logging.getLogger(__name__)
 
@@ -31,10 +37,15 @@ _temporal_index_fingerprint = None
 _temporal_index = []
 _temporal_v2_index_fingerprint = None
 _temporal_v2_index = []
+_holistic_v4_index_fingerprint = None
+_holistic_v4_index = []
 
 MIN_V2_LABEL_SAMPLES = 3
 MAX_V2_LABEL_DISTANCE = 0.16
 MIN_V2_LABEL_MARGIN = 0.012
+MIN_V4_LABEL_SAMPLES = 3
+MAX_V4_LABEL_DISTANCE = 0.18
+MIN_V4_LABEL_MARGIN = 0.018
 
 
 def extract_hand_angles(landmarks):
@@ -180,6 +191,38 @@ def get_temporal_v2_training_index(db: Session):
     return rebuilt
 
 
+def get_holistic_v4_training_index(db: Session):
+    """Carrega somente lotes v4 completos; nunca mistura dados v2/v3."""
+    global _holistic_v4_index_fingerprint, _holistic_v4_index
+    sample_stats = db.query(
+        func.count(models.TrainingSample.id),
+        func.max(models.TrainingSample.created_at),
+    ).filter(models.TrainingSample.deleted_at.is_(None)).one()
+    fingerprint = (str(db.get_bind().url), sample_stats[0], sample_stats[1])
+    if fingerprint == _holistic_v4_index_fingerprint:
+        return _holistic_v4_index
+
+    rebuilt = []
+    samples = db.query(
+        models.TrainingSample.sign_name,
+        models.TrainingSample.landmarks,
+    ).filter(models.TrainingSample.deleted_at.is_(None)).all()
+    for sign_name, payload in samples:
+        label = canonical_lexical_unit_label(sign_name)
+        if (
+            not is_lexical_unit_label(label)
+            or not isinstance(payload, dict)
+            or payload.get("format_version") != 4
+        ):
+            continue
+        signature = extract_holistic_signature(payload.get("frames"))
+        if signature:
+            rebuilt.append((label, signature))
+    _holistic_v4_index = rebuilt
+    _holistic_v4_index_fingerprint = fingerprint
+    return rebuilt
+
+
 def _rank_v2_labels(signatures, index):
     """Agrupa repetições por sinal para não confiar em uma amostra isolada."""
     distances_by_label = {}
@@ -196,6 +239,25 @@ def _rank_v2_labels(signatures, index):
         if len(finite) < MIN_V2_LABEL_SAMPLES:
             continue
         support = finite[:MIN_V2_LABEL_SAMPLES]
+        ranked.append((sum(support) / len(support), label, support))
+    return sorted(ranked, key=lambda item: item[0])
+
+
+def _rank_holistic_v4_labels(signatures, index):
+    distances_by_label = {}
+    for label, trained in index:
+        distance = min(
+            holistic_temporal_distance(signature, trained)
+            for signature in signatures
+        )
+        distances_by_label.setdefault(label, []).append(distance)
+
+    ranked = []
+    for label, distances in distances_by_label.items():
+        finite = sorted(value for value in distances if math.isfinite(value))
+        if len(finite) < MIN_V4_LABEL_SAMPLES:
+            continue
+        support = finite[:MIN_V4_LABEL_SAMPLES]
         ranked.append((sum(support) / len(support), label, support))
     return sorted(ranked, key=lambda item: item[0])
 
@@ -340,6 +402,85 @@ def predict_sign_sequence_v2(
         "label": best_label,
         "confidence": round(float(confidence), 2),
         "model": "two_hand_sequence_v2",
+        "support": len(support),
+    }
+
+
+@router.post(
+    "/translation/predict-sequence-v4",
+    response_model=schemas.HolisticPredictionResponseV4,
+)
+def predict_holistic_sequence_v4(
+    payload: schemas.HolisticPredictionRequestV4,
+    db: Session = Depends(get_db),
+):
+    """Reconhece usando somente coletas holísticas v4 compatíveis."""
+    frames = [frame.model_dump() for frame in payload.frames]
+    candidate_frames = []
+    for window_size in (24, 32, 40, 48, 64, 80, 96):
+        if len(frames) >= window_size:
+            candidate_frames.append(frames[-window_size:])
+    if len(frames) not in {24, 32, 40, 48, 64, 80, 96}:
+        candidate_frames.append(frames)
+    signatures = [
+        signature
+        for candidate in candidate_frames
+        if (signature := extract_holistic_signature(candidate)) is not None
+    ]
+    if not signatures:
+        return {
+            "label": "DADOS_INSUFICIENTES",
+            "confidence": 0.0,
+            "model": "holistic_sequence_v4",
+            "support": 0,
+        }
+
+    index = get_holistic_v4_training_index(db)
+    ranked = _rank_holistic_v4_labels(signatures, index)
+    if not ranked:
+        return {
+            "label": "SINAL_DESCONHECIDO",
+            "confidence": 0.0,
+            "model": "holistic_sequence_v4",
+            "support": 0,
+        }
+
+    best_distance, best_label, support = ranked[0]
+    if best_distance > MAX_V4_LABEL_DISTANCE:
+        return {
+            "label": "SINAL_DESCONHECIDO",
+            "confidence": 0.0,
+            "model": "holistic_sequence_v4",
+            "support": len(support),
+        }
+
+    second = ranked[1][0] if len(ranked) > 1 else math.inf
+    margin = max(0.0, second - best_distance)
+    required_margin = MIN_V4_LABEL_MARGIN + best_distance * 0.10
+    if math.isfinite(second) and margin < required_margin:
+        return {
+            "label": "SINAL_AMBIGUO",
+            "confidence": 0.0,
+            "model": "holistic_sequence_v4",
+            "support": len(support),
+        }
+
+    quality = max(0.0, 1.0 - best_distance / MAX_V4_LABEL_DISTANCE)
+    separation = (
+        0.0 if not math.isfinite(second) else min(1.0, margin / 0.10)
+    )
+    confidence = min(0.99, 0.75 + quality * 0.20 + separation * 0.04)
+    logger.info(
+        "holistic_v4_prediction label=%s distance=%.5f margin=%s support=%d",
+        best_label,
+        best_distance,
+        "none" if not math.isfinite(second) else f"{margin:.5f}",
+        len(support),
+    )
+    return {
+        "label": best_label,
+        "confidence": round(float(confidence), 2),
+        "model": "holistic_sequence_v4",
         "support": len(support),
     }
 

@@ -209,6 +209,45 @@ void main() {
       interpreter.addHandFrame(frame(23));
       expect(interpreter.hasEnoughHandFrames, isTrue);
     });
+
+    test('Usa quadros holísticos completos no tradutor v4', () async {
+      final interpreter = MockSignInterpreter();
+      await interpreter.loadModel('weights.json');
+
+      Map<String, dynamic> frame(int index) => {
+            'timestamp_ms': 1000 + index * 33,
+            'hands': [
+              {
+                'handedness': 'Right',
+                'score': 0.99,
+                'landmarks': [
+                  for (var point = 0; point < 21; point++)
+                    {'x': 0.2, 'y': 0.3, 'z': 0.0},
+                ],
+              },
+            ],
+            'pose': {
+              'landmarks': [
+                for (var point = 0; point < 13; point++)
+                  {'x': 0.4, 'y': 0.5, 'z': 0.0},
+              ],
+            },
+            'expression': {
+              'mouth_open': 0.1,
+              'mouth_width': 0.3,
+              'left_brow': 0.0,
+              'right_brow': 0.0,
+            },
+          };
+
+      for (var index = 0; index < 23; index++) {
+        interpreter.addHolisticFrame(frame(index));
+      }
+      expect(interpreter.hasEnoughHolisticFrames, isFalse);
+
+      interpreter.addHolisticFrame(frame(23));
+      expect(interpreter.hasEnoughHolisticFrames, isTrue);
+    });
   });
 
   group('Testes do Buffer de Sinais (GlossesBuffer)', () {

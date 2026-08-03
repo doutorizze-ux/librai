@@ -69,7 +69,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
       _lastLandmarkRevision = revision;
 
       final landmarks = _visionService.getLatestLandmarks();
-      final handFrame = _visionService.getLatestHandFrame();
+      final holisticFrame = _visionService.getLatestHolisticFrame();
       final handsOk = _visionService.isHandsDetected();
       final faceOk = _visionService.isFaceDetected();
       final bodyOk = _visionService.isBodyDetected();
@@ -83,10 +83,10 @@ class _TranslationScreenState extends State<TranslationScreen> {
       } else {
         _scheduleHandsRelease();
       }
-      if (handFrame != null) {
+      if (holisticFrame != null) {
         // A captura não pode parar enquanto uma requisição de reconhecimento
         // está em andamento. O movimento precisa permanecer contínuo.
-        _interpreter.addHandFrame(handFrame);
+        _interpreter.addHolisticFrame(holisticFrame);
       }
 
       if (_handsDetected != handsOk ||
@@ -103,8 +103,7 @@ class _TranslationScreenState extends State<TranslationScreen> {
 
       // Processamento assíncrono do frame
       _processFrame(
-        landmarks,
-        handFrame,
+        holisticFrame,
         handsOk,
       );
     });
@@ -156,20 +155,19 @@ class _TranslationScreenState extends State<TranslationScreen> {
   }
 
   Future<void> _processFrame(
-    List<Map<String, double>>? landmarks,
-    Map<String, dynamic>? handFrame,
+    Map<String, dynamic>? holisticFrame,
     bool handsOk,
   ) async {
-    if (handsOk && landmarks != null && landmarks.isNotEmpty) {
+    if (handsOk && holisticFrame != null) {
       if (_frameBuffer.isProcessing) return;
-      if (handFrame != null && !_interpreter.hasEnoughHandFrames) return;
+      if (!_interpreter.hasEnoughHolisticFrames) {
+        return;
+      }
       _frameBuffer.setProcessing(true);
       final sequenceGeneration = _sequenceGeneration;
 
       try {
-        final prediction = handFrame != null
-            ? await _interpreter.predictBufferedSequence()
-            : await _interpreter.predict(landmarks);
+        final prediction = await _interpreter.predictBufferedHolisticSequence();
         if (!mounted ||
             !_isTranslating ||
             sequenceGeneration != _sequenceGeneration) {

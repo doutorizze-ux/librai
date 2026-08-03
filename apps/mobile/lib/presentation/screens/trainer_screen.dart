@@ -618,7 +618,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
         if (completed) {
           _statusMessage =
               "Sinal '${SignPhraseComposer.displayLabel(pending.signName)}' "
-              '${isHolistic ? 'coletado e aguardando validação da nova IA.' : 'concluído e salvo no servidor.'}';
+              '${isHolistic ? 'disponível no tradutor v4 e salvo para a nova IA.' : 'concluído e salvo no servidor.'}';
           if (!isHolistic) {
             _existingSamplesCount += _requiredRepetitions;
           }

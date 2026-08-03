@@ -292,7 +292,11 @@ def holistic_frames(repetition_offset=0.0, frame_count=24, hand_ratio=1.0):
     return frames
 
 
-def holistic_batch(sign_name="OLÁ"):
+def holistic_batch(
+    sign_name="OLÁ",
+    base_offset=0.0,
+    capture_prefix="capture_holistic",
+):
     return {
         "format_version": 4,
         "sign_name": sign_name,
@@ -307,8 +311,8 @@ def holistic_batch(sign_name="OLÁ"):
         },
         "repetitions": [
             {
-                "capture_id": f"capture_holistic_{index:02d}",
-                "frames": holistic_frames(index * 0.003),
+                "capture_id": f"{capture_prefix}_{index:02d}",
+                "frames": holistic_frames(base_offset + index * 0.003),
             }
             for index in range(5)
         ],
@@ -350,6 +354,91 @@ def test_holistic_training_keeps_multiword_label_as_one_libras_unit():
         samples = db.query(models.TrainingSample).all()
         assert len(samples) == 5
         assert {sample.sign_name for sample in samples} == {"TUDO BEM?"}
+
+
+def test_holistic_translator_uses_v4_multiword_training_not_old_v3_label():
+    old_headers = trainer_headers("Professor Formato Antigo")
+    for index in range(5):
+        old_sample = client.post(
+            "/v1/training/samples-v2",
+            headers=old_headers,
+            json={
+                "sign_name": "OBRIGADO",
+                "format_version": 2,
+                "frames": structured_hand_frames(
+                    left_movement=0.004 + index * 0.0001,
+                    frame_count=32,
+                    two_hands=False,
+                ),
+            },
+        )
+        assert old_sample.status_code == 201, old_sample.text
+
+    trained = client.post(
+        "/v1/training/batches-v4",
+        headers=trainer_headers("Professora Formato Novo"),
+        json=holistic_batch("TUDO BEM?"),
+    )
+    assert trained.status_code == 201, trained.text
+    competing_v4 = client.post(
+        "/v1/training/batches-v4",
+        headers=trainer_headers("Professora Obrigado Novo"),
+        json=holistic_batch(
+            "OBRIGADO",
+            base_offset=0.18,
+            capture_prefix="capture_obrigado_v4",
+        ),
+    )
+    assert competing_v4.status_code == 201, competing_v4.text
+
+    prediction = client.post(
+        "/v1/translation/predict-sequence-v4",
+        json={
+            "format_version": 4,
+            "frames": holistic_frames(0.004, frame_count=32),
+        },
+    )
+
+    assert prediction.status_code == 200, prediction.text
+    assert prediction.json()["label"] == "TUDO BEM?"
+    assert prediction.json()["model"] == "holistic_sequence_v4"
+    assert prediction.json()["support"] == 3
+    assert prediction.json()["confidence"] >= 0.75
+
+
+def test_holistic_translator_never_falls_back_to_incompatible_old_samples():
+    headers = trainer_headers("Professor Somente Antigo")
+    for index in range(5):
+        created = client.post(
+            "/v1/training/samples-v2",
+            headers=headers,
+            json={
+                "sign_name": "OBRIGADO",
+                "format_version": 2,
+                "frames": structured_hand_frames(
+                    right_movement=0.004 + index * 0.0001,
+                    frame_count=32,
+                    two_hands=False,
+                ),
+            },
+        )
+        assert created.status_code == 201
+
+    prediction = client.post(
+        "/v1/translation/predict-sequence-v4",
+        json={
+            "format_version": 4,
+            "frames": holistic_frames(0.004, frame_count=32),
+        },
+    )
+
+    assert prediction.status_code == 200
+    assert prediction.json() == {
+        "label": "SINAL_DESCONHECIDO",
+        "confidence": 0.0,
+        "model": "holistic_sequence_v4",
+        "support": 0,
+    }
 
 
 def test_holistic_draft_persists_each_repetition_and_completes_multiword_unit():

@@ -416,6 +416,31 @@ class HolisticFrameV4(BaseModel):
     expression: DynamicExpression
 
 
+class HolisticPredictionRequestV4(BaseModel):
+    format_version: Literal[4] = 4
+    frames: List[HolisticFrameV4] = Field(min_length=24, max_length=120)
+
+    @field_validator("frames")
+    @classmethod
+    def validate_prediction_timestamps(cls, value):
+        timestamps = [frame.timestamp_ms for frame in value]
+        if (
+            timestamps != sorted(timestamps)
+            or len(timestamps) != len(set(timestamps))
+        ):
+            raise ValueError(
+                "timestamps dos quadros devem ser únicos e crescentes"
+            )
+        return value
+
+
+class HolisticPredictionResponseV4(BaseModel):
+    label: str
+    confidence: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
+    model: Literal["holistic_sequence_v4"] = "holistic_sequence_v4"
+    support: int = Field(ge=0)
+
+
 class HolisticLinguisticMetadataV4(BaseModel):
     regional_variation: str = Field(min_length=2, max_length=80)
     dominant_hand: Literal["Left", "Right", "Ambidextrous", "Unknown"]
