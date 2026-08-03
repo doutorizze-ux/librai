@@ -91,7 +91,12 @@
       "properties": {
         "x": { "type": "number", "minimum": -0.5, "maximum": 1.5 },
         "y": { "type": "number", "minimum": -0.5, "maximum": 1.5 },
-        "z": { "type": "number", "minimum": -3, "maximum": 3 }
+        "z": {
+          "type": "number",
+          "minimum": -10,
+          "maximum": 10,
+          "description": "MediaPipe depth is relative and may legitimately exceed +/-3 when a hand approaches the camera."
+        }
       }
     },
     "hand": {

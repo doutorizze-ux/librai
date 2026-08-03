@@ -423,6 +423,35 @@ def test_holistic_draft_persists_each_repetition_and_completes_multiword_unit():
         )
 
 
+def test_holistic_draft_accepts_mediapipe_depth_near_camera():
+    frames = holistic_frames()
+    for frame in frames:
+        frame["pose"]["landmarks"][10]["z"] = -4.25
+
+    response = client.post(
+        "/v1/training/drafts-v4/repetitions",
+        headers=trainer_headers("Professora Profundidade"),
+        json={
+            "capture_id": "depth_near_camera_01",
+            "format_version": 4,
+            "sign_name": "Ola",
+            "capture_context": {
+                "platform": "web",
+                "camera_facing": "front",
+                "app_version": "test",
+            },
+            "linguistic_metadata": {
+                "regional_variation": "Minas Gerais",
+                "dominant_hand": "Right",
+            },
+            "frames": frames,
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["repetitions_saved"] == 1
+
+
 def test_holistic_training_rejects_replayed_capture_ids():
     headers = trainer_headers("Professora Holística")
     first = client.post(

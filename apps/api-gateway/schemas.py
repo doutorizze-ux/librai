@@ -380,8 +380,26 @@ class TrainingModelResponse(BaseModel):
 
 
 # --- DEVELOPER API AND HOLISTIC CONTINUOUS RECOGNITION ---
+class HolisticLandmarkV4(BaseModel):
+    """Landmark range used by MediaPipe holistic capture.
+
+    Depth is relative to the body/camera scale and can legitimately exceed the
+    narrower range used by the legacy hand-only collector.
+    """
+
+    x: float = Field(ge=-0.5, le=1.5, allow_inf_nan=False)
+    y: float = Field(ge=-0.5, le=1.5, allow_inf_nan=False)
+    z: float = Field(ge=-10.0, le=10.0, allow_inf_nan=False)
+
+
+class HolisticHandV4(BaseModel):
+    handedness: Literal["Left", "Right", "Unknown"]
+    score: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
+    landmarks: List[HolisticLandmarkV4] = Field(min_length=21, max_length=21)
+
+
 class HolisticPose(BaseModel):
-    landmarks: List[TrainingLandmark] = Field(min_length=13, max_length=13)
+    landmarks: List[HolisticLandmarkV4] = Field(min_length=13, max_length=13)
 
 
 class DynamicExpression(BaseModel):
@@ -393,7 +411,7 @@ class DynamicExpression(BaseModel):
 
 class HolisticFrameV4(BaseModel):
     timestamp_ms: int = Field(ge=0)
-    hands: List[TrainingHand] = Field(min_length=0, max_length=2)
+    hands: List[HolisticHandV4] = Field(min_length=0, max_length=2)
     pose: HolisticPose
     expression: DynamicExpression
 

@@ -8,7 +8,10 @@ from pydantic import BaseModel, Field, field_validator
 class Landmark(BaseModel):
     x: float = Field(ge=-0.5, le=1.5, allow_inf_nan=False)
     y: float = Field(ge=-0.5, le=1.5, allow_inf_nan=False)
-    z: float = Field(ge=-3.0, le=3.0, allow_inf_nan=False)
+    # MediaPipe depth is relative and commonly exceeds +/-3 when a hand is
+    # close to the camera. Keep a finite anti-corruption bound without
+    # rejecting valid signing movements.
+    z: float = Field(ge=-10.0, le=10.0, allow_inf_nan=False)
 
 
 class Hand(BaseModel):

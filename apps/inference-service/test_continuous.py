@@ -38,6 +38,15 @@ def test_motion_energy_uses_torso_normalization():
     assert 0.09 < motion_energy(first, second) < 0.11
 
 
+def test_holistic_frame_accepts_mediapipe_depth_near_camera():
+    payload = frame(0, 0.2)
+    payload["pose"]["landmarks"][10]["z"] = -4.25
+
+    parsed = HolisticFrame.model_validate(payload)
+
+    assert parsed.pose.landmarks[10].z == -4.25
+
+
 def test_completed_segment_is_never_guessed_without_production_model():
     engine = ContinuousRecognitionEngine(recognizer=None)
     frames = [frame(0, 0.2)]
