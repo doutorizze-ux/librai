@@ -51,4 +51,22 @@ void main() {
     expect(holistic, greaterThanOrEqualTo(0));
     expect(start, greaterThan(holistic));
   });
+
+  test('camera and avatar engines are not kept alive outside their screens',
+      () {
+    final index = File('web/index.html').readAsStringSync();
+    final avatarView = File(
+      'lib/platform/vlibras/vlibras_avatar_view_web.dart',
+    ).readAsStringSync();
+
+    expect(index, isNot(contains('prewarmLibraiAvatar')));
+    expect(index, isNot(contains('librai-avatar-prewarm')));
+    expect(index, contains('handWorker.terminate()'));
+    expect(index, contains('workerReadyPromise = null'));
+
+    // O avatar continua disponível: seu iframe nasce sob demanda somente
+    // quando a tela de Português para Libras realmente for aberta.
+    expect(avatarView, contains('_iframe = web.HTMLIFrameElement()'));
+    expect(avatarView, contains('_loadInitialPlayer()'));
+  });
 }
