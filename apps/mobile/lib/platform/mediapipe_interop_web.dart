@@ -113,6 +113,17 @@ class MediaPipeService {
     }
   }
 
+  void setCaptureMode(String mode) {
+    try {
+      final b = _bridge;
+      if (b != null) {
+        b.callMethod<JSAny?>('setCaptureMode'.toJS, mode.toJS);
+      }
+    } catch (e) {
+      debugPrint("Falha ao selecionar modo do MediaPipe JS: $e");
+    }
+  }
+
   bool isHandsDetected() {
     try {
       final b = _bridge;
@@ -125,11 +136,23 @@ class MediaPipeService {
   }
 
   bool isFaceDetected() {
-    return true; // Ignorado no Web para estabilidade de memória e CPU
+    try {
+      final b = _bridge;
+      if (b == null) return false;
+      return b.getProperty<JSAny?>('faceDetected'.toJS)?.dartify() == true;
+    } catch (e) {
+      return false;
+    }
   }
 
   bool isBodyDetected() {
-    return true; // Ignorado no Web para estabilidade de memória e CPU
+    try {
+      final b = _bridge;
+      if (b == null) return false;
+      return b.getProperty<JSAny?>('poseDetected'.toJS)?.dartify() == true;
+    } catch (e) {
+      return false;
+    }
   }
 
   int getLandmarkRevision() {
@@ -278,5 +301,88 @@ class MediaPipeService {
       debugPrint('Falha ao ler quadro estruturado das mãos: $e');
       return null;
     }
+  }
+
+  Map<String, dynamic>? getLatestHolisticFrame() {
+    try {
+      final b = _bridge;
+      if (b == null) return null;
+      final raw = b.getProperty<JSAny?>('latestHolisticFrame'.toJS)?.dartify();
+      if (raw is! Map) return null;
+      final timestamp = raw['timestampMs'];
+      final rawHands = raw['hands'];
+      final rawPose = raw['pose'];
+      final rawExpression = raw['expression'];
+      if (timestamp is! num ||
+          rawHands is! List ||
+          rawPose is! Map ||
+          rawExpression is! Map) {
+        return null;
+      }
+
+      final hands = <Map<String, dynamic>>[];
+      for (final rawHand in rawHands) {
+        if (rawHand is! Map) continue;
+        final points = _parsePoints(rawHand['landmarks']);
+        if (points.length != 21) continue;
+        final score = rawHand['score'];
+        hands.add({
+          'handedness': rawHand['handedness']?.toString() ?? 'Unknown',
+          'score': score is num ? score.toDouble() : 0.0,
+          'landmarks': points,
+        });
+      }
+
+      final posePoints = _parsePoints(rawPose['landmarks']);
+      if (hands.isEmpty || posePoints.length != 13) return null;
+      double? number(String key) {
+        final value = rawExpression[key];
+        return value is num ? value.toDouble() : null;
+      }
+
+      final mouthOpen = number('mouth_open');
+      final mouthWidth = number('mouth_width');
+      final leftBrow = number('left_brow');
+      final rightBrow = number('right_brow');
+      if (mouthOpen == null ||
+          mouthWidth == null ||
+          leftBrow == null ||
+          rightBrow == null) {
+        return null;
+      }
+      return {
+        'timestamp_ms': timestamp.toInt(),
+        'hands': hands,
+        'pose': {'landmarks': posePoints},
+        'expression': {
+          'mouth_open': mouthOpen,
+          'mouth_width': mouthWidth,
+          'left_brow': leftBrow,
+          'right_brow': rightBrow,
+        },
+      };
+    } catch (e) {
+      debugPrint('Falha ao ler quadro holístico: $e');
+      return null;
+    }
+  }
+
+  List<Map<String, double>> _parsePoints(Object? rawPoints) {
+    if (rawPoints is! List) return const [];
+    final points = <Map<String, double>>[];
+    for (final point in rawPoints) {
+      if (point is! Map) continue;
+      final x = point['x'];
+      final y = point['y'];
+      final z = point['z'];
+      if (x is num && y is num && z is num) {
+        points.add({
+          'x': x.toDouble(),
+          'y': y.toDouble(),
+          'z': z.toDouble(),
+        });
+      }
+    }
+    return points;
   }
 }

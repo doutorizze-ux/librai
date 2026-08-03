@@ -7,7 +7,7 @@ import '../../platform/mediapipe_interop.dart';
 import '../../platform/tts_service.dart';
 import '../../platform/client_platform.dart';
 import '../../domain/sign_phrase_composer.dart';
-import '../../domain/isolated_sign_label.dart';
+import '../../domain/lexical_sign_label.dart';
 import '../../data/training_draft_store.dart';
 import '../../data/trainer_session_store.dart';
 
@@ -39,7 +39,10 @@ class _TrainerScreenState extends State<TrainerScreen> {
   bool _isCountingDown = false;
   List<Map<String, double>> _recordedLandmarks = [];
   final List<Map<String, dynamic>> _recordedHandFrames = [];
+  final List<Map<String, dynamic>> _recordedHolisticFrames = [];
   bool _handsDetected = false;
+  bool _faceDetected = false;
+  bool _bodyDetected = false;
   String _statusMessage = "Posicione a mão em frente à câmera";
   bool _isUploading = false;
 
@@ -67,6 +70,9 @@ class _TrainerScreenState extends State<TrainerScreen> {
   bool _hasPendingDraftUpload = false;
   String? _activeTrainingSign;
 
+  bool get _holisticCaptureReady =>
+      _trackingQuality == 'good' && _faceDetected && _bodyDetected;
+
   Options get _authorizedOptions => Options(
         headers: {'Authorization': 'Bearer $_trainerToken'},
       );
@@ -77,6 +83,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
     // O PlatformView precisa existir antes do primeiro build. Se o registro
     // ocorrer somente após o diálogo de autenticação, o Safari mantém a
     // visualização criada sem factory como uma superfície preta.
+    _visionService.setCaptureMode('holistic');
     _visionService.registerVideoView();
     _signNameController.addListener(_onSignNameChanged);
     WidgetsBinding.instance
@@ -227,6 +234,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
   void _startTrainerServices() {
     if (_trainerServicesStarted) return;
     _trainerServicesStarted = true;
+    _visionService.setCaptureMode('holistic');
     _visionService.start();
     _fetchSummary();
     _fetchMySamples();
@@ -234,12 +242,16 @@ class _TrainerScreenState extends State<TrainerScreen> {
     _frameTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
       if (!mounted) return;
       final handsOk = _visionService.isHandsDetected();
+      final faceOk = _visionService.isFaceDetected();
+      final bodyOk = _visionService.isBodyDetected();
       final trackingQuality = _visionService.getTrackingQuality();
       final handsCount = _visionService.getHandsCount();
       final inferenceFps = _visionService.getInferenceFps();
       final inferenceLatencyMs = _visionService.getInferenceLatencyMs();
       final handScreenRatio = _visionService.getHandScreenRatio();
       if (_handsDetected != handsOk ||
+          _faceDetected != faceOk ||
+          _bodyDetected != bodyOk ||
           _trackingQuality != trackingQuality ||
           _handsCount != handsCount ||
           (_inferenceFps - inferenceFps).abs() >= 0.5 ||
@@ -247,6 +259,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
           _handScreenRatio != handScreenRatio) {
         setState(() {
           _handsDetected = handsOk;
+          _faceDetected = faceOk;
+          _bodyDetected = bodyOk;
           _trackingQuality = trackingQuality;
           _handsCount = handsCount;
           _inferenceFps = inferenceFps;
@@ -274,26 +288,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
   void _onSignNameChanged() {
     if (_activeTrainingSign != null) return;
     if (_trainerToken == null) return;
-    final text = _signNameController.text.trim().toUpperCase();
+    final text = LexicalSignLabel.normalize(_signNameController.text);
     if (text.isEmpty) {
-      setState(() {
-        _existingSamplesCount = 0;
-        _isLoadingCount = false;
-      });
-      return;
-    }
-
-    if (SignPhraseComposer.trainingComponentsFor(text) != null) {
-      _debounceTimer?.cancel();
-      setState(() {
-        _existingSamplesCount = 0;
-        _isLoadingCount = false;
-      });
-      return;
-    }
-
-    if (SignPhraseComposer.normalizeLabel(text) == 'BOA') {
-      _debounceTimer?.cancel();
       setState(() {
         _existingSamplesCount = 0;
         _isLoadingCount = false;
@@ -347,36 +343,17 @@ class _TrainerScreenState extends State<TrainerScreen> {
         setState(() => _hasPendingDraftUpload = false);
       }
     }
-    final signName = _signNameController.text.trim().toUpperCase();
+    final signName = LexicalSignLabel.normalize(_signNameController.text);
     if (signName.isEmpty) {
       _showSnackBar(
           "Por favor, digite o nome do sinal (ex: OBRIGADO)", Colors.redAccent);
       return;
     }
 
-    if (!IsolatedSignLabel.isValid(signName)) {
+    if (!LexicalSignLabel.isValid(signName)) {
       _showSnackBar(
-        "Grave somente uma palavra por vez, sem espaços ou pontuação. "
-        "Exemplo: BOM e depois DIA.",
-        Colors.orange,
-      );
-      return;
-    }
-
-    final requiredSigns = SignPhraseComposer.trainingComponentsFor(signName);
-    if (requiredSigns != null) {
-      _showSnackBar(
-        "Grave separadamente: ${requiredSigns.join(' e ')}. "
-        "O tradutor montará a expressão automaticamente.",
-        Colors.orange,
-      );
-      return;
-    }
-
-    if (SignPhraseComposer.normalizeLabel(signName) == 'BOA') {
-      _showSnackBar(
-        "Não grave BOA separadamente. Use apenas BOM; o tradutor escolherá "
-        "“boa” quando o próximo sinal for TARDE ou NOITE.",
+        "Digite o significado de uma única unidade de Libras. Ela pode ter "
+        "mais de uma palavra, como TUDO BEM?.",
         Colors.orange,
       );
       return;
@@ -419,13 +396,14 @@ class _TrainerScreenState extends State<TrainerScreen> {
       _isRecording = true;
       _recordedLandmarks.clear();
       _recordedHandFrames.clear();
+      _recordedHolisticFrames.clear();
       _validCapturedFrames = 0;
       _lastCapturedRevision = _visionService.getLandmarkRevision();
       _statusMessage = "Gravando sinal: $signName";
     });
 
     const minimumCaptureTicks = 60;
-    const maximumCaptureTicks = 120;
+    const maximumCaptureTicks = 180;
     int frameCount = 0;
     Timer.periodic(const Duration(milliseconds: 33), (timer) async {
       if (!mounted || !_isRecording) {
@@ -451,16 +429,20 @@ class _TrainerScreenState extends State<TrainerScreen> {
       _lastCapturedRevision = revision;
       final latest = _visionService.getLatestLandmarks();
       final handFrame = _visionService.getLatestHandFrame();
+      final holisticFrame = _visionService.getLatestHolisticFrame();
       if (latest != null &&
           latest.length >= 21 &&
           latest.length % 21 == 0 &&
-          _visionService.getTrackingQuality() == 'good') {
-        if (handFrame != null) {
-          _recordedHandFrames.add(handFrame);
+          _visionService.getTrackingQuality() == 'good' &&
+          _visionService.isFaceDetected() &&
+          _visionService.isBodyDetected()) {
+        if (holisticFrame != null) {
+          _recordedHolisticFrames.add(holisticFrame);
           _validCapturedFrames++;
+        } else if (handFrame != null) {
+          _recordedHandFrames.add(handFrame);
         } else {
           _recordedLandmarks.addAll(latest);
-          _validCapturedFrames++;
         }
       }
 
@@ -488,7 +470,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
     if (_validCapturedFrames < 24) {
       setState(() {
         _statusMessage =
-            "Captura insuficiente: mantenha a mão visível durante a gravação.";
+            "Captura insuficiente: mantenha mãos, rosto e tronco visíveis.";
       });
       _showSnackBar(
         "Gravação recusada: somente $_validCapturedFrames quadro(s) útil(eis). "
@@ -498,13 +480,14 @@ class _TrainerScreenState extends State<TrainerScreen> {
       return;
     }
 
-    if (_recordedHandFrames.isEmpty) {
+    if (_recordedHolisticFrames.length < 24) {
       setState(() {
         _statusMessage =
-            "Captura recusada: atualize a página e mantenha as mãos visíveis.";
+            "Captura recusada: mantenha mãos, rosto e tronco visíveis.";
       });
       _showSnackBar(
-        "A câmera não entregou a sequência completa das mãos. Tente novamente.",
+        "A IA não recebeu a sequência completa de mãos, rosto e tronco. "
+        "Reposicione-se e tente novamente.",
         Colors.redAccent,
       );
       return;
@@ -521,9 +504,10 @@ class _TrainerScreenState extends State<TrainerScreen> {
       signName: signName,
       platform: currentClientPlatform(),
       cameraFacing: 'front',
-      frames: _recordedHandFrames
+      frames: _recordedHolisticFrames
           .map((frame) => Map<String, dynamic>.from(frame))
           .toList(growable: false),
+      formatVersion: 4,
     );
     try {
       // A cópia local é criada antes da rede. Ela só é apagada depois que
@@ -595,8 +579,11 @@ class _TrainerScreenState extends State<TrainerScreen> {
       });
     }
     try {
+      final isHolistic = pending.formatVersion == 4;
       final response = await _dio.post(
-        '/v1/training/drafts/repetitions',
+        isHolistic
+            ? '/v1/training/drafts-v4/repetitions'
+            : '/v1/training/drafts/repetitions',
         options: Options(
           headers: {'Authorization': 'Bearer $_trainerToken'},
           receiveTimeout: const Duration(seconds: 20),
@@ -605,11 +592,16 @@ class _TrainerScreenState extends State<TrainerScreen> {
         data: {
           'capture_id': pending.captureId,
           'sign_name': pending.signName,
-          'format_version': 3,
+          'format_version': pending.formatVersion,
           'capture_context': {
             'platform': pending.platform,
             'camera_facing': pending.cameraFacing,
           },
+          if (isHolistic)
+            'linguistic_metadata': {
+              'regional_variation': pending.regionalVariation,
+              'dominant_hand': pending.dominantHand,
+            },
           'frames': pending.frames,
         },
       );
@@ -619,14 +611,17 @@ class _TrainerScreenState extends State<TrainerScreen> {
       final saved = (response.data['repetitions_saved'] as num?)?.toInt() ?? 0;
       final completed = response.data['completed'] == true;
       _recordedHandFrames.clear();
+      _recordedHolisticFrames.clear();
       _recordedLandmarks.clear();
       setState(() {
         _hasPendingDraftUpload = false;
         if (completed) {
           _statusMessage =
               "Sinal '${SignPhraseComposer.displayLabel(pending.signName)}' "
-              'concluído e salvo no servidor.';
-          _existingSamplesCount += _requiredRepetitions;
+              '${isHolistic ? 'coletado e aguardando validação da nova IA.' : 'concluído e salvo no servidor.'}';
+          if (!isHolistic) {
+            _existingSamplesCount += _requiredRepetitions;
+          }
           _savedRepetitionsCount = 0;
           _activeTrainingSign = null;
         } else {
@@ -1034,7 +1029,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
                           border: Border.all(
                             color: _isRecording
                                 ? Colors.redAccent
-                                : (_handsDetected
+                                : (_holisticCaptureReady
                                     ? Colors.green
                                     : Colors.grey.shade800),
                             width: 3,
@@ -1060,13 +1055,19 @@ class _TrainerScreenState extends State<TrainerScreen> {
                               left: 16,
                               child: Semantics(
                                 liveRegion: true,
-                                label: _trackingQuality == 'good'
-                                    ? 'Captura válida. $_handsCount mão detectada.'
-                                    : _trackingQuality == 'edge'
-                                        ? 'Mão próxima da borda. Centralize as mãos.'
-                                        : _trackingQuality == 'far'
-                                            ? 'Mãos distantes. Aproxime-se da câmera.'
-                                            : 'Aguardando detecção das mãos.',
+                                label: _holisticCaptureReady
+                                    ? 'Captura válida. Mãos, rosto e tronco detectados.'
+                                    : _trackingQuality == 'good' &&
+                                            !_faceDetected
+                                        ? 'Mostre o rosto inteiro.'
+                                        : _trackingQuality == 'good' &&
+                                                !_bodyDetected
+                                            ? 'Mostre o tronco e os ombros.'
+                                            : _trackingQuality == 'edge'
+                                                ? 'Mão próxima da borda. Centralize as mãos.'
+                                                : _trackingQuality == 'far'
+                                                    ? 'Mãos distantes. Aproxime-se da câmera.'
+                                                    : 'Aguardando detecção das mãos.',
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 14,
@@ -1076,7 +1077,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
                                     color: Colors.black.withOpacity(0.72),
                                     borderRadius: BorderRadius.circular(999),
                                     border: Border.all(
-                                      color: _trackingQuality == 'good'
+                                      color: _holisticCaptureReady
                                           ? const Color(0xFF00FFD1)
                                           : _trackingQuality == 'edge'
                                               ? const Color(0xFFFFD740)
@@ -1087,7 +1088,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
                                     ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: (_trackingQuality == 'good'
+                                        color: (_holisticCaptureReady
                                                 ? const Color(0xFF00FFD1)
                                                 : _trackingQuality == 'edge'
                                                     ? const Color(0xFFFFD740)
@@ -1104,7 +1105,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Icon(
-                                        _trackingQuality == 'good'
+                                        _holisticCaptureReady
                                             ? Icons.check_circle
                                             : _trackingQuality == 'edge'
                                                 ? Icons.warning_amber_rounded
@@ -1113,7 +1114,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
                                                     : Icons
                                                         .pan_tool_alt_outlined,
                                         size: 20,
-                                        color: _trackingQuality == 'good'
+                                        color: _holisticCaptureReady
                                             ? const Color(0xFF00FFD1)
                                             : _trackingQuality == 'edge'
                                                 ? const Color(0xFFFFD740)
@@ -1123,13 +1124,20 @@ class _TrainerScreenState extends State<TrainerScreen> {
                                       ),
                                       const SizedBox(width: 8),
                                       Text(
-                                        _trackingQuality == 'good'
-                                            ? 'CAPTURA VÁLIDA • $_handsCount MÃO${_handsCount == 1 ? '' : 'S'}'
-                                            : _trackingQuality == 'edge'
-                                                ? 'CENTRALIZE AS MÃOS'
-                                                : _trackingQuality == 'far'
-                                                    ? 'APROXIME AS MÃOS'
-                                                    : 'MOSTRE AS MÃOS',
+                                        _holisticCaptureReady
+                                            ? 'CAPTURA VÁLIDA • MÃOS + ROSTO + TRONCO'
+                                            : _trackingQuality == 'good' &&
+                                                    !_faceDetected
+                                                ? 'MOSTRE O ROSTO'
+                                                : _trackingQuality == 'good' &&
+                                                        !_bodyDetected
+                                                    ? 'MOSTRE O TRONCO'
+                                                    : _trackingQuality == 'edge'
+                                                        ? 'CENTRALIZE AS MÃOS'
+                                                        : _trackingQuality ==
+                                                                'far'
+                                                            ? 'APROXIME AS MÃOS'
+                                                            : 'MOSTRE AS MÃOS',
                                         style: const TextStyle(
                                           color: Colors.white,
                                           fontWeight: FontWeight.w800,

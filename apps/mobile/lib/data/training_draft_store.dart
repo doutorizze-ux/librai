@@ -10,6 +10,9 @@ class PendingTrainingRepetition {
     required this.platform,
     required this.cameraFacing,
     required this.frames,
+    this.formatVersion = 3,
+    this.regionalVariation = 'Não informado',
+    this.dominantHand = 'Unknown',
   });
 
   final String captureId;
@@ -18,6 +21,9 @@ class PendingTrainingRepetition {
   final String platform;
   final String cameraFacing;
   final List<Map<String, dynamic>> frames;
+  final int formatVersion;
+  final String regionalVariation;
+  final String dominantHand;
 
   Map<String, dynamic> toJson() => {
         'capture_id': captureId,
@@ -26,6 +32,9 @@ class PendingTrainingRepetition {
         'platform': platform,
         'camera_facing': cameraFacing,
         'frames': frames,
+        'format_version': formatVersion,
+        'regional_variation': regionalVariation,
+        'dominant_hand': dominantHand,
       };
 
   static PendingTrainingRepetition? fromJson(Object? value) {
@@ -36,6 +45,7 @@ class PendingTrainingRepetition {
     final platform = value['platform'];
     final cameraFacing = value['camera_facing'];
     final rawFrames = value['frames'];
+    final rawFormatVersion = value['format_version'];
     if (captureId is! String ||
         trainerName is! String ||
         signName is! String ||
@@ -56,6 +66,10 @@ class PendingTrainingRepetition {
       platform: platform,
       cameraFacing: cameraFacing,
       frames: frames,
+      formatVersion: rawFormatVersion is num ? rawFormatVersion.toInt() : 3,
+      regionalVariation:
+          value['regional_variation']?.toString() ?? 'Não informado',
+      dominantHand: value['dominant_hand']?.toString() ?? 'Unknown',
     );
   }
 }

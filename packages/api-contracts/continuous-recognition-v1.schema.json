@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://librai.app/contracts/continuous-recognition-v1.schema.json",
+  "title": "Librai Continuous Recognition Chunk v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol_version", "stream_id", "sequence_number", "frames", "end_of_stream"],
+  "properties": {
+    "protocol_version": { "const": 1 },
+    "stream_id": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 80,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "sequence_number": { "type": "integer", "minimum": 0 },
+    "frames": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 120,
+      "items": {
+        "$ref": "holistic-training-batch-v4.schema.json#/$defs/frame"
+      }
+    },
+    "end_of_stream": { "type": "boolean" }
+  }
+}

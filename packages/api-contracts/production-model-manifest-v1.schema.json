@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://librai.app/contracts/production-model-manifest-v1.schema.json",
+  "title": "Librai Production Model Manifest v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "model_id",
+    "architecture",
+    "feature_schema",
+    "sequence_length",
+    "labels",
+    "validation_mode",
+    "validation_accuracy",
+    "onnx_file",
+    "onnx_sha256",
+    "status"
+  ],
+  "properties": {
+    "model_id": { "type": "string", "minLength": 8, "maxLength": 120 },
+    "architecture": { "const": "ST-GCN" },
+    "feature_schema": { "const": "librai_holistic_v4" },
+    "sequence_length": { "type": "integer", "minimum": 24, "maximum": 120 },
+    "labels": {
+      "type": "object",
+      "minProperties": 2,
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "validation_mode": { "const": "global-trainer" },
+    "validation_accuracy": { "type": "number", "minimum": 0.7, "maximum": 1 },
+    "onnx_file": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "onnx_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "status": { "const": "production" }
+  }
+}

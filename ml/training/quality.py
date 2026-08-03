@@ -51,7 +51,7 @@ def validate_dataset(
         if not label or not trainer or not isinstance(sequence, dict):
             invalid += 1
             continue
-        if sequence.get("format_version") not in {2, 3}:
+        if sequence.get("format_version") not in {2, 3, 4}:
             invalid += 1
             continue
         by_class[label] += 1

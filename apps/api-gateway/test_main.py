@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from database import Base, get_db
 from main import app
 import models
-from routers import training, translation
+from routers import developer, training, translation
 
 # Configuração de banco de dados SQLite temporário para testes
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
@@ -32,9 +32,123 @@ client = TestClient(app)
 def setup_db():
     training.TRAINER_ACCESS_CODE = "codigo-professores-seguro"
     training.TRAINER_DELETE_SECRET = "segredo-admin-exclusao"
+    developer.API_KEY_PEPPER = "pepper-de-teste-seguro"
+    developer.ADMIN_API_SECRET = "segredo-admin-api-seguro"
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
+
+
+def create_developer_key(scopes=None):
+    response = client.post(
+        "/v1/admin/developer-credentials",
+        headers={"X-Librai-Admin-Secret": "segredo-admin-api-seguro"},
+        json={
+            "name": "Integração de teste",
+            "scopes": scopes or ["translation:recognize"],
+        },
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+def test_developer_key_is_returned_once_and_stored_as_hash():
+    created = create_developer_key()
+    assert created["api_key"].startswith(
+        f"librai_{created['key_prefix']}_"
+    )
+
+    listed = client.get(
+        "/v1/admin/developer-credentials",
+        headers={"X-Librai-Admin-Secret": "segredo-admin-api-seguro"},
+    )
+    assert listed.status_code == 200
+    assert listed.json()[0]["key_prefix"] == created["key_prefix"]
+    assert "api_key" not in listed.json()[0]
+
+    with TestingSessionLocal() as db:
+        stored = db.query(models.DeveloperCredential).one()
+        assert stored.key_hash != created["api_key"]
+        assert created["api_key"] not in stored.key_hash
+
+
+def test_continuous_recognition_requires_scoped_developer_key(monkeypatch):
+    denied = client.post(
+        "/v1/developer/recognition/chunks",
+        headers={"X-Librai-Key": "librai_invalid_invalid"},
+        json={
+            "protocol_version": 1,
+            "stream_id": "stream_1234567890",
+            "sequence_number": 0,
+            "frames": [],
+            "end_of_stream": False,
+        },
+    )
+    assert denied.status_code == 401
+
+    credential = create_developer_key(scopes=["models:read"])
+    forbidden = client.post(
+        "/v1/developer/recognition/chunks",
+        headers={"X-Librai-Key": credential["api_key"]},
+        json={
+            "protocol_version": 1,
+            "stream_id": "stream_1234567890",
+            "sequence_number": 0,
+            "frames": [],
+            "end_of_stream": False,
+        },
+    )
+    assert forbidden.status_code == 403
+
+
+def test_continuous_recognition_proxies_validated_payload(monkeypatch):
+    credential = create_developer_key()
+
+    def fake_forward(payload):
+        return 200, {
+            "stream_id": payload["stream_id"],
+            "sequence_number": payload["sequence_number"],
+            "status": "observing",
+            "model_version": None,
+            "predictions": [],
+        }
+
+    monkeypatch.setattr(developer, "_forward_recognition", fake_forward)
+    response = client.post(
+        "/v1/developer/recognition/chunks",
+        headers={"X-Librai-Key": credential["api_key"]},
+        json={
+            "protocol_version": 1,
+            "stream_id": "stream_1234567890",
+            "sequence_number": 0,
+            "frames": [],
+            "end_of_stream": False,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "observing"
+
+
+def test_revoked_developer_key_stops_working(monkeypatch):
+    credential = create_developer_key()
+    revoked = client.delete(
+        f"/v1/admin/developer-credentials/{credential['id']}",
+        headers={"X-Librai-Admin-Secret": "segredo-admin-api-seguro"},
+    )
+    assert revoked.status_code == 200
+
+    response = client.post(
+        "/v1/developer/recognition/chunks",
+        headers={"X-Librai-Key": credential["api_key"]},
+        json={
+            "protocol_version": 1,
+            "stream_id": "stream_1234567890",
+            "sequence_number": 0,
+            "frames": [],
+            "end_of_stream": True,
+        },
+    )
+    assert response.status_code == 401
 
 
 def trainer_headers(name="Professora Teste"):
@@ -140,6 +254,204 @@ def structured_hand_frames(
             "hands": hands,
         })
     return frames
+
+
+def holistic_frames(repetition_offset=0.0, frame_count=24, hand_ratio=1.0):
+    frames = []
+    hand_frame_limit = round(frame_count * hand_ratio)
+    for frame_index in range(frame_count):
+        hands = []
+        if frame_index < hand_frame_limit:
+            hands.append({
+                "handedness": "Right",
+                "score": 0.99,
+                "landmarks": [
+                    {
+                        "x": 0.2 + repetition_offset + frame_index * 0.004 + index * 0.001,
+                        "y": 0.35 + (index % 5) * 0.002,
+                        "z": index * 0.0005,
+                    }
+                    for index in range(21)
+                ],
+            })
+        pose = [
+            {"x": 0.3 + index * 0.02, "y": 0.2 + index * 0.01, "z": 0.0}
+            for index in range(13)
+        ]
+        frames.append({
+            "timestamp_ms": frame_index * 33,
+            "hands": hands,
+            "pose": {"landmarks": pose},
+            "expression": {
+                "mouth_open": 0.1,
+                "mouth_width": 0.3,
+                "left_brow": 0.1,
+                "right_brow": 0.1,
+            },
+        })
+    return frames
+
+
+def holistic_batch(sign_name="OLÁ"):
+    return {
+        "format_version": 4,
+        "sign_name": sign_name,
+        "capture_context": {
+            "platform": "web",
+            "camera_facing": "front",
+            "app_version": "test",
+        },
+        "linguistic_metadata": {
+            "regional_variation": "Minas Gerais",
+            "dominant_hand": "Right",
+        },
+        "repetitions": [
+            {
+                "capture_id": f"capture_holistic_{index:02d}",
+                "frames": holistic_frames(index * 0.003),
+            }
+            for index in range(5)
+        ],
+    }
+
+
+def test_holistic_training_batch_is_persisted_but_not_auto_deployed():
+    response = client.post(
+        "/v1/training/batches-v4",
+        headers=trainer_headers("Professora Holística"),
+        json=holistic_batch(),
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["repetitions_created"] == 5
+    assert body["dataset_state"] == "pending_validation"
+    assert body["used_by_production_model"] is False
+
+    with TestingSessionLocal() as db:
+        samples = db.query(models.TrainingSample).all()
+        assert len(samples) == 5
+        assert all(sample.landmarks["format_version"] == 4 for sample in samples)
+        assert all(
+            sample.landmarks["dataset_state"] == "pending_validation"
+            for sample in samples
+        )
+
+
+def test_holistic_training_keeps_multiword_label_as_one_libras_unit():
+    response = client.post(
+        "/v1/training/batches-v4",
+        headers=trainer_headers("Professora Unidade Semantica"),
+        json=holistic_batch("  Tudo   bem?  "),
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["sign_name"] == "TUDO BEM?"
+
+    with TestingSessionLocal() as db:
+        samples = db.query(models.TrainingSample).all()
+        assert len(samples) == 5
+        assert {sample.sign_name for sample in samples} == {"TUDO BEM?"}
+
+
+def test_holistic_draft_persists_each_repetition_and_completes_multiword_unit():
+    trainer_name = "Professora Holistica Rascunho"
+    headers = trainer_headers(trainer_name)
+
+    for index in range(3):
+        response = client.post(
+            "/v1/training/drafts-v4/repetitions",
+            headers=headers,
+            json={
+                "capture_id": f"draft_holistic_capture_{index:02d}",
+                "format_version": 4,
+                "sign_name": "Tudo bem?",
+                "capture_context": {
+                    "platform": "web",
+                    "camera_facing": "front",
+                    "app_version": "test",
+                },
+                "linguistic_metadata": {
+                    "regional_variation": "Minas Gerais",
+                    "dominant_hand": "Right",
+                },
+                "frames": holistic_frames(index * 0.003),
+            },
+        )
+        assert response.status_code == 201, response.text
+        assert response.json()["repetitions_saved"] == index + 1
+        assert response.json()["completed"] is False
+
+    restored = client.get("/v1/training/drafts/current", headers=headers)
+    assert restored.status_code == 200
+    assert restored.json()["sign_name"] == "TUDO BEM?"
+    assert restored.json()["repetitions_saved"] == 3
+
+    with TestingSessionLocal() as db:
+        assert db.query(models.TrainingSample).count() == 0
+
+    for index in range(3, 5):
+        response = client.post(
+            "/v1/training/drafts-v4/repetitions",
+            headers=headers,
+            json={
+                "capture_id": f"draft_holistic_capture_{index:02d}",
+                "format_version": 4,
+                "sign_name": "Tudo bem?",
+                "capture_context": {
+                    "platform": "web",
+                    "camera_facing": "front",
+                    "app_version": "test",
+                },
+                "linguistic_metadata": {
+                    "regional_variation": "Minas Gerais",
+                    "dominant_hand": "Right",
+                },
+                "frames": holistic_frames(index * 0.003),
+            },
+        )
+        assert response.status_code == 201, response.text
+
+    assert response.json()["completed"] is True
+    assert response.json()["repetitions_saved"] == 5
+    with TestingSessionLocal() as db:
+        samples = db.query(models.TrainingSample).all()
+        assert len(samples) == 5
+        assert {sample.sign_name for sample in samples} == {"TUDO BEM?"}
+        assert all(sample.landmarks["format_version"] == 4 for sample in samples)
+        assert all(
+            sample.landmarks["dataset_state"] == "pending_validation"
+            for sample in samples
+        )
+
+
+def test_holistic_training_rejects_replayed_capture_ids():
+    headers = trainer_headers("Professora Holística")
+    first = client.post(
+        "/v1/training/batches-v4",
+        headers=headers,
+        json=holistic_batch(),
+    )
+    assert first.status_code == 201
+    replay = client.post(
+        "/v1/training/batches-v4",
+        headers=headers,
+        json=holistic_batch("AJUDA"),
+    )
+    assert replay.status_code == 409
+
+
+def test_holistic_training_rejects_capture_with_missing_hands():
+    payload = holistic_batch()
+    payload["repetitions"][0]["frames"] = holistic_frames(
+        repetition_offset=0.0,
+        hand_ratio=0.5,
+    )
+    response = client.post(
+        "/v1/training/batches-v4",
+        headers=trainer_headers("Professora Holística"),
+        json=payload,
+    )
+    assert response.status_code == 422
+    assert "mãos" in response.json()["detail"].lower()
 
 
 def test_assisted_prediction_requires_a_complete_ordered_capture():

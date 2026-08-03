@@ -13,6 +13,10 @@ class MediaPipeService {
     debugPrint("[Mock Stub] Câmera e MediaPipe Parados.");
   }
 
+  void setCaptureMode(String mode) {
+    debugPrint("[Mock Stub] Modo de captura: $mode");
+  }
+
   bool isHandsDetected() {
     return true; // Mock sempre ativo para facilitação de testes nativos
   }
@@ -50,4 +54,6 @@ class MediaPipeService {
   }
 
   Map<String, dynamic>? getLatestHandFrame() => null;
+
+  Map<String, dynamic>? getLatestHolisticFrame() => null;
 }

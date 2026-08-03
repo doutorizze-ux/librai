@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from typing import List, Optional
+from typing import List, Literal, Optional
 from datetime import datetime
 
 # --- AUTH SCHEMAS ---
@@ -377,3 +377,163 @@ class TrainingModelResponse(BaseModel):
     feature_schema: str = "hand_angles_v1"
     threshold: float
     features: List[TrainingFeature]
+
+
+# --- DEVELOPER API AND HOLISTIC CONTINUOUS RECOGNITION ---
+class HolisticPose(BaseModel):
+    landmarks: List[TrainingLandmark] = Field(min_length=13, max_length=13)
+
+
+class DynamicExpression(BaseModel):
+    mouth_open: float = Field(ge=0.0, le=2.0, allow_inf_nan=False)
+    mouth_width: float = Field(ge=0.0, le=2.0, allow_inf_nan=False)
+    left_brow: float = Field(ge=-1.0, le=1.0, allow_inf_nan=False)
+    right_brow: float = Field(ge=-1.0, le=1.0, allow_inf_nan=False)
+
+
+class HolisticFrameV4(BaseModel):
+    timestamp_ms: int = Field(ge=0)
+    hands: List[TrainingHand] = Field(min_length=0, max_length=2)
+    pose: HolisticPose
+    expression: DynamicExpression
+
+
+class HolisticLinguisticMetadataV4(BaseModel):
+    regional_variation: str = Field(min_length=2, max_length=80)
+    dominant_hand: Literal["Left", "Right", "Ambidextrous", "Unknown"]
+
+
+class HolisticTrainingRepetitionV4(BaseModel):
+    capture_id: str = Field(
+        min_length=16,
+        max_length=80,
+        pattern=r"^[A-Za-z0-9_-]+$",
+    )
+    frames: List[HolisticFrameV4] = Field(min_length=24, max_length=240)
+
+    @field_validator("frames")
+    @classmethod
+    def validate_holistic_timestamps(cls, value):
+        timestamps = [frame.timestamp_ms for frame in value]
+        if (
+            timestamps != sorted(timestamps)
+            or len(timestamps) != len(set(timestamps))
+        ):
+            raise ValueError(
+                "timestamps dos quadros devem ser únicos e crescentes"
+            )
+        return value
+
+
+class HolisticTrainingBatchCreateV4(BaseModel):
+    format_version: Literal[4] = 4
+    sign_name: str = Field(min_length=1, max_length=64)
+    capture_context: TrainingCaptureContextV3
+    linguistic_metadata: HolisticLinguisticMetadataV4
+    repetitions: List[HolisticTrainingRepetitionV4] = Field(
+        min_length=5,
+        max_length=5,
+    )
+
+    @field_validator("sign_name")
+    @classmethod
+    def normalize_holistic_sign_name(cls, value: str) -> str:
+        return " ".join(value.strip().upper().split())
+
+
+class HolisticTrainingDraftRepetitionCreateV4(BaseModel):
+    capture_id: str = Field(
+        min_length=16,
+        max_length=80,
+        pattern=r"^[A-Za-z0-9_-]+$",
+    )
+    format_version: Literal[4] = 4
+    sign_name: str = Field(min_length=1, max_length=64)
+    capture_context: TrainingCaptureContextV3
+    linguistic_metadata: HolisticLinguisticMetadataV4
+    frames: List[HolisticFrameV4] = Field(min_length=24, max_length=240)
+
+    @field_validator("sign_name")
+    @classmethod
+    def normalize_holistic_draft_sign_name(cls, value: str) -> str:
+        return " ".join(value.strip().upper().split())
+
+    @field_validator("frames")
+    @classmethod
+    def validate_holistic_draft_timestamps(cls, value):
+        timestamps = [frame.timestamp_ms for frame in value]
+        if (
+            timestamps != sorted(timestamps)
+            or len(timestamps) != len(set(timestamps))
+        ):
+            raise ValueError(
+                "timestamps dos quadros devem ser únicos e crescentes"
+            )
+        return value
+
+
+class ContinuousRecognitionChunk(BaseModel):
+    protocol_version: Literal[1] = 1
+    stream_id: str = Field(
+        min_length=16,
+        max_length=80,
+        pattern=r"^[A-Za-z0-9_-]+$",
+    )
+    sequence_number: int = Field(ge=0)
+    frames: List[HolisticFrameV4] = Field(min_length=0, max_length=120)
+    end_of_stream: bool = False
+
+    @field_validator("frames")
+    @classmethod
+    def validate_continuous_timestamps(cls, value):
+        timestamps = [frame.timestamp_ms for frame in value]
+        if (
+            timestamps != sorted(timestamps)
+            or len(timestamps) != len(set(timestamps))
+        ):
+            raise ValueError(
+                "timestamps dos quadros devem ser únicos e crescentes"
+            )
+        return value
+
+
+class DeveloperCredentialCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=80)
+    scopes: List[Literal[
+        "translation:recognize",
+        "models:read",
+        "usage:read",
+    ]] = Field(min_length=1)
+    expires_at: Optional[datetime] = None
+
+    @field_validator("scopes")
+    @classmethod
+    def validate_unique_scopes(cls, value):
+        if len(value) != len(set(value)):
+            raise ValueError("escopos não podem ser repetidos")
+        return value
+
+
+class DeveloperCredentialCreated(BaseModel):
+    id: str
+    name: str
+    key_prefix: str
+    api_key: str
+    scopes: List[str]
+    expires_at: Optional[datetime]
+    created_at: datetime
+
+
+class DeveloperCredentialMetadata(BaseModel):
+    id: str
+    name: str
+    key_prefix: str
+    scopes: List[str]
+    is_active: bool
+    expires_at: Optional[datetime]
+    created_at: datetime
+    last_used_at: Optional[datetime]
+    request_count: int
+
+    class Config:
+        from_attributes = True

@@ -82,7 +82,17 @@ def train(args) -> dict[str, Any]:
         min_samples_per_class=args.min_samples_per_class,
         minimum_validation_accuracy=args.minimum_validation_accuracy,
     )
-    records = load_records(args.dataset)
+    records = [
+        record
+        for record in load_records(args.dataset)
+        if isinstance(record.get("landmarks"), dict)
+        and record["landmarks"].get("format_version")
+        == args.required_format_version
+    ]
+    if not records:
+        raise DatasetQualityError(
+            "Nenhuma amostra do formato holístico exigido foi encontrada."
+        )
     quality = validate_dataset(records, policy)
     split = (
         split_by_class_trainer
@@ -159,7 +169,8 @@ def train(args) -> dict[str, Any]:
     manifest = {
         "model_id": f"librai-stgcn-{digest[:12]}",
         "architecture": "ST-GCN",
-        "feature_schema": "librai_landmarks_v3",
+        "feature_schema": "librai_holistic_v4",
+        "training_format_version": args.required_format_version,
         "sequence_length": args.sequence_length,
         "labels": labels,
         "validation_trainers": validation_trainers,
@@ -186,6 +197,7 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--sequence-length", type=int, default=48)
+    parser.add_argument("--required-format-version", type=int, default=4)
     parser.add_argument("--seed", type=int, default=20260727)
     parser.add_argument("--min-classes", type=int, default=2)
     parser.add_argument("--min-trainers-per-class", type=int, default=3)

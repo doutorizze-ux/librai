@@ -109,7 +109,7 @@ class SequencePreprocessor:
     sequence_length: int = 48
 
     def __call__(self, payload: Any):
-        if not isinstance(payload, dict) or payload.get("format_version") not in {2, 3}:
+        if not isinstance(payload, dict) or payload.get("format_version") not in {2, 3, 4}:
             return None
         frames = payload.get("frames")
         if not isinstance(frames, list) or len(frames) < 12:

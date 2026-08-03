@@ -79,4 +79,35 @@ void main() {
 
     expect(await store.restore('Professora Ana'), isNull);
   });
+
+  test('preserva formato e metadados da coleta holística', () async {
+    final store = TrainingDraftStore();
+    await store.save(
+      const PendingTrainingRepetition(
+        captureId: 'capture_holistic_1234',
+        trainerName: 'Professora Ana',
+        signName: 'TUDO BEM?',
+        platform: 'web',
+        cameraFacing: 'front',
+        frames: [
+          {
+            'timestamp_ms': 1000,
+            'hands': [],
+            'pose': {'landmarks': []},
+            'expression': {},
+          },
+        ],
+        formatVersion: 4,
+        regionalVariation: 'Minas Gerais',
+        dominantHand: 'Right',
+      ),
+    );
+
+    final restored = await store.restore('Professora Ana');
+    expect(restored, isNotNull);
+    expect(restored!.formatVersion, 4);
+    expect(restored.signName, 'TUDO BEM?');
+    expect(restored.regionalVariation, 'Minas Gerais');
+    expect(restored.dominantHand, 'Right');
+  });
 }

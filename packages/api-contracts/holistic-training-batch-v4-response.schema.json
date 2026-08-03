@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://librai.app/contracts/holistic-training-batch-v4-response.schema.json",
+  "title": "Librai Holistic Training Batch v4 Response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sign_name",
+    "format_version",
+    "repetitions_created",
+    "dataset_state",
+    "used_by_production_model",
+    "samples"
+  ],
+  "properties": {
+    "sign_name": { "type": "string", "minLength": 1 },
+    "format_version": { "const": 4 },
+    "repetitions_created": { "const": 5 },
+    "dataset_state": { "const": "pending_validation" },
+    "used_by_production_model": { "const": false },
+    "samples": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "capture_id", "frame_count", "quality"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "capture_id": { "type": "string", "minLength": 16 },
+          "frame_count": { "type": "integer", "minimum": 24, "maximum": 240 },
+          "quality": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["hand_frame_ratio", "pose_frame_ratio", "duration_ms", "median_frame_interval_ms"],
+            "properties": {
+              "hand_frame_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+              "pose_frame_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+              "duration_ms": { "type": "integer", "minimum": 1 },
+              "median_frame_interval_ms": { "type": "number", "exclusiveMinimum": 0 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

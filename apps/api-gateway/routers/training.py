@@ -1,4 +1,5 @@
 import hashlib
+import json
 import logging
 import math
 import os
@@ -13,7 +14,12 @@ import models
 import schemas
 import security
 from routers.translation import extract_hand_angles
-from sign_labels import canonical_visual_label, is_isolated_sign_label
+from sign_labels import (
+    canonical_lexical_unit_label,
+    canonical_visual_label,
+    is_isolated_sign_label,
+    is_lexical_unit_label,
+)
 
 router = APIRouter(prefix="/v1", tags=["training"])
 logger = logging.getLogger(__name__)
@@ -23,6 +29,70 @@ TRAINER_DELETE_SECRET = os.getenv("TRAINER_DELETE_SECRET", "")
 trainer_bearer = HTTPBearer(auto_error=False)
 
 _LEGACY_TRAINER_NAMES = {"prof1"}
+
+
+def _holistic_fingerprint(frames: list[schemas.HolisticFrameV4]) -> str:
+    canonical = json.dumps(
+        [frame.model_dump() for frame in frames],
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _holistic_quality(frames: list[schemas.HolisticFrameV4]) -> dict:
+    timestamps = [frame.timestamp_ms for frame in frames]
+    intervals = [
+        current - previous
+        for previous, current in zip(timestamps, timestamps[1:])
+    ]
+    sorted_intervals = sorted(intervals)
+    median_interval = sorted_intervals[len(sorted_intervals) // 2]
+    duration = timestamps[-1] - timestamps[0]
+    if duration < 300 or duration > 12000:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Cada repetição deve durar entre 0,3 e 12 segundos.",
+        )
+    if median_interval < 8 or median_interval > 200:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "A cadência da câmera está fora do intervalo aceito; "
+                "grave novamente sem travamentos."
+            ),
+        )
+    hand_frames = sum(bool(frame.hands) for frame in frames)
+    pose_frames = sum(
+        any(
+            abs(point.x) + abs(point.y) + abs(point.z) > 1e-6
+            for point in frame.pose.landmarks
+        )
+        for frame in frames
+    )
+    hand_ratio = hand_frames / len(frames)
+    pose_ratio = pose_frames / len(frames)
+    if hand_ratio < 0.70:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "As mãos ficaram fora da câmera em muitos quadros; "
+                "reposicione-se e repita o sinal."
+            ),
+        )
+    if pose_ratio < 0.75:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Rosto e tronco não ficaram visíveis durante toda a captura."
+            ),
+        )
+    return {
+        "hand_frame_ratio": round(hand_ratio, 4),
+        "pose_frame_ratio": round(pose_ratio, 4),
+        "duration_ms": duration,
+        "median_frame_interval_ms": float(median_interval),
+    }
 
 
 def _legacy_training_filter():
@@ -548,6 +618,162 @@ def save_training_draft_repetition(
     return final_response
 
 
+@router.post(
+    "/training/drafts-v4/repetitions",
+    response_model=schemas.TrainingDraftRepetitionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def save_holistic_training_draft_repetition_v4(
+    repetition: schemas.HolisticTrainingDraftRepetitionCreateV4,
+    db: Session = Depends(get_db),
+    trainer_name: str = Depends(get_current_trainer),
+):
+    """Salva uma repetição holística imediatamente e fecha na quinta."""
+    existing_receipt = db.query(models.TrainingCaptureReceipt).filter(
+        models.TrainingCaptureReceipt.capture_id == repetition.capture_id,
+    ).first()
+    if existing_receipt:
+        if existing_receipt.trainer_name != trainer_name:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Identificador de captura já utilizado.",
+            )
+        response = dict(existing_receipt.response)
+        response["duplicate"] = True
+        return response
+
+    sign_name = canonical_lexical_unit_label(repetition.sign_name)
+    if not is_lexical_unit_label(sign_name):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Grave uma unidade semântica de Libras por treinamento. "
+                "O rótulo pode conter mais de uma palavra, como TUDO BEM?."
+            ),
+        )
+    quality = _holistic_quality(repetition.frames)
+    fingerprint = _holistic_fingerprint(repetition.frames)
+    frames = [frame.model_dump() for frame in repetition.frames]
+    context = {
+        "format_version": 4,
+        **repetition.capture_context.model_dump(exclude_none=True),
+        "linguistic_metadata": repetition.linguistic_metadata.model_dump(),
+    }
+
+    draft = db.query(models.TrainingDraft).filter(
+        models.TrainingDraft.trainer_name == trainer_name,
+    ).with_for_update().first()
+    if draft and draft.sign_name != sign_name:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Conclua as cinco repetições de {draft.sign_name} "
+                "antes de iniciar outro sinal."
+            ),
+        )
+    if draft and (draft.capture_context or {}).get("format_version") != 4:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Existe uma coleta antiga incompleta nesta conta. "
+                "Conclua ou remova essa coleta antes de iniciar o formato novo."
+            ),
+        )
+    if draft and draft.capture_context != context:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Mantenha a mesma variação regional, lateralidade e "
+                "contexto de captura durante as cinco repetições."
+            ),
+        )
+    if not draft:
+        draft = models.TrainingDraft(
+            trainer_name=trainer_name,
+            sign_name=sign_name,
+            capture_context=context,
+            repetitions=[],
+        )
+        db.add(draft)
+        db.flush()
+
+    stored_repetitions = list(draft.repetitions or [])
+    if any(item.get("fingerprint") == fingerprint for item in stored_repetitions):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Esta repetição é idêntica a outra já salva.",
+        )
+    stored_repetitions.append({
+        "capture_id": repetition.capture_id,
+        "fingerprint": fingerprint,
+        "quality": quality,
+        "frames": frames,
+    })
+    draft.repetitions = stored_repetitions
+    draft.updated_at = datetime.utcnow()
+    saved_count = len(stored_repetitions)
+    response = {
+        "sign_name": sign_name,
+        "repetitions_saved": saved_count,
+        "required_repetitions": 5,
+        "completed": saved_count == 5,
+        "duplicate": False,
+    }
+    db.add(models.TrainingCaptureReceipt(
+        capture_id=repetition.capture_id,
+        trainer_name=trainer_name,
+        sign_name=sign_name,
+        response=response,
+    ))
+
+    if saved_count < 5:
+        db.add(models.AuditLog(
+            user_id=trainer_name,
+            action="HOLISTIC_TRAINING_DRAFT_REPETITION_SAVE_V4",
+            target=f"{draft.id}:{sign_name}:{saved_count}/5",
+        ))
+        db.commit()
+        return response
+
+    for entry in stored_repetitions:
+        sequence = {
+            "format_version": 4,
+            "dataset_state": "pending_validation",
+            "capture_context": {
+                key: value
+                for key, value in draft.capture_context.items()
+                if key not in {"format_version", "linguistic_metadata"}
+            },
+            "linguistic_metadata": draft.capture_context[
+                "linguistic_metadata"
+            ],
+            "quality": entry["quality"],
+            "fingerprint": entry["fingerprint"],
+            "frames": entry["frames"],
+        }
+        db.add(models.TrainingSample(
+            sign_name=sign_name,
+            landmarks=sequence,
+            trainer_name=trainer_name,
+            frame_count=len(entry["frames"]),
+        ))
+    db.flush()
+    for entry in stored_repetitions:
+        saved_receipt = db.query(models.TrainingCaptureReceipt).filter(
+            models.TrainingCaptureReceipt.capture_id == entry["capture_id"],
+        ).first()
+        if saved_receipt:
+            saved_receipt.response = dict(response)
+    db.delete(draft)
+    db.add(models.AuditLog(
+        user_id=trainer_name,
+        action="HOLISTIC_TRAINING_DRAFT_COMPLETE_V4",
+        target=f"{sign_name}:5_pending_validation",
+    ))
+    db.commit()
+    return response
+
+
 @router.post("/training/batches-v3", status_code=status.HTTP_201_CREATED)
 def create_training_batch_v3(
     batch: schemas.TrainingBatchCreateV3,
@@ -618,6 +844,111 @@ def create_training_batch_v3(
         "format_version": 3,
         "repetitions_created": len(created),
         "used_by_current_translator": True,
+        "samples": created,
+    }
+
+
+@router.post("/training/batches-v4", status_code=status.HTTP_201_CREATED)
+def create_holistic_training_batch_v4(
+    batch: schemas.HolisticTrainingBatchCreateV4,
+    db: Session = Depends(get_db),
+    trainer_name: str = Depends(get_current_trainer),
+):
+    """Persiste cinco repetições holísticas sem ativá-las antes da validação."""
+    sign_name = canonical_lexical_unit_label(batch.sign_name)
+    if not is_lexical_unit_label(sign_name):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Grave uma unidade semântica de Libras por treinamento. "
+                "O rótulo pode conter mais de uma palavra, como TUDO BEM?."
+            ),
+        )
+
+    capture_ids = [item.capture_id for item in batch.repetitions]
+    if len(capture_ids) != len(set(capture_ids)):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Cada repetição precisa possuir um identificador novo.",
+        )
+    existing = db.query(models.TrainingCaptureReceipt.capture_id).filter(
+        models.TrainingCaptureReceipt.capture_id.in_(capture_ids)
+    ).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Uma destas capturas já foi recebida anteriormente.",
+        )
+
+    fingerprints = [
+        _holistic_fingerprint(repetition.frames)
+        for repetition in batch.repetitions
+    ]
+    if len(fingerprints) != len(set(fingerprints)):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="As cinco repetições precisam ser gravações diferentes.",
+        )
+
+    qualities = [
+        _holistic_quality(repetition.frames)
+        for repetition in batch.repetitions
+    ]
+    context = batch.capture_context.model_dump(exclude_none=True)
+    linguistic = batch.linguistic_metadata.model_dump()
+    created = []
+    for repetition, quality, fingerprint in zip(
+        batch.repetitions,
+        qualities,
+        fingerprints,
+    ):
+        sequence = {
+            "format_version": 4,
+            "dataset_state": "pending_validation",
+            "capture_context": context,
+            "linguistic_metadata": linguistic,
+            "quality": quality,
+            "fingerprint": fingerprint,
+            "frames": [frame.model_dump() for frame in repetition.frames],
+        }
+        sample = models.TrainingSample(
+            sign_name=sign_name,
+            landmarks=sequence,
+            trainer_name=trainer_name,
+            frame_count=len(repetition.frames),
+        )
+        db.add(sample)
+        db.flush()
+        receipt_response = {
+            "sample_id": sample.id,
+            "capture_id": repetition.capture_id,
+            "dataset_state": "pending_validation",
+        }
+        db.add(models.TrainingCaptureReceipt(
+            capture_id=repetition.capture_id,
+            trainer_name=trainer_name,
+            sign_name=sign_name,
+            response=receipt_response,
+        ))
+        created.append({
+            "id": sample.id,
+            "capture_id": repetition.capture_id,
+            "frame_count": sample.frame_count,
+            "quality": quality,
+        })
+
+    db.add(models.AuditLog(
+        user_id=trainer_name,
+        action="HOLISTIC_TRAINING_BATCH_CREATE_V4",
+        target=f"{sign_name}:5_pending_validation",
+    ))
+    db.commit()
+    return {
+        "sign_name": sign_name,
+        "format_version": 4,
+        "repetitions_created": 5,
+        "dataset_state": "pending_validation",
+        "used_by_production_model": False,
         "samples": created,
     }
 

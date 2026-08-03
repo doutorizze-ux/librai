@@ -17,6 +17,7 @@ __pycache__/
 ml/dataset/private/
 ml/models/candidate/
 ml/models/review/
+ml/models/production/
 ml/models/mediapipe/
 ml/models/pilot-v1*/
 !ml/models/pilot-v1-core-hands/

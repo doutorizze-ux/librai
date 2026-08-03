@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://librai.app/contracts/holistic-training-batch-v4.schema.json",
+  "title": "Librai Holistic Training Batch v4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format_version",
+    "sign_name",
+    "capture_context",
+    "linguistic_metadata",
+    "repetitions"
+  ],
+  "properties": {
+    "format_version": { "const": 4 },
+    "sign_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Display label for exactly one semantic Libras unit. It may contain multiple Portuguese words (for example, TUDO BEM?) and must not be tokenized by whitespace."
+    },
+    "capture_context": {
+      "$ref": "#/$defs/captureContext"
+    },
+    "linguistic_metadata": {
+      "$ref": "#/$defs/linguisticMetadata"
+    },
+    "repetitions": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["capture_id", "frames"],
+        "properties": {
+          "capture_id": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "frames": {
+            "type": "array",
+            "minItems": 24,
+            "maxItems": 240,
+            "items": { "$ref": "#/$defs/frame" }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "captureContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "camera_facing"],
+      "properties": {
+        "platform": {
+          "enum": ["android", "ios", "web", "windows", "macos", "linux", "other"]
+        },
+        "camera_facing": {
+          "enum": ["front", "back", "external", "unknown"]
+        },
+        "app_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        }
+      }
+    },
+    "linguisticMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["regional_variation", "dominant_hand"],
+      "properties": {
+        "regional_variation": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "dominant_hand": {
+          "enum": ["Left", "Right", "Ambidextrous", "Unknown"]
+        }
+      }
+    },
+    "landmark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": "number", "minimum": -0.5, "maximum": 1.5 },
+        "y": { "type": "number", "minimum": -0.5, "maximum": 1.5 },
+        "z": { "type": "number", "minimum": -3, "maximum": 3 }
+      }
+    },
+    "hand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["handedness", "score", "landmarks"],
+      "properties": {
+        "handedness": { "enum": ["Left", "Right", "Unknown"] },
+        "score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "landmarks": {
+          "type": "array",
+          "minItems": 21,
+          "maxItems": 21,
+          "items": { "$ref": "#/$defs/landmark" }
+        }
+      }
+    },
+    "pose": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["landmarks"],
+      "properties": {
+        "landmarks": {
+          "type": "array",
+          "minItems": 13,
+          "maxItems": 13,
+          "description": "Upper-body landmarks only; no identifying body mesh.",
+          "items": { "$ref": "#/$defs/landmark" }
+        }
+      }
+    },
+    "expression": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Dynamic non-identifying ratios; never a raw facial mesh.",
+      "required": ["mouth_open", "mouth_width", "left_brow", "right_brow"],
+      "properties": {
+        "mouth_open": { "type": "number", "minimum": 0, "maximum": 2 },
+        "mouth_width": { "type": "number", "minimum": 0, "maximum": 2 },
+        "left_brow": { "type": "number", "minimum": -1, "maximum": 1 },
+        "right_brow": { "type": "number", "minimum": -1, "maximum": 1 }
+      }
+    },
+    "frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timestamp_ms", "hands", "pose", "expression"],
+      "properties": {
+        "timestamp_ms": { "type": "integer", "minimum": 0 },
+        "hands": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 2,
+          "items": { "$ref": "#/$defs/hand" }
+        },
+        "pose": { "$ref": "#/$defs/pose" },
+        "expression": { "$ref": "#/$defs/expression" }
+      }
+    }
+  }
+}

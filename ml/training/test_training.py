@@ -16,6 +16,7 @@ from quality import (
 from merge_extracted_datasets import normalize_label
 from extract_spatial_grid_dataset import build_layouts
 from stgcn import LibrasSTGCN, SequencePreprocessor, TOTAL_NODES
+from promote import PromotionError, promote
 
 
 def sequence():
@@ -98,6 +99,14 @@ def test_preprocessor_and_stgcn_use_temporal_two_hand_shape():
     assert torch.isfinite(logits).all()
 
 
+def test_preprocessor_accepts_version_four_semantic_units():
+    payload = sequence()
+    payload["format_version"] = 4
+    payload["dataset_state"] = "pending_validation"
+    features = SequencePreprocessor(sequence_length=24)(payload)
+    assert features.shape == (4, 24, TOTAL_NODES)
+
+
 def test_merge_normalizes_accents_and_known_equivalent_labels():
     assert normalize_label("  Olá  ") == "OLA"
     assert normalize_label("obrigada") == "OBRIGADO"
@@ -116,3 +125,52 @@ def test_spatial_layout_uses_every_cell_before_sharding():
     layout = build_layouts(candidates)["grid.mp4"]
     assert len(layout["x"]) == 3
     assert len(layout["y"]) == 3
+
+
+def test_promotion_keeps_multiword_labels_and_requires_real_gates(tmp_path):
+    review = tmp_path / "review"
+    production = tmp_path / "production"
+    review.mkdir()
+    model = review / "candidate.onnx"
+    model.write_bytes(b"validated-onnx-test")
+    digest = __import__("hashlib").sha256(model.read_bytes()).hexdigest()
+    manifest = {
+        "model_id": "librai-stgcn-test",
+        "architecture": "ST-GCN",
+        "feature_schema": "librai_holistic_v4",
+        "sequence_length": 48,
+        "labels": {"OLA": 0, "TUDO BEM?": 1},
+        "validation_mode": "global-trainer",
+        "validation_accuracy": 0.9,
+        "quality_policy": {"minimum_validation_accuracy": 0.7},
+        "dataset_quality": {
+            "trainers_by_class": {
+                "OLA": ["A", "B", "C"],
+                "TUDO BEM?": ["A", "B", "C"],
+            }
+        },
+        "onnx_file": model.name,
+        "onnx_sha256": digest,
+        "status": "validated_ready_for_review",
+    }
+    manifest_path = review / "candidate.manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    promoted = promote(manifest_path, production, "Comitê Librai")
+    assert promoted["status"] == "production"
+    assert promoted["labels"]["TUDO BEM?"] == 1
+    assert (production / "production.manifest.json").is_file()
+    assert (production / "librai_stgcn.onnx").read_bytes() == model.read_bytes()
+
+
+def test_promotion_rejects_two_professors_per_class(tmp_path):
+    manifest = tmp_path / "candidate.manifest.json"
+    manifest.write_text(json.dumps({
+        "status": "validated_ready_for_review",
+        "feature_schema": "librai_holistic_v4",
+        "validation_mode": "global-trainer",
+        "validation_accuracy": 0.99,
+        "dataset_quality": {"trainers_by_class": {"OLA": ["A", "B"]}},
+    }), encoding="utf-8")
+    with pytest.raises(PromotionError, match="três professores"):
+        promote(manifest, tmp_path / "production", "Comitê Librai")

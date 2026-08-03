@@ -19,6 +19,7 @@ from routers import (
     admin,
     auth,
     dictionary,
+    developer,
     models as model_router,
     privacy,
     training,
@@ -90,6 +91,7 @@ async def add_security_headers(request: Request, call_next):
 app.include_router(auth.router)
 app.include_router(translation.router)
 app.include_router(dictionary.router)
+app.include_router(developer.router)
 app.include_router(model_router.router)
 app.include_router(privacy.router)
 app.include_router(admin.router)

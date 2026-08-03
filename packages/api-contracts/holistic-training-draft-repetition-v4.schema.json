@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://librai.app/contracts/holistic-training-draft-repetition-v4.schema.json",
+  "title": "Librai Holistic Training Draft Repetition v4",
+  "description": "Persists one of five repetitions immediately. sign_name identifies exactly one semantic Libras unit and may contain multiple Portuguese words.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "capture_id",
+    "format_version",
+    "sign_name",
+    "capture_context",
+    "linguistic_metadata",
+    "frames"
+  ],
+  "properties": {
+    "capture_id": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 80,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "format_version": { "const": 4 },
+    "sign_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "One semantic Libras unit; whitespace does not split the class."
+    },
+    "capture_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "camera_facing"],
+      "properties": {
+        "platform": {
+          "enum": ["android", "ios", "web", "windows", "macos", "linux", "other"]
+        },
+        "camera_facing": {
+          "enum": ["front", "back", "external", "unknown"]
+        },
+        "app_version": { "type": "string", "minLength": 1, "maxLength": 32 }
+      }
+    },
+    "linguistic_metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["regional_variation", "dominant_hand"],
+      "properties": {
+        "regional_variation": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "dominant_hand": { "enum": ["Left", "Right", "Ambidextrous", "Unknown"] }
+      }
+    },
+    "frames": {
+      "type": "array",
+      "minItems": 24,
+      "maxItems": 240,
+      "items": { "$ref": "holistic-training-batch-v4.schema.json#/$defs/frame" }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://librai.app/contracts/continuous-recognition-response-v1.schema.json",
+  "title": "Librai Continuous Recognition Response v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["stream_id", "sequence_number", "status", "model_version", "predictions"],
+  "properties": {
+    "stream_id": { "type": "string", "minLength": 16, "maxLength": 80 },
+    "sequence_number": { "type": "integer", "minimum": 0 },
+    "status": {
+      "enum": ["observing", "segmenting", "predicted", "unknown", "model_unavailable", "finished"]
+    },
+    "model_version": { "type": ["string", "null"] },
+    "predictions": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["gloss", "confidence", "start_timestamp_ms", "end_timestamp_ms", "finalized"],
+        "properties": {
+          "gloss": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "start_timestamp_ms": { "type": "integer", "minimum": 0 },
+          "end_timestamp_ms": { "type": "integer", "minimum": 0 },
+          "finalized": { "type": "boolean" }
+        }
+      }
+    },
+    "reason": {
+      "enum": ["low_confidence", "ambiguous", "insufficient_motion", "no_hands", "no_production_model", "inference_error", "stream_finished"]
+    }
+  }
+}

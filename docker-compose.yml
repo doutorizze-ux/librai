@@ -79,6 +79,9 @@ services:
       - TRAINER_ACCESS_CODE=${TRAINER_ACCESS_CODE}
       - TRAINER_DELETE_SECRET=${TRAINER_DELETE_SECRET}
       - APP_RELEASE=${SOURCE_COMMIT:-unknown}
+      - INFERENCE_SERVICE_URL=http://inference-service:8001
+      - API_KEY_PEPPER=${API_KEY_PEPPER}
+      - ADMIN_API_SECRET=${ADMIN_API_SECRET}
     depends_on:
       postgres:
         condition: service_healthy
@@ -86,6 +89,26 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      inference-service:
+        condition: service_healthy
+
+  inference-service:
+    build:
+      context: .
+      dockerfile: apps/inference-service/Dockerfile
+    container_name: librai_inference_service
+    restart: always
+    expose:
+      - "8001"
+    environment:
+      - LIBRAI_MODEL_MANIFEST=/models/production.manifest.json
+    volumes:
+      - ./ml/models/production:/models:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
 
   admin-web:
     build:
