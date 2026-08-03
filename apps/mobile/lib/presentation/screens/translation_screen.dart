@@ -48,6 +48,10 @@ class _TranslationScreenState extends State<TranslationScreen> {
   @override
   void initState() {
     super.initState();
+    // Tradução usa mãos, expressão facial e postura corporal. O modo padrão
+    // do bridge web rastreia apenas as mãos, então ative o modo holístico
+    // antes de registrar e iniciar a câmera.
+    _visionService.setCaptureMode('holistic');
     // Registrar view da câmera no web antes de iniciar
     _visionService.registerVideoView();
     // Inicia serviço de landmarks

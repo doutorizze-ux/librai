@@ -30,12 +30,25 @@ void main() {
     expect(index, contains('mediapipe-holistic-worker.js'));
     expect(index, contains('latestHolisticFrame'));
 
-    expect(worker, contains('HandLandmarker.createFromOptions'));
-    expect(worker, contains('PoseLandmarker.createFromOptions'));
-    expect(worker, contains('FaceLandmarker.createFromOptions'));
+    expect(worker, contains('HolisticLandmarker.createFromOptions'));
+    expect(worker, contains('result.leftHandLandmarks'));
+    expect(worker, contains('result.rightHandLandmarks'));
+    expect(worker, contains('result.poseLandmarks'));
+    expect(worker, contains('result.faceLandmarks'));
     expect(worker, contains('POSE_INDICES'));
     expect(worker, contains('dynamicExpression'));
     expect(worker, contains('outputFaceBlendshapes: false'));
     expect(worker, contains('bitmap.close()'));
+  });
+
+  test('translator enables holistic capture before starting the camera', () {
+    final screen = File(
+      'lib/presentation/screens/translation_screen.dart',
+    ).readAsStringSync();
+
+    final holistic = screen.indexOf("setCaptureMode('holistic')");
+    final start = screen.indexOf('_visionService.start()');
+    expect(holistic, greaterThanOrEqualTo(0));
+    expect(start, greaterThan(holistic));
   });
 }
