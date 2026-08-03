@@ -39,10 +39,12 @@
     // Interface Global de Interoperação JavaScript-Dart
     window.sinalizaAiMediaPipe = {
       handsDetected: false,
-      faceDetected: true, // Forçar verdadeiro no Web para simplificar enquadramento e evitar crash de RAM
-      poseDetected: true, // Forçar verdadeiro no Web para simplificar enquadramento e evitar crash de RAM
+      faceDetected: false,
+      poseDetected: false,
       latestLandmarks: null,
       latestHandFrame: null,
+      latestHolisticFrame: null,
+      captureMode: 'hands',
       landmarkRevision: 0,
       trackingQuality: 'waiting',
       handsCount: 0,
@@ -59,6 +61,7 @@
         
         let currentHands = [];
         let currentHandFrame = null;
+        let currentHolisticFrame = null;
         let activeStream = null;
         let animationFrameId = null;
         let videoFrameCallbackId = null;
@@ -67,6 +70,7 @@
         let smoothedFrameInterval = 0;
         let handWorker = null;
         let workerReadyPromise = null;
+        let workerMode = null;
         let frameInFlight = false;
         let cameraSessionId = 0;
         let lastSubmittedTimestamp = 0;
@@ -77,14 +81,25 @@
           // latestHandFrame, que preserva cada mão e o instante do quadro.
           self.latestLandmarks = [...currentHands];
           self.latestHandFrame = currentHandFrame;
+          self.latestHolisticFrame = currentHolisticFrame;
         };
 
         const ensureWorker = () => {
-          if (workerReadyPromise) return workerReadyPromise;
+          if (workerReadyPromise && workerMode === self.captureMode) {
+            return workerReadyPromise;
+          }
+          if (handWorker) {
+            handWorker.terminate();
+            handWorker = null;
+          }
+          workerReadyPromise = null;
+          workerMode = self.captureMode;
 
           workerReadyPromise = new Promise((resolve, reject) => {
             const workerUrl = new URL(
-              'mediapipe-hand-worker.js',
+              workerMode === 'holistic'
+                ? 'mediapipe-holistic-worker.js'
+                : 'mediapipe-hand-worker.js',
               document.baseURI
             );
             handWorker = new Worker(workerUrl);
@@ -93,6 +108,7 @@
               handWorker?.terminate();
               handWorker = null;
               workerReadyPromise = null;
+              workerMode = null;
               reject(new Error(event.message || 'Falha no worker do MediaPipe.'));
             };
 
@@ -113,6 +129,7 @@
                   handWorker?.terminate();
                   handWorker = null;
                   workerReadyPromise = null;
+                  workerMode = null;
                   reject(error);
                 }
                 return;
@@ -126,6 +143,7 @@
                 handWorker?.terminate();
                 handWorker = null;
                 workerReadyPromise = null;
+                workerMode = null;
                 reject(new Error(message.message || 'Falha ao iniciar MediaPipe.'));
                 return;
               }
@@ -137,7 +155,13 @@
               wasmRoot:
                 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm',
               modelAssetPath:
-                'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'
+                'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+              handModelAssetPath:
+                'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+              poseModelAssetPath:
+                'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
+              faceModelAssetPath:
+                'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
             });
           });
 
@@ -298,6 +322,8 @@
           resultAt,
           capturedTimestampMs
         ) => {
+          self.faceDetected = Boolean(results.faceDetected);
+          self.poseDetected = Boolean(results.poseDetected);
           if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
             self.handsDetected = true;
             self.handsCount = results.multiHandLandmarks.length;
@@ -340,6 +366,32 @@
                 ),
               })),
             };
+            if (
+              self.captureMode === 'holistic' &&
+              self.faceDetected &&
+              self.poseDetected &&
+              Array.isArray(results.poseLandmarks) &&
+              results.poseLandmarks.length === 13 &&
+              results.expression
+            ) {
+              currentHolisticFrame = {
+                timestampMs: capturedTimestampMs,
+                hands: currentHandFrame.hands,
+                pose: {
+                  landmarks: results.poseLandmarks.map(
+                    ({ x, y, z }) => ({ x, y, z }),
+                  ),
+                },
+                expression: {
+                  mouth_open: Number(results.expression.mouth_open || 0),
+                  mouth_width: Number(results.expression.mouth_width || 0),
+                  left_brow: Number(results.expression.left_brow || 0),
+                  right_brow: Number(results.expression.right_brow || 0),
+                },
+              };
+            } else {
+              currentHolisticFrame = null;
+            }
             const closeToEdge = currentHands.some(
               point => point.x < 0.055 || point.x > 0.945 ||
                        point.y < 0.055 || point.y > 0.945
@@ -369,6 +421,7 @@
             self.handScreenRatio = 0;
             currentHands = [];
             currentHandFrame = null;
+            currentHolisticFrame = null;
             clearLandmarkCanvas();
           }
           updateLatestLandmarks();
@@ -407,7 +460,11 @@
             {
               image: videoElement,
               multiHandLandmarks: message.landmarks || [],
-              multiHandedness: message.handedness || []
+              multiHandedness: message.handedness || [],
+              poseLandmarks: message.poseLandmarks || [],
+              poseDetected: message.poseDetected === true,
+              faceDetected: message.faceDetected === true,
+              expression: message.expression || null
             },
             resultAt,
             Math.round(performance.timeOrigin + Number(message.timestampMs || 0))
@@ -533,11 +590,40 @@
           }
         };
 
+        self.setCaptureMode = function(mode) {
+          const normalized = mode === 'holistic' ? 'holistic' : 'hands';
+          if (self.captureMode === normalized && workerMode === normalized) {
+            return;
+          }
+          const restart = self.isActive;
+          if (restart) self.stop();
+          if (handWorker) {
+            handWorker.terminate();
+            handWorker = null;
+          }
+          workerReadyPromise = null;
+          workerMode = null;
+          self.captureMode = normalized;
+          self.faceDetected = false;
+          self.poseDetected = false;
+          currentHolisticFrame = null;
+          updateLatestLandmarks();
+          if (restart) {
+            self.start();
+          } else {
+            ensureWorker().catch((error) => {
+              console.warn('Pré-inicialização do modo adiada:', error);
+            });
+          }
+        };
+
         self.stop = function() {
           self.isActive = false;
           cameraSessionId++;
           frameInFlight = false;
           self.handsDetected = false;
+          self.faceDetected = false;
+          self.poseDetected = false;
           self.handsCount = 0;
           self.trackingQuality = 'waiting';
           self.inferenceFps = 0;
@@ -548,6 +634,8 @@
           smoothedFrameInterval = 0;
           currentHands = [];
           currentHandFrame = null;
+          currentHolisticFrame = null;
+          updateLatestLandmarks();
           clearCameraCanvas();
           
           // Parar loop
