@@ -33,6 +33,15 @@ def promote(
     )
     if float(manifest.get("validation_accuracy", 0)) < max(0.70, minimum):
         raise PromotionError("A acurácia está abaixo do gate registrado.")
+    rejection = manifest.get("rejection") or {}
+    if rejection.get("method") != "softmax_confidence_and_margin":
+        raise PromotionError("A rejeição de sinais desconhecidos não foi calibrada.")
+    if float(rejection.get("known_acceptance_rate", 0)) < 0.70:
+        raise PromotionError("A aceitação de sinais conhecidos está abaixo do gate.")
+    if float(rejection.get("ood_recall", 0)) < 0.90:
+        raise PromotionError("A rejeição de sinais desconhecidos está abaixo do gate.")
+    if int(rejection.get("ood_validation_samples", 0)) < 30:
+        raise PromotionError("São necessários ao menos 30 exemplos OOD.")
     trainers_by_class = (
         (manifest.get("dataset_quality") or {}).get("trainers_by_class") or {}
     )

@@ -3,6 +3,7 @@ import json
 import numpy as np
 
 from model_runtime import (
+    HAND_NODES,
     HolisticPreprocessor,
     OnnxProductionRecognizer,
     TOTAL_NODES,
@@ -57,6 +58,29 @@ def test_v4_preprocessor_matches_the_training_tensor_shape():
     assert output[:, 3].sum() > 0
 
 
+def test_runtime_assigns_unknown_hands_by_screen_position():
+    payload = frame(0).model_dump()
+
+    def unknown_hand(wrist_x):
+        return {
+            "handedness": "Unknown",
+            "score": 0.9,
+            "landmarks": [
+                {"x": wrist_x + index * 0.001, "y": 0.4, "z": 0.0}
+                for index in range(HAND_NODES)
+            ],
+        }
+
+    payload["hands"] = [unknown_hand(0.8), unknown_hand(0.2)]
+    parsed = HolisticFrame.model_validate(payload)
+    output = np.zeros((4, 1, TOTAL_NODES), dtype=np.float32)
+
+    HolisticPreprocessor()._write_hands(output, 0, parsed)
+
+    assert output[0, 0, 0] == np.float32(0.2)
+    assert output[0, 0, HAND_NODES] == np.float32(0.8)
+
+
 def test_runtime_keeps_multiword_semantic_unit_as_one_prediction():
     recognizer = OnnxProductionRecognizer({
         "model_id": "librai-test-model",
@@ -84,3 +108,23 @@ def test_candidate_manifest_is_never_loaded_as_production(tmp_path):
     result = load_production_recognizer(manifest)
     assert result.recognizer is None
     assert "not explicitly promoted" in result.reason
+
+
+def test_production_manifest_without_ood_calibration_is_rejected(tmp_path):
+    manifest = tmp_path / "production.manifest.json"
+    model = tmp_path / "model.onnx"
+    model.write_bytes(b"not-loaded-because-manifest-gate-fails-first")
+    manifest.write_text(json.dumps({
+        "status": "production",
+        "architecture": "ST-GCN",
+        "feature_schema": "librai_holistic_v4",
+        "validation_mode": "global-trainer",
+        "validation_accuracy": 0.99,
+        "labels": {"OLA": 0, "TUDO BEM?": 1},
+        "onnx_file": model.name,
+    }), encoding="utf-8")
+
+    result = load_production_recognizer(manifest)
+
+    assert result.recognizer is None
+    assert "rejection calibration is missing" in result.reason

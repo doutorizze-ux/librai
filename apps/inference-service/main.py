@@ -16,14 +16,38 @@ engine = ContinuousRecognitionEngine(recognizer=model_load.recognizer)
 
 @app.get("/health")
 def health():
+    ready = model_load.recognizer is not None
     return {
-        "status": "healthy",
-        "production_model_loaded": model_load.recognizer is not None,
+        "status": "ready" if ready else "degraded",
+        "production_model_loaded": ready,
         "model_version": (
             model_load.recognizer.version if model_load.recognizer else None
         ),
         "model_load_reason": model_load.reason,
         "mode": "production" if model_load.recognizer else "laboratory",
+    }
+
+
+@app.get("/live")
+def live():
+    """Sinaliza apenas que o processo está vivo, sem prometer um modelo."""
+    return {"status": "alive"}
+
+
+@app.get("/ready")
+def ready():
+    """Só libera tráfego neural quando um manifesto de produção foi carregado."""
+    if model_load.recognizer is None:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "not_ready",
+                "reason": model_load.reason,
+            },
+        )
+    return {
+        "status": "ready",
+        "model_version": model_load.recognizer.version,
     }
 
 

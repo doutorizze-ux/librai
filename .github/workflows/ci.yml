@@ -43,6 +43,17 @@ jobs:
         run: |
           pytest apps/api-gateway/
 
+      - name: Run inference service tests
+        run: |
+          pip install -r apps/inference-service/requirements.txt
+          cd apps/inference-service
+          pytest
+
+      - name: Run neural graph contract tests
+        run: |
+          pip install --index-url https://download.pytorch.org/whl/cpu torch
+          pytest ml/training/test_stgcn_core.py ml/training/test_export_dataset.py ml/training/test_metrics.py
+
       - name: Validate backup image and restore a dump
         run: |
           docker build -f ops/postgres-backup/Dockerfile -t librai-postgres-backup:test .

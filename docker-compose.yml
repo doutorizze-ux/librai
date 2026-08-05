@@ -105,7 +105,7 @@ services:
     volumes:
       - ./ml/models/production:/models:ro
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/live', timeout=2)"]
       interval: 10s
       timeout: 3s
       retries: 6

@@ -1,7 +1,9 @@
 from fastapi.testclient import TestClient
 
+import main as service_main
 from continuous import ContinuousRecognitionEngine, motion_energy
 from main import app
+from model_runtime import ModelLoadResult
 from schemas import HolisticFrame, RecognitionChunk
 
 
@@ -95,6 +97,25 @@ def test_http_contract_rejects_out_of_order_frame_timestamps():
         },
     )
     assert response.status_code == 422
+
+
+def test_liveness_does_not_claim_that_the_model_is_ready(monkeypatch):
+    monkeypatch.setattr(
+        service_main,
+        "model_load",
+        ModelLoadResult(None, "manifest_missing"),
+    )
+    client = TestClient(app)
+
+    assert client.get("/live").json() == {"status": "alive"}
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.json()["status"] == "degraded"
+    assert health.json()["production_model_loaded"] is False
+
+    readiness = client.get("/ready")
+    assert readiness.status_code == 503
+    assert readiness.json()["detail"]["reason"] == "manifest_missing"
 
 
 def test_runtime_failure_is_reported_without_guessing_a_sign():

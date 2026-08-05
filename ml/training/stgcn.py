@@ -33,11 +33,12 @@ def _edges():
         (pose_offset + a, pose_offset + b)
         for a, b in [
             (0, 1), (0, 2), (1, 3), (3, 5), (2, 4), (4, 6),
-            (1, 7), (2, 8), (7, 8), (7, 9), (8, 10), (9, 11), (10, 12),
+            (5, 6), (5, 7), (7, 9), (6, 8), (8, 10),
+            (5, 11), (6, 12), (11, 12),
         ]
     )
     # Conecta pulsos das mãos aos pulsos corporais.
-    result.extend([(0, pose_offset + 5), (HAND_NODES, pose_offset + 6)])
+    result.extend([(0, pose_offset + 9), (HAND_NODES, pose_offset + 10)])
     expression_offset = pose_offset + POSE_NODES
     result.extend(
         (pose_offset, expression_offset + index)
@@ -85,7 +86,7 @@ class STGCNBlock(nn.Module):
 
 
 class LibrasSTGCN(nn.Module):
-    """Entrada N,C,T,V; C=(x,y,z,presença), V=55 articulações."""
+    """Entrada N,C,T,V; C=(x,y,z,presença), V=59 articulações."""
 
     def __init__(self, num_classes: int):
         super().__init__()
@@ -145,19 +146,41 @@ class SequencePreprocessor:
     def _write_hands(self, output, time_index, hands):
         if not isinstance(hands, list):
             return
-        unknown_offset = 0
+        slots = [None, None]
+        unknown = []
         for hand in hands[:2]:
             if not isinstance(hand, dict):
                 continue
             side = hand.get("handedness")
-            if side == "Left":
-                offset = 0
-            elif side == "Right":
-                offset = HAND_NODES
+            slot = 0 if side == "Left" else 1 if side == "Right" else None
+            if slot is None or slots[slot] is not None:
+                unknown.append(hand)
             else:
-                offset = unknown_offset
-                unknown_offset = HAND_NODES
-            self._write_points(output, time_index, offset, hand.get("landmarks"))
+                slots[slot] = hand
+        for hand in unknown:
+            available = [
+                index for index, value in enumerate(slots) if value is None
+            ]
+            if not available:
+                break
+            points = hand.get("landmarks")
+            wrist_x = (
+                float(points[0].get("x", 0.5))
+                if isinstance(points, list)
+                and points
+                and isinstance(points[0], dict)
+                else 0.5
+            )
+            preferred = 0 if wrist_x <= 0.5 else 1
+            slots[preferred if preferred in available else available[0]] = hand
+        for slot, hand in enumerate(slots):
+            if hand is not None:
+                self._write_points(
+                    output,
+                    time_index,
+                    slot * HAND_NODES,
+                    hand.get("landmarks"),
+                )
 
     def _write_pose(self, output, time_index, pose):
         points = pose.get("landmarks") if isinstance(pose, dict) else None

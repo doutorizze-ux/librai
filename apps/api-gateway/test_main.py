@@ -319,6 +319,38 @@ def holistic_batch(
     }
 
 
+def train_holistic_draft(
+    sign_name,
+    trainer_name,
+    base_offset=0.0,
+    capture_prefix="draft_holistic",
+):
+    response = None
+    headers = trainer_headers(trainer_name)
+    for index in range(5):
+        response = client.post(
+            "/v1/training/drafts-v4/repetitions",
+            headers=headers,
+            json={
+                "capture_id": f"{capture_prefix}_{index:02d}",
+                "format_version": 4,
+                "sign_name": sign_name,
+                "capture_context": {
+                    "platform": "web",
+                    "camera_facing": "front",
+                    "app_version": "test",
+                },
+                "linguistic_metadata": {
+                    "regional_variation": "Minas Gerais",
+                    "dominant_hand": "Right",
+                },
+                "frames": holistic_frames(base_offset + index * 0.003),
+            },
+        )
+        assert response.status_code == 201, response.text
+    return response
+
+
 def test_holistic_training_batch_is_persisted_but_not_auto_deployed():
     response = client.post(
         "/v1/training/batches-v4",
@@ -374,20 +406,17 @@ def test_holistic_translator_uses_v4_multiword_training_not_old_v3_label():
         )
         assert old_sample.status_code == 201, old_sample.text
 
-    trained = client.post(
-        "/v1/training/batches-v4",
-        headers=trainer_headers("Professora Formato Novo"),
-        json=holistic_batch("TUDO BEM?"),
+    trained = train_holistic_draft(
+        "TUDO BEM?",
+        "Professora Formato Novo",
+        capture_prefix="draft_tudo_bem_v4",
     )
     assert trained.status_code == 201, trained.text
-    competing_v4 = client.post(
-        "/v1/training/batches-v4",
-        headers=trainer_headers("Professora Obrigado Novo"),
-        json=holistic_batch(
-            "OBRIGADO",
-            base_offset=0.18,
-            capture_prefix="capture_obrigado_v4",
-        ),
+    competing_v4 = train_holistic_draft(
+        "OBRIGADO",
+        "Professora Obrigado Novo",
+        base_offset=0.18,
+        capture_prefix="draft_obrigado_v4",
     )
     assert competing_v4.status_code == 201, competing_v4.text
 
@@ -501,15 +530,74 @@ def test_holistic_draft_persists_each_repetition_and_completes_multiword_unit():
 
     assert response.json()["completed"] is True
     assert response.json()["repetitions_saved"] == 5
+    assert response.json()["dataset_state"] == "validated_capture"
+    assert response.json()["retake_required"] is False
+    assert response.json()["consistency"]["accepted"] is True
     with TestingSessionLocal() as db:
         samples = db.query(models.TrainingSample).all()
         assert len(samples) == 5
         assert {sample.sign_name for sample in samples} == {"TUDO BEM?"}
         assert all(sample.landmarks["format_version"] == 4 for sample in samples)
         assert all(
-            sample.landmarks["dataset_state"] == "pending_validation"
+            sample.landmarks["dataset_state"] == "validated_capture"
             for sample in samples
         )
+
+
+def test_holistic_draft_rejects_an_inconsistent_fifth_repetition():
+    trainer_name = "Professora Reteste"
+    headers = trainer_headers(trainer_name)
+    response = None
+    for index in range(5):
+        response = client.post(
+            "/v1/training/drafts-v4/repetitions",
+            headers=headers,
+            json={
+                "capture_id": f"draft_retake_capture_{index:02d}",
+                "format_version": 4,
+                "sign_name": "OLÁ",
+                "capture_context": {
+                    "platform": "web",
+                    "camera_facing": "front",
+                    "app_version": "test",
+                },
+                "linguistic_metadata": {
+                    "regional_variation": "Minas Gerais",
+                    "dominant_hand": "Right",
+                },
+                "frames": holistic_frames(0.35 if index == 4 else index * 0.003),
+            },
+        )
+        assert response.status_code == 201, response.text
+
+    body = response.json()
+    assert body["completed"] is False
+    assert body["repetitions_saved"] == 4
+    assert body["dataset_state"] == "retake_required"
+    assert body["retake_required"] is True
+    assert body["rejected_capture_id"] == "draft_retake_capture_04"
+    assert body["consistency"]["accepted"] is False
+
+    with TestingSessionLocal() as db:
+        assert db.query(models.TrainingSample).count() == 0
+        draft = db.query(models.TrainingDraft).one()
+        assert len(draft.repetitions) == 4
+
+
+def test_holistic_translator_ignores_pending_batch_samples():
+    created = client.post(
+        "/v1/training/batches-v4",
+        headers=trainer_headers("Professora Pendente"),
+        json=holistic_batch("OLÁ", capture_prefix="pending_batch_capture"),
+    )
+    assert created.status_code == 201, created.text
+
+    prediction = client.post(
+        "/v1/translation/predict-sequence-v4",
+        json={"format_version": 4, "frames": holistic_frames()},
+    )
+    assert prediction.status_code == 200
+    assert prediction.json()["label"] == "SINAL_DESCONHECIDO"
 
 
 def test_holistic_draft_accepts_mediapipe_depth_near_camera():

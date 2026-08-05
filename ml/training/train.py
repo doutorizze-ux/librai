@@ -27,6 +27,7 @@ from quality import (
     split_by_trainer,
     validate_dataset,
 )
+from metrics import calibrate_rejection, classification_report
 
 
 class LibrasSequenceDataset(Dataset):
@@ -46,6 +47,25 @@ class LibrasSequenceDataset(Dataset):
                 self.examples.append((tensor, labels[label]))
         if not self.examples:
             raise DatasetQualityError("Nenhuma sequência pôde ser convertida.")
+
+    def __len__(self) -> int:
+        return len(self.examples)
+
+    def __getitem__(self, index: int):
+        return self.examples[index]
+
+
+class LibrasUnlabeledDataset(Dataset):
+    def __init__(self, records, preprocessor):
+        self.examples = [
+            tensor
+            for record in records
+            if (tensor := preprocessor(record.get("landmarks"))) is not None
+        ]
+        if not self.examples:
+            raise DatasetQualityError(
+                "Nenhuma sequência OOD pôde ser convertida."
+            )
 
     def __len__(self) -> int:
         return len(self.examples)
@@ -75,6 +95,26 @@ def run_epoch(model, loader, criterion, device, optimizer=None):
     return total_loss / max(total, 1), correct / max(total, 1)
 
 
+def collect_probabilities(model, loader, device, *, labeled: bool):
+    probabilities = []
+    targets = []
+    predictions = []
+    model.eval()
+    with torch.inference_mode():
+        for batch in loader:
+            if labeled:
+                features, batch_targets = batch
+                targets.extend(int(value) for value in batch_targets.tolist())
+            else:
+                features = batch
+            rows = torch.softmax(model(features.to(device)), dim=1).cpu()
+            probabilities.extend(rows.tolist())
+            predictions.extend(
+                int(value) for value in rows.argmax(dim=1).tolist()
+            )
+    return probabilities, targets, predictions
+
+
 def train(args) -> dict[str, Any]:
     policy = QualityPolicy(
         min_classes=args.min_classes,
@@ -88,6 +128,8 @@ def train(args) -> dict[str, Any]:
         if isinstance(record.get("landmarks"), dict)
         and record["landmarks"].get("format_version")
         == args.required_format_version
+        and record["landmarks"].get("dataset_state")
+        == "validated_capture"
     ]
     if not records:
         raise DatasetQualityError(
@@ -162,6 +204,39 @@ def train(args) -> dict[str, Any]:
             f"{policy.minimum_validation_accuracy:.1%}."
         )
 
+    model.load_state_dict(best_state)
+    known_probabilities, known_targets, known_predictions = collect_probabilities(
+        model, validation_loader, device, labeled=True
+    )
+    metrics = classification_report(known_targets, known_predictions, labels)
+
+    ood_records = [
+        record
+        for record in load_records(args.ood_dataset)
+        if isinstance(record.get("landmarks"), dict)
+        and record["landmarks"].get("format_version")
+        == args.required_format_version
+    ]
+    ood_data = LibrasUnlabeledDataset(ood_records, preprocessor)
+    if len(ood_data) < args.min_ood_samples:
+        raise DatasetQualityError(
+            f"Somente {len(ood_data)} exemplos OOD; mínimo "
+            f"{args.min_ood_samples}."
+        )
+    ood_loader = DataLoader(
+        ood_data, batch_size=args.batch_size, shuffle=False
+    )
+    ood_probabilities, _, _ = collect_probabilities(
+        model, ood_loader, device, labeled=False
+    )
+    rejection = calibrate_rejection(
+        known_probabilities,
+        known_targets,
+        ood_probabilities,
+        minimum_known_acceptance=args.minimum_known_acceptance,
+        minimum_ood_recall=args.minimum_ood_recall,
+    )
+
     args.output_dir.mkdir(parents=True, exist_ok=True)
     weights_path = args.output_dir / "librai_stgcn.pt"
     torch.save(best_state, weights_path)
@@ -176,6 +251,8 @@ def train(args) -> dict[str, Any]:
         "validation_trainers": validation_trainers,
         "validation_mode": args.validation_mode,
         "validation_accuracy": round(best_accuracy, 6),
+        "validation_metrics": metrics,
+        "rejection": rejection,
         "dataset_quality": quality,
         "quality_policy": asdict(policy),
         "weights_sha256": digest,
@@ -192,6 +269,12 @@ def train(args) -> dict[str, Any]:
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("dataset", type=Path)
+    parser.add_argument(
+        "--ood-dataset",
+        type=Path,
+        required=True,
+        help="Sequências v4 de sinais fora do vocabulário e movimentos não-sinais.",
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("ml/models/candidate"))
     parser.add_argument("--epochs", type=int, default=80)
     parser.add_argument("--batch-size", type=int, default=16)
@@ -203,6 +286,9 @@ def parse_args():
     parser.add_argument("--min-trainers-per-class", type=int, default=3)
     parser.add_argument("--min-samples-per-class", type=int, default=15)
     parser.add_argument("--minimum-validation-accuracy", type=float, default=0.70)
+    parser.add_argument("--min-ood-samples", type=int, default=30)
+    parser.add_argument("--minimum-known-acceptance", type=float, default=0.70)
+    parser.add_argument("--minimum-ood-recall", type=float, default=0.90)
     parser.add_argument(
         "--validation-mode",
         choices=("global-trainer", "per-class-trainer"),

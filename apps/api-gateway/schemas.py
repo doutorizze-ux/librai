@@ -515,6 +515,22 @@ class HolisticTrainingDraftRepetitionCreateV4(BaseModel):
         return value
 
 
+class HolisticTrainingDraftRepetitionResponseV4(BaseModel):
+    sign_name: str
+    repetitions_saved: int = Field(ge=1, le=5)
+    required_repetitions: Literal[5] = 5
+    completed: bool
+    duplicate: bool = False
+    dataset_state: Literal[
+        "collecting",
+        "validated_capture",
+        "retake_required",
+    ]
+    retake_required: bool
+    rejected_capture_id: Optional[str] = None
+    consistency: Optional[dict] = None
+
+
 class ContinuousRecognitionChunk(BaseModel):
     protocol_version: Literal[1] = 1
     stream_id: str = Field(

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://librai.app/contracts/holistic-training-draft-repetition-v4-response.schema.json",
+  "title": "Librai Holistic Training Draft Repetition v4 Response",
+  "description": "Reports durable collection progress and the validation state of a five-repetition Libras unit.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sign_name",
+    "repetitions_saved",
+    "required_repetitions",
+    "completed",
+    "duplicate",
+    "dataset_state",
+    "retake_required"
+  ],
+  "properties": {
+    "sign_name": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "repetitions_saved": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "required_repetitions": { "const": 5 },
+    "completed": { "type": "boolean" },
+    "duplicate": { "type": "boolean" },
+    "dataset_state": {
+      "enum": ["collecting", "validated_capture", "retake_required"]
+    },
+    "retake_required": { "type": "boolean" },
+    "rejected_capture_id": { "type": ["string", "null"] },
+    "consistency": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": [
+        "accepted",
+        "median_pairwise_distance",
+        "maximum_medoid_distance",
+        "acceptance_threshold"
+      ],
+      "properties": {
+        "accepted": { "type": "boolean" },
+        "median_pairwise_distance": { "type": "number", "minimum": 0 },
+        "maximum_medoid_distance": { "type": "number", "minimum": 0 },
+        "acceptance_threshold": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}

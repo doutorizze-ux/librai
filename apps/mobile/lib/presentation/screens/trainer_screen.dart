@@ -610,6 +610,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
       await _draftStore.clear();
       final saved = (response.data['repetitions_saved'] as num?)?.toInt() ?? 0;
       final completed = response.data['completed'] == true;
+      final retakeRequired = response.data['retake_required'] == true;
       _recordedHandFrames.clear();
       _recordedHolisticFrames.clear();
       _recordedLandmarks.clear();
@@ -618,7 +619,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
         if (completed) {
           _statusMessage =
               "Sinal '${SignPhraseComposer.displayLabel(pending.signName)}' "
-              '${isHolistic ? 'disponível no tradutor v4 e salvo para a nova IA.' : 'concluído e salvo no servidor.'}';
+              '${isHolistic ? 'validado e salvo para o treinamento da nova IA.' : 'concluído e salvo no servidor.'}';
           if (!isHolistic) {
             _existingSamplesCount += _requiredRepetitions;
           }
@@ -627,8 +628,11 @@ class _TrainerScreenState extends State<TrainerScreen> {
         } else {
           _activeTrainingSign = pending.signName;
           _savedRepetitionsCount = saved;
-          _statusMessage = 'Repetição $saved/$_requiredRepetitions salva no '
-              'servidor. Repita ${SignPhraseComposer.displayLabel(pending.signName)}.';
+          _statusMessage = retakeRequired
+              ? 'Uma captura ficou diferente das demais. As outras $saved '
+                  'foram preservadas; grave mais uma vez.'
+              : 'Repetição $saved/$_requiredRepetitions salva no servidor. '
+                  'Repita ${SignPhraseComposer.displayLabel(pending.signName)}.';
         }
       });
       if (completed) {
@@ -639,6 +643,14 @@ class _TrainerScreenState extends State<TrainerScreen> {
         );
         _fetchSummary();
         _fetchMySamples();
+      } else if (retakeRequired) {
+        _ttsService.speak(
+          'Uma repetição ficou diferente. Grave o sinal mais uma vez.',
+        );
+        _showSnackBar(
+          'Captura inconsistente: $saved repetições foram preservadas.',
+          Colors.orange,
+        );
       } else {
         _ttsService.speak(
           'Repetição $saved de $_requiredRepetitions concluída.',

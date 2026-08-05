@@ -142,6 +142,14 @@ def test_promotion_keeps_multiword_labels_and_requires_real_gates(tmp_path):
         "labels": {"OLA": 0, "TUDO BEM?": 1},
         "validation_mode": "global-trainer",
         "validation_accuracy": 0.9,
+        "rejection": {
+            "method": "softmax_confidence_and_margin",
+            "minimum_confidence": 0.8,
+            "minimum_margin": 0.15,
+            "known_acceptance_rate": 0.8,
+            "ood_recall": 0.95,
+            "ood_validation_samples": 30,
+        },
         "quality_policy": {"minimum_validation_accuracy": 0.7},
         "dataset_quality": {
             "trainers_by_class": {
@@ -170,6 +178,14 @@ def test_promotion_rejects_two_professors_per_class(tmp_path):
         "feature_schema": "librai_holistic_v4",
         "validation_mode": "global-trainer",
         "validation_accuracy": 0.99,
+        "rejection": {
+            "method": "softmax_confidence_and_margin",
+            "minimum_confidence": 0.8,
+            "minimum_margin": 0.15,
+            "known_acceptance_rate": 0.8,
+            "ood_recall": 0.95,
+            "ood_validation_samples": 30,
+        },
         "dataset_quality": {"trainers_by_class": {"OLA": ["A", "B"]}},
     }), encoding="utf-8")
     with pytest.raises(PromotionError, match="três professores"):

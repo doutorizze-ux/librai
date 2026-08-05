@@ -28,6 +28,8 @@ STREAM_TTL_SECONDS = 120.0
 
 class ProductionRecognizer(Protocol):
     version: str
+    minimum_confidence: float
+    minimum_margin: float
 
     def predict(self, frames: list[HolisticFrame]) -> tuple[str, float, float]:
         """Return gloss, confidence and runner-up confidence."""
@@ -210,10 +212,16 @@ class ContinuousRecognitionEngine:
                 )
                 rejection_reason = "inference_error"
                 continue
-            if confidence < 0.85:
+            minimum_confidence = float(
+                getattr(self._recognizer, "minimum_confidence", 0.85)
+            )
+            minimum_margin = float(
+                getattr(self._recognizer, "minimum_margin", 0.12)
+            )
+            if confidence < minimum_confidence:
                 rejection_reason = "low_confidence"
                 continue
-            if confidence - runner_up < 0.12:
+            if confidence - runner_up < minimum_margin:
                 rejection_reason = "ambiguous"
                 continue
             predictions.append(Prediction(

@@ -20,6 +20,10 @@ from sign_labels import (
     is_isolated_sign_label,
     is_lexical_unit_label,
 )
+from temporal_recognition import (
+    extract_holistic_signature,
+    holistic_temporal_distance,
+)
 
 router = APIRouter(prefix="/v1", tags=["training"])
 logger = logging.getLogger(__name__)
@@ -29,6 +33,7 @@ TRAINER_DELETE_SECRET = os.getenv("TRAINER_DELETE_SECRET", "")
 trainer_bearer = HTTPBearer(auto_error=False)
 
 _LEGACY_TRAINER_NAMES = {"prof1"}
+HOLISTIC_CONSISTENCY_THRESHOLD = 0.18
 
 
 def _holistic_fingerprint(frames: list[schemas.HolisticFrameV4]) -> str:
@@ -93,6 +98,61 @@ def _holistic_quality(frames: list[schemas.HolisticFrameV4]) -> dict:
         "duration_ms": duration,
         "median_frame_interval_ms": float(median_interval),
     }
+
+
+def _holistic_repetition_consistency(repetitions: list[dict]) -> tuple[dict, int]:
+    """Compara as cinco repetições e aponta a mais distante do medóide.
+
+    A validação é deliberadamente conservadora: uma sessão inconsistente não
+    entra no conjunto utilizável. O professor mantém quatro repetições e refaz
+    somente a captura discrepante.
+    """
+    signatures = [
+        extract_holistic_signature(entry.get("frames"))
+        for entry in repetitions
+    ]
+    if any(signature is None for signature in signatures):
+        return {
+            "accepted": False,
+            "median_pairwise_distance": 1.0,
+            "maximum_medoid_distance": 1.0,
+            "acceptance_threshold": HOLISTIC_CONSISTENCY_THRESHOLD,
+        }, len(repetitions) - 1
+
+    distances = [[0.0 for _ in signatures] for _ in signatures]
+    pairwise = []
+    for first_index in range(len(signatures)):
+        for second_index in range(first_index + 1, len(signatures)):
+            distance = holistic_temporal_distance(
+                signatures[first_index], signatures[second_index]
+            )
+            if not math.isfinite(distance):
+                distance = 1.0
+            distances[first_index][second_index] = distance
+            distances[second_index][first_index] = distance
+            pairwise.append(distance)
+
+    mean_distances = [
+        sum(row) / max(1, len(row) - 1)
+        for row in distances
+    ]
+    medoid_index = min(
+        range(len(mean_distances)), key=mean_distances.__getitem__
+    )
+    medoid_distances = distances[medoid_index]
+    rejected_index = max(
+        range(len(medoid_distances)), key=medoid_distances.__getitem__
+    )
+    sorted_pairwise = sorted(pairwise)
+    median_pairwise = sorted_pairwise[len(sorted_pairwise) // 2]
+    maximum_medoid = medoid_distances[rejected_index]
+    accepted = maximum_medoid <= HOLISTIC_CONSISTENCY_THRESHOLD
+    return {
+        "accepted": accepted,
+        "median_pairwise_distance": round(median_pairwise, 6),
+        "maximum_medoid_distance": round(maximum_medoid, 6),
+        "acceptance_threshold": HOLISTIC_CONSISTENCY_THRESHOLD,
+    }, rejected_index
 
 
 def _legacy_training_filter():
@@ -620,7 +680,7 @@ def save_training_draft_repetition(
 
 @router.post(
     "/training/drafts-v4/repetitions",
-    response_model=schemas.TrainingDraftRepetitionResponse,
+    response_model=schemas.HolisticTrainingDraftRepetitionResponseV4,
     status_code=status.HTTP_201_CREATED,
 )
 def save_holistic_training_draft_repetition_v4(
@@ -718,15 +778,19 @@ def save_holistic_training_draft_repetition_v4(
         "required_repetitions": 5,
         "completed": saved_count == 5,
         "duplicate": False,
+        "dataset_state": "collecting",
+        "retake_required": False,
+        "rejected_capture_id": None,
+        "consistency": None,
     }
-    db.add(models.TrainingCaptureReceipt(
-        capture_id=repetition.capture_id,
-        trainer_name=trainer_name,
-        sign_name=sign_name,
-        response=response,
-    ))
 
     if saved_count < 5:
+        db.add(models.TrainingCaptureReceipt(
+            capture_id=repetition.capture_id,
+            trainer_name=trainer_name,
+            sign_name=sign_name,
+            response=response,
+        ))
         db.add(models.AuditLog(
             user_id=trainer_name,
             action="HOLISTIC_TRAINING_DRAFT_REPETITION_SAVE_V4",
@@ -735,10 +799,54 @@ def save_holistic_training_draft_repetition_v4(
         db.commit()
         return response
 
+    consistency, rejected_index = _holistic_repetition_consistency(
+        stored_repetitions
+    )
+    response["consistency"] = consistency
+    if not consistency["accepted"]:
+        rejected = stored_repetitions.pop(rejected_index)
+        draft.repetitions = stored_repetitions
+        draft.updated_at = datetime.utcnow()
+        response.update({
+            "repetitions_saved": len(stored_repetitions),
+            "completed": False,
+            "dataset_state": "retake_required",
+            "retake_required": True,
+            "rejected_capture_id": rejected["capture_id"],
+        })
+        current_receipt = models.TrainingCaptureReceipt(
+            capture_id=repetition.capture_id,
+            trainer_name=trainer_name,
+            sign_name=sign_name,
+            response=response,
+        )
+        db.add(current_receipt)
+        rejected_receipt = db.query(models.TrainingCaptureReceipt).filter(
+            models.TrainingCaptureReceipt.capture_id
+            == rejected["capture_id"],
+        ).first()
+        if rejected_receipt:
+            rejected_receipt.response = dict(response)
+        db.add(models.AuditLog(
+            user_id=trainer_name,
+            action="HOLISTIC_TRAINING_DRAFT_RETAKE_REQUIRED_V4",
+            target=f"{draft.id}:{sign_name}:{rejected['capture_id']}",
+        ))
+        db.commit()
+        return response
+
+    response["dataset_state"] = "validated_capture"
+    db.add(models.TrainingCaptureReceipt(
+        capture_id=repetition.capture_id,
+        trainer_name=trainer_name,
+        sign_name=sign_name,
+        response=response,
+    ))
+
     for entry in stored_repetitions:
         sequence = {
             "format_version": 4,
-            "dataset_state": "pending_validation",
+            "dataset_state": "validated_capture",
             "capture_context": {
                 key: value
                 for key, value in draft.capture_context.items()
@@ -748,6 +856,7 @@ def save_holistic_training_draft_repetition_v4(
                 "linguistic_metadata"
             ],
             "quality": entry["quality"],
+            "consistency": consistency,
             "fingerprint": entry["fingerprint"],
             "frames": entry["frames"],
         }
@@ -768,7 +877,7 @@ def save_holistic_training_draft_repetition_v4(
     db.add(models.AuditLog(
         user_id=trainer_name,
         action="HOLISTIC_TRAINING_DRAFT_COMPLETE_V4",
-        target=f"{sign_name}:5_pending_validation",
+        target=f"{sign_name}:5_validated_captures",
     ))
     db.commit()
     return response

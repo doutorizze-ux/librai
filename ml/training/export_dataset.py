@@ -33,13 +33,23 @@ def export_dataset(database_url: str, output: Path):
             landmarks = row["landmarks"]
             if isinstance(landmarks, str):
                 landmarks = json.loads(landmarks)
+            if (
+                not isinstance(landmarks, dict)
+                or landmarks.get("format_version") != 4
+                or landmarks.get("dataset_state") != "validated_capture"
+            ):
+                continue
             samples.append(
                 {
                     "id": row["id"],
                     "sign_name": row["sign_name"],
                     "trainer_name": row["trainer_name"],
                     "frame_count": row["frame_count"],
-                    "created_at": row["created_at"].isoformat(),
+                    "created_at": (
+                        row["created_at"].isoformat()
+                        if hasattr(row["created_at"], "isoformat")
+                        else str(row["created_at"])
+                    ),
                     "landmarks": landmarks,
                 }
             )

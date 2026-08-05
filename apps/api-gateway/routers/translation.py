@@ -192,7 +192,7 @@ def get_temporal_v2_training_index(db: Session):
 
 
 def get_holistic_v4_training_index(db: Session):
-    """Carrega somente lotes v4 completos; nunca mistura dados v2/v3."""
+    """Carrega somente capturas v4 consistentes; nunca usa lotes pendentes."""
     global _holistic_v4_index_fingerprint, _holistic_v4_index
     sample_stats = db.query(
         func.count(models.TrainingSample.id),
@@ -213,6 +213,7 @@ def get_holistic_v4_training_index(db: Session):
             not is_lexical_unit_label(label)
             or not isinstance(payload, dict)
             or payload.get("format_version") != 4
+            or payload.get("dataset_state") != "validated_capture"
         ):
             continue
         signature = extract_holistic_signature(payload.get("frames"))

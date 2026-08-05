@@ -121,6 +121,11 @@ class OnnxProductionRecognizer:
         self._labels = {
             int(index): str(label) for label, index in labels.items()
         }
+        rejection = manifest.get("rejection") or {}
+        self.minimum_confidence = float(
+            rejection.get("minimum_confidence", 0.85)
+        )
+        self.minimum_margin = float(rejection.get("minimum_margin", 0.12))
 
     def predict(self, frames: list[HolisticFrame]) -> tuple[str, float, float]:
         features = self._preprocessor(frames)
@@ -155,6 +160,21 @@ def _validate_manifest(manifest: dict[str, Any], manifest_path: Path) -> Path:
         raise ModelManifestError("validation must hold out complete trainers")
     if float(manifest.get("validation_accuracy", 0)) < 0.70:
         raise ModelManifestError("validation accuracy is below the production gate")
+    rejection = manifest.get("rejection")
+    if not isinstance(rejection, dict):
+        raise ModelManifestError("unknown-sign rejection calibration is missing")
+    if rejection.get("method") != "softmax_confidence_and_margin":
+        raise ModelManifestError("unsupported rejection calibration")
+    if float(rejection.get("known_acceptance_rate", 0)) < 0.70:
+        raise ModelManifestError("known-sign acceptance is below the production gate")
+    if float(rejection.get("ood_recall", 0)) < 0.90:
+        raise ModelManifestError("OOD recall is below the production gate")
+    if int(rejection.get("ood_validation_samples", 0)) < 30:
+        raise ModelManifestError("insufficient OOD validation samples")
+    minimum_confidence = float(rejection.get("minimum_confidence", 0))
+    minimum_margin = float(rejection.get("minimum_margin", 0))
+    if not 0.0 < minimum_confidence < 1.0 or not 0.0 < minimum_margin < 1.0:
+        raise ModelManifestError("invalid rejection thresholds")
     labels = manifest.get("labels")
     if not isinstance(labels, dict) or len(labels) < 2:
         raise ModelManifestError("invalid class map")
