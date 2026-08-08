@@ -256,7 +256,12 @@ def structured_hand_frames(
     return frames
 
 
-def holistic_frames(repetition_offset=0.0, frame_count=24, hand_ratio=1.0):
+def holistic_frames(
+    repetition_offset=0.0,
+    frame_count=24,
+    hand_ratio=1.0,
+    frame_interval_ms=33,
+):
     frames = []
     hand_frame_limit = round(frame_count * hand_ratio)
     for frame_index in range(frame_count):
@@ -279,7 +284,7 @@ def holistic_frames(repetition_offset=0.0, frame_count=24, hand_ratio=1.0):
             for index in range(13)
         ]
         frames.append({
-            "timestamp_ms": frame_index * 33,
+            "timestamp_ms": frame_index * frame_interval_ms,
             "hands": hands,
             "pose": {"landmarks": pose},
             "expression": {
@@ -543,6 +548,49 @@ def test_holistic_draft_persists_each_repetition_and_completes_multiword_unit():
             for sample in samples
         )
 
+
+def test_holistic_draft_preserves_three_repetitions_from_a_slow_camera():
+    trainer_name = "Professora Camera Lenta"
+    headers = trainer_headers(trainer_name)
+
+    for index in range(3):
+        response = client.post(
+            "/v1/training/drafts-v4/repetitions",
+            headers=headers,
+            json={
+                "capture_id": f"slow_camera_capture_{index:02d}",
+                "format_version": 4,
+                "sign_name": "OLÁ",
+                "capture_context": {
+                    "platform": "web",
+                    "camera_facing": "front",
+                    "app_version": "test",
+                },
+                "linguistic_metadata": {
+                    "regional_variation": "Minas Gerais",
+                    "dominant_hand": "Right",
+                },
+                "frames": holistic_frames(
+                    index * 0.003,
+                    frame_interval_ms=250,
+                ),
+            },
+        )
+        assert response.status_code == 201, response.text
+        assert response.json()["repetitions_saved"] == index + 1
+
+    restored = client.get("/v1/training/drafts/current", headers=headers)
+    assert restored.status_code == 200
+    assert restored.json()["repetitions_saved"] == 3
+
+    with TestingSessionLocal() as db:
+        draft = db.query(models.TrainingDraft).filter(
+            models.TrainingDraft.trainer_name == trainer_name,
+        ).one()
+        assert all(
+            "slow_capture_cadence" in entry["quality"]["warnings"]
+            for entry in draft.repetitions
+        )
 
 def test_holistic_draft_rejects_an_inconsistent_fifth_repetition():
     trainer_name = "Professora Reteste"

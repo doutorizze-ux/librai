@@ -54,19 +54,18 @@ def _holistic_quality(frames: list[schemas.HolisticFrameV4]) -> dict:
     sorted_intervals = sorted(intervals)
     median_interval = sorted_intervals[len(sorted_intervals) // 2]
     duration = timestamps[-1] - timestamps[0]
-    if duration < 300 or duration > 12000:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Cada repetição deve durar entre 0,3 e 12 segundos.",
-        )
-    if median_interval < 8 or median_interval > 200:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "A cadência da câmera está fora do intervalo aceito; "
-                "grave novamente sem travamentos."
-            ),
-        )
+    # A cadência depende do aparelho, navegador e carga momentânea. O pipeline
+    # neural reamostra a sequência antes do treino; por isso, duração e FPS são
+    # metadados de qualidade, e não motivo para perder uma repetição válida.
+    warnings = []
+    if duration < 300:
+        warnings.append("short_duration")
+    elif duration > 12000:
+        warnings.append("long_duration")
+    if median_interval < 8:
+        warnings.append("timestamp_precision")
+    elif median_interval > 200:
+        warnings.append("slow_capture_cadence")
     hand_frames = sum(bool(frame.hands) for frame in frames)
     pose_frames = sum(
         any(
@@ -97,6 +96,7 @@ def _holistic_quality(frames: list[schemas.HolisticFrameV4]) -> dict:
         "pose_frame_ratio": round(pose_ratio, 4),
         "duration_ms": duration,
         "median_frame_interval_ms": float(median_interval),
+        "warnings": warnings,
     }
 
 

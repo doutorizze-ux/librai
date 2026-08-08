@@ -45,6 +45,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
   bool _bodyDetected = false;
   String _statusMessage = "Posicione a mão em frente à câmera";
   bool _isUploading = false;
+  bool _isFinalizingCapture = false;
 
   Timer? _debounceTimer;
   int _existingSamplesCount = 0;
@@ -390,7 +391,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
   }
 
   // Captura por pelo menos 2 segundos. Em aparelhos mais lentos, estende até
-  // 4 segundos para atingir 24 quadros realmente novos sem penalizar o professor.
+  // 10 segundos para atingir 24 quadros realmente novos sem penalizar o professor.
   void _startCapture(String signName) {
     setState(() {
       _isRecording = true;
@@ -403,7 +404,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
     });
 
     const minimumCaptureTicks = 60;
-    const maximumCaptureTicks = 180;
+    const maximumCaptureTicks = 300;
     int frameCount = 0;
     Timer.periodic(const Duration(milliseconds: 33), (timer) async {
       if (!mounted || !_isRecording) {
@@ -462,63 +463,69 @@ class _TrainerScreenState extends State<TrainerScreen> {
 
   // Finaliza a gravação e envia para a API do Coolify
   Future<void> _stopAndUploadCapture(String signName) async {
+    if (_isFinalizingCapture || _isUploading) return;
+    _isFinalizingCapture = true;
     setState(() {
       _isRecording = false;
       _statusMessage = "Validando repetição...";
     });
 
-    if (_validCapturedFrames < 24) {
-      setState(() {
-        _statusMessage =
-            "Captura insuficiente: mantenha mãos, rosto e tronco visíveis.";
-      });
-      _showSnackBar(
-        "Gravação recusada: somente $_validCapturedFrames quadro(s) útil(eis). "
-        "São necessários pelo menos 24.",
-        Colors.redAccent,
-      );
-      return;
-    }
-
-    if (_recordedHolisticFrames.length < 24) {
-      setState(() {
-        _statusMessage =
-            "Captura recusada: mantenha mãos, rosto e tronco visíveis.";
-      });
-      _showSnackBar(
-        "A IA não recebeu a sequência completa de mãos, rosto e tronco. "
-        "Reposicione-se e tente novamente.",
-        Colors.redAccent,
-      );
-      return;
-    }
-
-    setState(() {
-      _isUploading = true;
-      _statusMessage = "Salvando esta repetição...";
-    });
-
-    final pending = PendingTrainingRepetition(
-      captureId: _newCaptureId(),
-      trainerName: _trainerName!,
-      signName: signName,
-      platform: currentClientPlatform(),
-      cameraFacing: 'front',
-      frames: _recordedHolisticFrames
-          .map((frame) => Map<String, dynamic>.from(frame))
-          .toList(growable: false),
-      formatVersion: 4,
-    );
     try {
+      if (_validCapturedFrames < 24 || _recordedHolisticFrames.length < 24) {
+        setState(() {
+          _statusMessage =
+              "Captura insuficiente: mantenha mãos, rosto e tronco visíveis.";
+        });
+        _showSnackBar(
+          "A câmera reuniu $_validCapturedFrames de 24 quadros necessários. "
+          "Reposicione-se e tente novamente.",
+          Colors.redAccent,
+        );
+        return;
+      }
+
+      setState(() {
+        _isUploading = true;
+        _statusMessage = "Salvando esta repetição...";
+      });
+
+      final pending = PendingTrainingRepetition(
+        captureId: _newCaptureId(),
+        trainerName: _trainerName!,
+        signName: signName,
+        platform: currentClientPlatform(),
+        cameraFacing: 'front',
+        frames: _recordedHolisticFrames
+            .map((frame) => Map<String, dynamic>.from(frame))
+            .toList(growable: false),
+        formatVersion: 4,
+      );
       // A cópia local é criada antes da rede. Ela só é apagada depois que
       // o PostgreSQL confirmar o mesmo capture_id.
       await _draftStore.save(pending);
       if (!mounted) return;
       setState(() => _hasPendingDraftUpload = true);
       await _uploadPendingRepetition(pending);
+    } catch (error, stackTrace) {
+      debugPrint('Erro ao proteger a repetição antes do envio: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (!mounted) return;
+      setState(() {
+        _statusMessage =
+            'Não foi possível preparar esta repetição. A tela continua aberta; tente novamente.';
+      });
+      _showSnackBar(_statusMessage, Colors.redAccent);
     } finally {
+      _isFinalizingCapture = false;
       if (mounted) setState(() => _isUploading = false);
     }
+  }
+
+  Future<void> _finishRecordingManually() async {
+    if (!_isRecording || _isFinalizingCapture) return;
+    final signName = _activeTrainingSign ??
+        LexicalSignLabel.normalize(_signNameController.text);
+    await _stopAndUploadCapture(signName);
   }
 
   String _newCaptureId() {
@@ -586,8 +593,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
             : '/v1/training/drafts/repetitions',
         options: Options(
           headers: {'Authorization': 'Bearer $_trainerToken'},
-          receiveTimeout: const Duration(seconds: 20),
-          sendTimeout: const Duration(seconds: 20),
+          receiveTimeout: const Duration(seconds: 45),
+          sendTimeout: const Duration(seconds: 45),
         ),
         data: {
           'capture_id': pending.captureId,
@@ -673,6 +680,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
       if (rejected) {
         await _draftStore.clear();
         _recordedHandFrames.clear();
+        _recordedHolisticFrames.clear();
         _recordedLandmarks.clear();
       }
       if (!mounted) return;
@@ -1320,7 +1328,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
                     onPressed: (_isCountingDown || _isUploading)
                         ? null
                         : (_isRecording
-                            ? () => setState(() => _isRecording = false)
+                            ? _finishRecordingManually
                             : _startRecordingFlow),
                   ),
                 const SizedBox(height: 24),
