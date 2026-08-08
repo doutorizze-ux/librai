@@ -4,6 +4,10 @@ import '../domain/interfaces/sign_interpreter.dart';
 import 'app_config.dart';
 
 class MockSignInterpreter implements SignInterpreter {
+  static const int _minimumHolisticFrames = 24;
+  static const int _maximumHolisticFrames = 40;
+  static const int _holisticPredictionStride = 6;
+
   String? _loadedModelPath;
   final double confidenceThreshold = 0.75;
   final List<List<Map<String, double>>> _sequenceFrames = [];
@@ -59,14 +63,20 @@ class MockSignInterpreter implements SignInterpreter {
     }
     _holisticSequenceFrames.add(Map<String, dynamic>.from(frame));
     _holisticFramesSincePrediction++;
-    if (_holisticSequenceFrames.length > 96) {
+    if (_holisticSequenceFrames.length > _maximumHolisticFrames) {
       _holisticSequenceFrames.removeAt(0);
     }
   }
 
   bool get hasEnoughHolisticFrames =>
-      _holisticSequenceFrames.length >= 24 &&
-      _holisticFramesSincePrediction >= 6;
+      _holisticSequenceFrames.length >= _minimumHolisticFrames &&
+      _holisticFramesSincePrediction >= _holisticPredictionStride;
+
+  @visibleForTesting
+  int get bufferedHolisticFrameCount => _holisticSequenceFrames.length;
+
+  @visibleForTesting
+  int get holisticFramesSincePrediction => _holisticFramesSincePrediction;
 
   Future<PredictionResult> predictBufferedHolisticSequence() async {
     if (_loadedModelPath == null) {

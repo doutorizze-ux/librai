@@ -247,6 +247,12 @@ void main() {
 
       interpreter.addHolisticFrame(frame(23));
       expect(interpreter.hasEnoughHolisticFrames, isTrue);
+
+      for (var index = 24; index < 80; index++) {
+        interpreter.addHolisticFrame(frame(index));
+      }
+      expect(interpreter.bufferedHolisticFrameCount, equals(40));
+      expect(interpreter.holisticFramesSincePrediction, equals(80));
     });
   });
 

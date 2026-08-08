@@ -10,6 +10,12 @@ void main() {
     expect(index, contains('new Worker('));
     expect(index, contains('requestVideoFrameCallback'));
     expect(index, contains('createImageBitmap'));
+    expect(index, contains('createInferenceBitmap'));
+    expect(index, contains("self.inferenceDelegate === 'CPU'"));
+    expect(index, contains('? 512'));
+    expect(index, contains(': 640'));
+    expect(index, contains('resizeWidth'));
+    expect(index, contains("resizeQuality: 'low'"));
     expect(index, contains('frameInFlight'));
     expect(index, isNot(contains('await hands.send')));
 

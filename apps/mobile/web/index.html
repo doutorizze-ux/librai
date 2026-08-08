@@ -51,6 +51,8 @@
       inferenceFps: 0,
       inferenceLatencyMs: 0,
       inferenceDelegate: 'initializing',
+      inferenceInputWidth: 0,
+      inferenceInputHeight: 0,
       handScreenRatio: 0,
       isActive: false,
 
@@ -74,6 +76,7 @@
         let frameInFlight = false;
         let cameraSessionId = 0;
         let lastSubmittedTimestamp = 0;
+        let bitmapResizeSupported = true;
         const motionTrails = [[], []];
 
         const updateLatestLandmarks = () => {
@@ -197,6 +200,61 @@
           const offsetY = (height - renderedHeight) / 2;
 
           return { renderedWidth, renderedHeight, offsetX, offsetY };
+        };
+
+        // A prévia permanece na resolução nativa da câmera. Somente a cópia
+        // enviada ao MediaPipe é limitada a 640 px no maior lado. Os modelos
+        // redimensionam a imagem internamente de qualquer forma; fazer isso
+        // antes da transferência reduz cópia, memória e latência sem alterar
+        // as coordenadas normalizadas usadas pelo tradutor.
+        const createInferenceBitmap = async () => {
+          const sourceWidth = Number(videoElement?.videoWidth || 0);
+          const sourceHeight = Number(videoElement?.videoHeight || 0);
+          if (!sourceWidth || !sourceHeight) {
+            return createImageBitmap(videoElement);
+          }
+
+          const maxEdge =
+            self.captureMode === 'holistic' && self.inferenceDelegate === 'CPU'
+              ? 512
+              : 640;
+          const scale = Math.min(
+            1,
+            maxEdge / Math.max(sourceWidth, sourceHeight)
+          );
+          const resizeWidth = Math.max(2, Math.round(sourceWidth * scale));
+          const resizeHeight = Math.max(2, Math.round(sourceHeight * scale));
+          self.inferenceInputWidth = resizeWidth;
+          self.inferenceInputHeight = resizeHeight;
+
+          if (!bitmapResizeSupported || scale >= 0.995) {
+            return createImageBitmap(videoElement);
+          }
+
+          try {
+            return await createImageBitmap(
+              videoElement,
+              0,
+              0,
+              sourceWidth,
+              sourceHeight,
+              {
+                resizeWidth,
+                resizeHeight,
+                resizeQuality: 'low'
+              }
+            );
+          } catch (error) {
+            // Alguns WebViews antigos aceitam ImageBitmap, mas não as opções
+            // de redimensionamento. Memorize o fallback para não repetir uma
+            // exceção em cada quadro.
+            bitmapResizeSupported = false;
+            console.warn(
+              'Redimensionamento de quadro indisponível; usando captura nativa.',
+              error
+            );
+            return createImageBitmap(videoElement);
+          }
         };
 
         const drawSkeletonCanvas = (image, multiHandLandmarks, quality) => {
@@ -507,7 +565,7 @@
           lastSubmittedTimestamp = timestampMs;
 
           try {
-            const bitmap = await createImageBitmap(videoElement);
+            const bitmap = await createInferenceBitmap();
             if (!self.isActive || sessionId !== cameraSessionId) {
               bitmap.close();
               return;
@@ -626,6 +684,8 @@
           self.trackingQuality = 'waiting';
           self.inferenceFps = 0;
           self.inferenceLatencyMs = 0;
+          self.inferenceInputWidth = 0;
+          self.inferenceInputHeight = 0;
           self.handScreenRatio = 0;
           lastFrameStartedAt = 0;
           lastResultAt = 0;
