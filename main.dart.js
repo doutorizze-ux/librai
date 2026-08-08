@@ -30747,7 +30747,7 @@ $S:2}
 A.aFI.prototype={
 $1(a){var s=A.dD().b
 s=s==null?null:s.canvasKitBaseUrl
-return(s==null?"https://www.gstatic.com/flutter-canvaskit/0cd610717bde95fd88343c64f81c11ba4e5c0010/":s)+a},
+return(s==null?"https://www.gstatic.com/flutter-canvaskit/5a2a6a42cce67f965cf540fcecf616faca624aa1/":s)+a},
 $S:55}
 A.Qa.prototype={
 gC(a){var s=this.a
@@ -98876,7 +98876,7 @@ if(t.j.b(s))if(!J.dY(s)){p=t.f
 p=!p.b(r)||!p.b(q)}if(p)return
 p=this.e
 p.push(A.rB(a,t.N,t.z));++this.r
-if(p.length>96)B.b.hZ(p,0)},
+if(p.length>40)B.b.hZ(p,0)},
 ga0Y(){return this.e.length>=24&&this.r>=6},
 E1(){var s=0,r=A.G(t.bo),q,p=2,o=[],n=this,m,l,k,j,i,h,g
 var $async$E1=A.H(function(a,b){if(a===1){o.push(b)
