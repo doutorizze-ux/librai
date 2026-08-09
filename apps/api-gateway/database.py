@@ -192,10 +192,52 @@ def get_training_integrity_status(db):
         "total_samples": counts["total_count"],
         "active_samples": counts["active_count"],
         "archived_samples": counts["archived_count"],
+        "eligible_v4_samples": 0,
+        "eligible_v4_labels": 0,
+        "ready_v4_labels": 0,
+        "incompatible_active_samples": counts["active_count"],
         "integrity": "ok",
         "last_backup_at": None,
         "external_backup": False,
     }
+
+    if engine.dialect.name == "postgresql":
+        compatible_filter = """
+            deleted_at IS NULL
+            AND landmarks ->> 'format_version' = '4'
+            AND landmarks ->> 'dataset_state' = 'validated_capture'
+        """
+    else:
+        compatible_filter = """
+            deleted_at IS NULL
+            AND json_extract(landmarks, '$.format_version') = 4
+            AND json_extract(landmarks, '$.dataset_state') = 'validated_capture'
+        """
+
+    compatible = db.execute(text(f"""
+        SELECT
+            COUNT(*) AS sample_count,
+            COUNT(DISTINCT UPPER(TRIM(sign_name))) AS label_count
+        FROM training_samples
+        WHERE {compatible_filter}
+    """)).mappings().one()
+    ready_labels = db.execute(text(f"""
+        SELECT COUNT(*)
+        FROM (
+            SELECT UPPER(TRIM(sign_name)) AS normalized_label
+            FROM training_samples
+            WHERE {compatible_filter}
+            GROUP BY UPPER(TRIM(sign_name))
+            HAVING COUNT(*) >= 3
+        ) AS ready_signs
+    """)).scalar_one()
+    result["eligible_v4_samples"] = compatible["sample_count"]
+    result["eligible_v4_labels"] = compatible["label_count"]
+    result["ready_v4_labels"] = ready_labels
+    result["incompatible_active_samples"] = max(
+        0,
+        counts["active_count"] - compatible["sample_count"],
+    )
     if engine.dialect.name != "postgresql":
         return result
 

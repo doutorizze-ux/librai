@@ -142,6 +142,31 @@ jobs:
           cd apps/mobile
           flutter pub get
 
+      - name: Validate MediaPipe web bridge syntax
+        run: |
+          cd apps/mobile
+          python - <<'PY'
+          import re
+          import subprocess
+          from pathlib import Path
+
+          html = Path("web/index.html").read_text(encoding="utf-8")
+          scripts = re.findall(r"<script>(.*?)</script>", html, re.DOTALL)
+          if not scripts:
+              raise SystemExit("MediaPipe bridge script not found")
+          subprocess.run(
+              ["node", "--check", "-"],
+              input=scripts[0],
+              text=True,
+              check=True,
+          )
+          for worker in (
+              "web/mediapipe-hand-worker.js",
+              "web/mediapipe-holistic-worker.js",
+          ):
+              subprocess.run(["node", "--check", worker], check=True)
+          PY
+
       - name: Run tests
         run: |
           cd apps/mobile

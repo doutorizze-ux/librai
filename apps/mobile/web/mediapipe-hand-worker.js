@@ -9,7 +9,12 @@ let handLandmarker = null;
 let delegate = "CPU";
 let isReady = false;
 
-async function createLandmarker(wasmRoot, modelAssetPath, requestedDelegate) {
+async function createLandmarker(
+  wasmRoot,
+  modelAssetPath,
+  requestedDelegate,
+  visualTracking,
+) {
   const vision = await FilesetResolver.forVisionTasks(wasmRoot);
   return HandLandmarker.createFromOptions(vision, {
     baseOptions: {
@@ -18,13 +23,13 @@ async function createLandmarker(wasmRoot, modelAssetPath, requestedDelegate) {
     },
     runningMode: "VIDEO",
     numHands: 2,
-    minHandDetectionConfidence: 0.55,
-    minHandPresenceConfidence: 0.55,
-    minTrackingConfidence: 0.55,
+    minHandDetectionConfidence: visualTracking ? 0.45 : 0.55,
+    minHandPresenceConfidence: visualTracking ? 0.45 : 0.55,
+    minTrackingConfidence: visualTracking ? 0.40 : 0.55,
   });
 }
 
-async function initialize({ wasmRoot, modelAssetPath }) {
+async function initialize({ wasmRoot, modelAssetPath, visualTracking = false }) {
   if (handLandmarker) {
     self.postMessage({
       type: isReady ? "ready" : "warmup-request",
@@ -38,6 +43,7 @@ async function initialize({ wasmRoot, modelAssetPath }) {
       wasmRoot,
       modelAssetPath,
       "GPU",
+      visualTracking,
     );
     delegate = "GPU";
   } catch (gpuError) {
@@ -49,6 +55,7 @@ async function initialize({ wasmRoot, modelAssetPath }) {
       wasmRoot,
       modelAssetPath,
       "CPU",
+      visualTracking,
     );
     delegate = "CPU";
   }

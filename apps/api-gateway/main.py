@@ -110,12 +110,18 @@ def read_root():
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):
     training_storage = get_training_integrity_status(db)
+    recognition_ready = (
+        training_storage["active_samples"] == 0
+        or training_storage["ready_v4_labels"] > 0
+    )
     return {
         "status": (
             "healthy"
-            if training_storage["integrity"] == "ok"
+            if training_storage["integrity"] == "ok" and recognition_ready
             else "degraded"
         ),
+        "release": os.getenv("APP_RELEASE", "unknown"),
+        "recognition_ready": recognition_ready,
         "training_storage": training_storage,
     }
 if __name__ == "__main__":

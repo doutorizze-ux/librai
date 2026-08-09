@@ -786,14 +786,47 @@ def test_health():
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "healthy"
+    assert payload["release"] == "unknown"
+    assert payload["recognition_ready"] is True
     assert payload["training_storage"] == {
         "total_samples": 0,
         "active_samples": 0,
         "archived_samples": 0,
+        "eligible_v4_samples": 0,
+        "eligible_v4_labels": 0,
+        "ready_v4_labels": 0,
+        "incompatible_active_samples": 0,
         "integrity": "ok",
         "last_backup_at": None,
         "external_backup": False,
     }
+
+
+def test_health_reports_v4_dataset_eligible_after_training():
+    with TestingSessionLocal() as db:
+        for index in range(3):
+            db.add(models.TrainingSample(
+                sign_name="OLA",
+                trainer_name="Professora teste",
+                frame_count=24,
+                landmarks={
+                    "format_version": 4,
+                    "dataset_state": "validated_capture",
+                    "frames": [],
+                    "capture_id": f"health-{index}",
+                },
+            ))
+        db.commit()
+
+    response = client.get("/health")
+    assert response.status_code == 200
+    storage = response.json()["training_storage"]
+    assert storage["active_samples"] == 3
+    assert storage["eligible_v4_samples"] == 3
+    assert storage["eligible_v4_labels"] == 1
+    assert storage["ready_v4_labels"] == 1
+    assert storage["incompatible_active_samples"] == 0
+    assert response.json()["recognition_ready"] is True
 
 
 def test_vlibras_reference_catalog_search():
