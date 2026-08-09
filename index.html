@@ -51,6 +51,9 @@
       inferenceFps: 0,
       inferenceLatencyMs: 0,
       inferenceDelegate: 'initializing',
+      recognitionFps: 0,
+      recognitionLatencyMs: 0,
+      trackingDelegate: 'initializing',
       inferenceInputWidth: 0,
       inferenceInputHeight: 0,
       handScreenRatio: 0,
@@ -74,10 +77,23 @@
         let workerReadyPromise = null;
         let workerMode = null;
         let frameInFlight = false;
+        let trackingWorker = null;
+        let trackingWorkerReadyPromise = null;
+        let trackingFrameInFlight = false;
         let cameraSessionId = 0;
         let lastSubmittedTimestamp = 0;
+        let lastTrackingSubmittedTimestamp = 0;
+        let lastRecognitionSubmittedAt = 0;
         let bitmapResizeSupported = true;
+        let lastTrackingFrameStartedAt = 0;
+        let lastTrackingResultAt = 0;
+        let smoothedTrackingFrameInterval = 0;
+        let lastOverlayDetectionAt = 0;
+        let lastFaceDetectionAt = 0;
+        let lastPoseDetectionAt = 0;
         const motionTrails = [[], []];
+        const mediaPipeWorkerRevision = '20260809-dual-tracking-v1';
+        const overlayDetectionGraceMs = 220;
 
         const updateLatestLandmarks = () => {
           // Mantido somente para telas legadas. O reconhecimento v2 consome
@@ -105,6 +121,7 @@
                 : 'mediapipe-hand-worker.js',
               document.baseURI
             );
+            workerUrl.searchParams.set('rev', mediaPipeWorkerRevision);
             handWorker = new Worker(workerUrl);
 
             handWorker.onerror = (event) => {
@@ -173,6 +190,84 @@
           return workerReadyPromise;
         };
 
+        // O rastreador visual usa apenas o modelo de mÃ£os. Ele fica separado
+        // do modelo holÃ­stico (mÃ£os + rosto + tronco), para que o neon nÃ£o
+        // espere a inferÃªncia mais pesada terminar.
+        const ensureTrackingWorker = () => {
+          if (self.captureMode !== 'holistic') return Promise.resolve();
+          if (trackingWorkerReadyPromise) return trackingWorkerReadyPromise;
+
+          trackingWorkerReadyPromise = new Promise((resolve, reject) => {
+            const workerUrl = new URL(
+              'mediapipe-hand-worker.js',
+              document.baseURI
+            );
+            workerUrl.searchParams.set('rev', mediaPipeWorkerRevision);
+            trackingWorker = new Worker(workerUrl);
+
+            trackingWorker.onerror = (event) => {
+              trackingWorker?.terminate();
+              trackingWorker = null;
+              trackingWorkerReadyPromise = null;
+              reject(new Error(
+                event.message || 'Falha no rastreador visual do MediaPipe.'
+              ));
+            };
+
+            trackingWorker.onmessage = async (event) => {
+              const message = event.data || {};
+              if (message.type === 'warmup-request') {
+                try {
+                  self.trackingDelegate = message.delegate || 'CPU';
+                  const warmupCanvas = document.createElement('canvas');
+                  warmupCanvas.width = 224;
+                  warmupCanvas.height = 224;
+                  const warmupContext = warmupCanvas.getContext('2d');
+                  warmupContext.fillStyle = '#777';
+                  warmupContext.fillRect(0, 0, 224, 224);
+                  const bitmap = await createImageBitmap(warmupCanvas);
+                  trackingWorker.postMessage(
+                    { type: 'warmup', bitmap },
+                    [bitmap]
+                  );
+                } catch (error) {
+                  trackingWorker?.terminate();
+                  trackingWorker = null;
+                  trackingWorkerReadyPromise = null;
+                  reject(error);
+                }
+                return;
+              }
+              if (message.type === 'ready') {
+                self.trackingDelegate = message.delegate || 'CPU';
+                resolve();
+                return;
+              }
+              if (message.type === 'init-error') {
+                trackingWorker?.terminate();
+                trackingWorker = null;
+                trackingWorkerReadyPromise = null;
+                reject(new Error(
+                  message.message || 'Falha ao iniciar rastreador visual.'
+                ));
+                return;
+              }
+              handleTrackingWorkerResult(message);
+            };
+
+            trackingWorker.postMessage({
+              type: 'init',
+              visualTracking: true,
+              wasmRoot:
+                'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm',
+              modelAssetPath:
+                'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'
+            });
+          });
+
+          return trackingWorkerReadyPromise;
+        };
+
         const syncCanvasSize = (canvas) => {
           const width = Math.max(1, Math.round(canvas.clientWidth || 640));
           const height = Math.max(1, Math.round(canvas.clientHeight || 480));
@@ -207,17 +302,16 @@
         // redimensionam a imagem internamente de qualquer forma; fazer isso
         // antes da transferência reduz cópia, memória e latência sem alterar
         // as coordenadas normalizadas usadas pelo tradutor.
-        const createInferenceBitmap = async () => {
+        const createInferenceBitmap = async (maxEdgeOverride = null) => {
           const sourceWidth = Number(videoElement?.videoWidth || 0);
           const sourceHeight = Number(videoElement?.videoHeight || 0);
           if (!sourceWidth || !sourceHeight) {
             return createImageBitmap(videoElement);
           }
 
-          const maxEdge =
-            self.captureMode === 'holistic' && self.inferenceDelegate === 'CPU'
-              ? 512
-              : 640;
+          const maxEdge = maxEdgeOverride || (
+            self.captureMode === 'holistic' ? 512 : 640
+          );
           const scale = Math.min(
             1,
             maxEdge / Math.max(sourceWidth, sourceHeight)
@@ -377,13 +471,75 @@
           motionTrails.forEach(trail => trail.length = 0);
         };
 
+        const trackingQualityFor = (multiHandLandmarks) => {
+          const points = multiHandLandmarks.flat();
+          if (points.length === 0) {
+            return { quality: 'waiting', ratio: 0 };
+          }
+          const closeToEdge = points.some(
+            point => point.x < 0.055 || point.x > 0.945 ||
+                     point.y < 0.055 || point.y > 0.945
+          );
+          const xs = points.map(point => point.x);
+          const ys = points.map(point => point.y);
+          const ratio = Math.round(
+            Math.max(
+              Math.max(...xs) - Math.min(...xs),
+              Math.max(...ys) - Math.min(...ys)
+            ) * 100
+          );
+          return {
+            quality: closeToEdge ? 'edge' : ratio < 6 ? 'far' : 'good',
+            ratio
+          };
+        };
+
+        const updateVisualTracking = (landmarks, resultAt) => {
+          if (landmarks.length > 0) {
+            lastOverlayDetectionAt = resultAt;
+            const tracking = trackingQualityFor(landmarks);
+            self.handsDetected = true;
+            self.handsCount = landmarks.length;
+            self.trackingQuality = tracking.quality;
+            self.handScreenRatio = tracking.ratio;
+            drawSkeletonCanvas(
+              videoElement,
+              landmarks,
+              tracking.quality
+            );
+            return;
+          }
+
+          // Uma falha isolada do detector nÃ£o deve fazer o neon piscar. SÃ³
+          // removemos a Ãºltima posiÃ§Ã£o se a mÃ£o continuar ausente por alguns
+          // quadros consecutivos.
+          if (resultAt - lastOverlayDetectionAt < overlayDetectionGraceMs) {
+            return;
+          }
+          self.handsDetected = false;
+          self.handsCount = 0;
+          self.trackingQuality = 'waiting';
+          self.handScreenRatio = 0;
+          clearLandmarkCanvas();
+        };
+
         const processResults = (
           results,
           resultAt,
           capturedTimestampMs
         ) => {
-          self.faceDetected = Boolean(results.faceDetected);
-          self.poseDetected = Boolean(results.poseDetected);
+          if (results.faceDetected) {
+            lastFaceDetectionAt = resultAt;
+            self.faceDetected = true;
+          } else if (resultAt - lastFaceDetectionAt >= overlayDetectionGraceMs) {
+            self.faceDetected = false;
+          }
+          if (results.poseDetected) {
+            lastPoseDetectionAt = resultAt;
+            self.poseDetected = true;
+          } else if (resultAt - lastPoseDetectionAt >= overlayDetectionGraceMs) {
+            self.poseDetected = false;
+          }
           if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
             self.handsDetected = true;
             self.handsCount = results.multiHandLandmarks.length;
@@ -428,8 +584,8 @@
             };
             if (
               self.captureMode === 'holistic' &&
-              self.faceDetected &&
-              self.poseDetected &&
+              results.faceDetected === true &&
+              results.poseDetected === true &&
               Array.isArray(results.poseLandmarks) &&
               results.poseLandmarks.length === 13 &&
               results.expression
@@ -452,37 +608,16 @@
             } else {
               currentHolisticFrame = null;
             }
-            const closeToEdge = currentHands.some(
-              point => point.x < 0.055 || point.x > 0.945 ||
-                       point.y < 0.055 || point.y > 0.945
-            );
-            const xs = currentHands.map(point => point.x);
-            const ys = currentHands.map(point => point.y);
-            const handWidth = Math.max(...xs) - Math.min(...xs);
-            const handHeight = Math.max(...ys) - Math.min(...ys);
-            self.handScreenRatio = Math.round(
-              Math.max(handWidth, handHeight) * 100
-            );
-            const tooFar = self.handScreenRatio < 6;
-            self.trackingQuality = closeToEdge
-              ? 'edge'
-              : tooFar
-                ? 'far'
-                : 'good';
-            drawSkeletonCanvas(
-              results.image,
-              results.multiHandLandmarks,
-              self.trackingQuality
-            );
+            if (!trackingWorker) {
+              updateVisualTracking(results.multiHandLandmarks, resultAt);
+            }
           } else {
-            self.handsDetected = false;
-            self.handsCount = 0;
-            self.trackingQuality = 'waiting';
-            self.handScreenRatio = 0;
             currentHands = [];
             currentHandFrame = null;
             currentHolisticFrame = null;
-            clearLandmarkCanvas();
+            if (!trackingWorker) {
+              updateVisualTracking([], resultAt);
+            }
           }
           updateLatestLandmarks();
           // Permite ao Flutter consumir cada resultado apenas uma vez.
@@ -502,7 +637,7 @@
           }
 
           const resultAt = performance.now();
-          self.inferenceLatencyMs = lastFrameStartedAt > 0
+          self.recognitionLatencyMs = lastFrameStartedAt > 0
             ? Math.round(resultAt - lastFrameStartedAt)
             : Number(message.inferenceLatencyMs || 0);
           if (lastResultAt > 0) {
@@ -510,11 +645,15 @@
             smoothedFrameInterval = smoothedFrameInterval === 0
               ? interval
               : smoothedFrameInterval * 0.8 + interval * 0.2;
-            self.inferenceFps = smoothedFrameInterval > 0
+            self.recognitionFps = smoothedFrameInterval > 0
               ? Math.round((1000 / smoothedFrameInterval) * 10) / 10
               : 0;
           }
           lastResultAt = resultAt;
+          if (!trackingWorker) {
+            self.inferenceLatencyMs = self.recognitionLatencyMs;
+            self.inferenceFps = self.recognitionFps;
+          }
 
           processResults(
             {
@@ -531,6 +670,39 @@
           );
         };
 
+        const handleTrackingWorkerResult = (message) => {
+          if (message.type !== 'result' && message.type !== 'frame-error') {
+            return;
+          }
+          if (message.sessionId !== cameraSessionId) return;
+
+          trackingFrameInFlight = false;
+          if (message.type === 'frame-error') {
+            console.warn(
+              'Erro ao processar rastreamento visual:',
+              message.message
+            );
+            return;
+          }
+
+          const resultAt = performance.now();
+          self.inferenceLatencyMs = lastTrackingFrameStartedAt > 0
+            ? Math.round(resultAt - lastTrackingFrameStartedAt)
+            : Number(message.inferenceLatencyMs || 0);
+          if (lastTrackingResultAt > 0) {
+            const interval = resultAt - lastTrackingResultAt;
+            smoothedTrackingFrameInterval =
+              smoothedTrackingFrameInterval === 0
+                ? interval
+                : smoothedTrackingFrameInterval * 0.75 + interval * 0.25;
+            self.inferenceFps = smoothedTrackingFrameInterval > 0
+              ? Math.round((1000 / smoothedTrackingFrameInterval) * 10) / 10
+              : 0;
+          }
+          lastTrackingResultAt = resultAt;
+          updateVisualTracking(message.landmarks || [], resultAt);
+        };
+
         const scheduleNextFrame = () => {
           if (!self.isActive || !videoElement) return;
           if (typeof videoElement.requestVideoFrameCallback === 'function') {
@@ -544,28 +716,29 @@
         // A captura continua na UI, mas toda inferência síncrona ocorre no
         // worker. Se ele ainda estiver ocupado, o quadro novo é descartado em
         // vez de entrar em uma fila que aumentaria o atraso dos movimentos.
-        async function processFrameLoop(now) {
-          if (!self.isActive) return;
-          scheduleNextFrame();
-
-          if (!videoElement ||
-              videoElement.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
-              frameInFlight ||
-              !handWorker) {
+        const submitRecognitionFrame = async (now) => {
+          if (frameInFlight || !handWorker) return;
+          const submittedAt = performance.now();
+          if (
+            self.captureMode === 'holistic' &&
+            submittedAt - lastRecognitionSubmittedAt < 80
+          ) {
             return;
           }
-
+          lastRecognitionSubmittedAt = submittedAt;
           const sessionId = cameraSessionId;
           frameInFlight = true;
-          lastFrameStartedAt = performance.now();
+          lastFrameStartedAt = submittedAt;
           const timestampMs = Math.max(
             lastSubmittedTimestamp + 1,
-            Math.round(Number(now || lastFrameStartedAt))
+            Math.round(Number(now || submittedAt))
           );
           lastSubmittedTimestamp = timestampMs;
 
           try {
-            const bitmap = await createInferenceBitmap();
+            const bitmap = await createInferenceBitmap(
+              self.captureMode === 'holistic' ? 512 : 640
+            );
             if (!self.isActive || sessionId !== cameraSessionId) {
               bitmap.close();
               return;
@@ -578,6 +751,52 @@
             if (sessionId === cameraSessionId) frameInFlight = false;
             console.warn('Erro ao transferir quadro para o worker:', error);
           }
+        };
+
+        const submitTrackingFrame = async (now) => {
+          if (trackingFrameInFlight || !trackingWorker) return;
+          const sessionId = cameraSessionId;
+          trackingFrameInFlight = true;
+          lastTrackingFrameStartedAt = performance.now();
+          const timestampMs = Math.max(
+            lastTrackingSubmittedTimestamp + 1,
+            Math.round(Number(now || lastTrackingFrameStartedAt))
+          );
+          lastTrackingSubmittedTimestamp = timestampMs;
+
+          try {
+            const bitmap = await createInferenceBitmap(448);
+            if (!self.isActive || sessionId !== cameraSessionId) {
+              bitmap.close();
+              return;
+            }
+            trackingWorker.postMessage(
+              { type: 'frame', bitmap, timestampMs, sessionId },
+              [bitmap]
+            );
+          } catch (error) {
+            if (sessionId === cameraSessionId) {
+              trackingFrameInFlight = false;
+            }
+            console.warn(
+              'Erro ao transferir quadro para o rastreador visual:',
+              error
+            );
+          }
+        };
+
+        function processFrameLoop(now) {
+          if (!self.isActive) return;
+          scheduleNextFrame();
+
+          if (!videoElement ||
+              videoElement.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+            return;
+          }
+          if (trackingWorker) {
+            void submitTrackingFrame(now);
+          }
+          void submitRecognitionFrame(now);
         }
 
         if (videoElement) {
@@ -598,7 +817,13 @@
           self.isActive = true;
           cameraSessionId++;
           frameInFlight = false;
+          trackingFrameInFlight = false;
           lastSubmittedTimestamp = 0;
+          lastTrackingSubmittedTimestamp = 0;
+          lastRecognitionSubmittedAt = 0;
+          lastOverlayDetectionAt = 0;
+          lastFaceDetectionAt = 0;
+          lastPoseDetectionAt = 0;
 
           try {
             if (typeof createImageBitmap !== 'function') {
@@ -614,7 +839,20 @@
 
             // Inicializa modelo e câmera em paralelo. A prévia aparece assim
             // que o WebRTC abre; o aquecimento da IA termina em segundo plano.
-            const workerPromise = ensureWorker();
+            const workerPromises = [ensureWorker()];
+            if (self.captureMode === 'holistic') {
+              workerPromises.push(
+                ensureTrackingWorker().catch((error) => {
+                  console.warn(
+                    'Rastreador visual rÃ¡pido indisponÃ­vel; usando o modelo holÃ­stico.',
+                    error
+                  );
+                  trackingWorker?.terminate();
+                  trackingWorker = null;
+                  trackingWorkerReadyPromise = null;
+                })
+              );
+            }
             const stream = await navigator.mediaDevices.getUserMedia({
               video: {
                 facingMode: { ideal: "user" },
@@ -633,7 +871,7 @@
               await videoElement.play().catch(e => console.warn("Erro no play inicial:", e));
             }
 
-            await workerPromise;
+            await Promise.all(workerPromises);
             // Iniciar loop de frames
             scheduleNextFrame();
           } catch (err) {
@@ -661,7 +899,12 @@
             handWorker.terminate();
             handWorker = null;
           }
+          if (trackingWorker) {
+            trackingWorker.terminate();
+            trackingWorker = null;
+          }
           workerReadyPromise = null;
+          trackingWorkerReadyPromise = null;
           workerMode = null;
           self.captureMode = normalized;
           self.faceDetected = false;
@@ -677,6 +920,7 @@
           self.isActive = false;
           cameraSessionId++;
           frameInFlight = false;
+          trackingFrameInFlight = false;
           self.handsDetected = false;
           self.faceDetected = false;
           self.poseDetected = false;
@@ -684,12 +928,21 @@
           self.trackingQuality = 'waiting';
           self.inferenceFps = 0;
           self.inferenceLatencyMs = 0;
+          self.recognitionFps = 0;
+          self.recognitionLatencyMs = 0;
           self.inferenceInputWidth = 0;
           self.inferenceInputHeight = 0;
           self.handScreenRatio = 0;
           lastFrameStartedAt = 0;
           lastResultAt = 0;
           smoothedFrameInterval = 0;
+          lastTrackingFrameStartedAt = 0;
+          lastTrackingResultAt = 0;
+          smoothedTrackingFrameInterval = 0;
+          lastRecognitionSubmittedAt = 0;
+          lastOverlayDetectionAt = 0;
+          lastFaceDetectionAt = 0;
+          lastPoseDetectionAt = 0;
           currentHands = [];
           currentHandFrame = null;
           currentHolisticFrame = null;
@@ -737,7 +990,12 @@
             handWorker.terminate();
             handWorker = null;
           }
+          if (trackingWorker) {
+            trackingWorker.terminate();
+            trackingWorker = null;
+          }
           workerReadyPromise = null;
+          trackingWorkerReadyPromise = null;
           workerMode = null;
         };
       }
