@@ -11,7 +11,11 @@ void main() {
     expect(index, contains('requestVideoFrameCallback'));
     expect(index, contains('createImageBitmap'));
     expect(index, contains('createInferenceBitmap'));
-    expect(index, contains("self.inferenceDelegate === 'CPU'"));
+    expect(index, contains('trackingWorker'));
+    expect(index, contains('trackingFrameInFlight'));
+    expect(index, contains('createInferenceBitmap(448)'));
+    expect(index, contains('overlayDetectionGraceMs = 220'));
+    expect(index, contains('visualTracking: true'));
     expect(index, contains('? 512'));
     expect(index, contains(': 640'));
     expect(index, contains('resizeWidth'));
