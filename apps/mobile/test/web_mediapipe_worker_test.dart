@@ -11,20 +11,17 @@ void main() {
     expect(index, contains('requestVideoFrameCallback'));
     expect(index, contains('createImageBitmap'));
     expect(index, contains('createInferenceBitmap'));
-    expect(index, contains('trackingWorker'));
-    expect(index, contains('trackingFrameInFlight'));
-    expect(index, contains('balancedTrackingIntervalMs = 67'));
-    expect(index, contains('reducedTrackingIntervalMs = 100'));
-    expect(index, contains('balancedRecognitionIntervalMs = 110'));
-    expect(index, contains('reducedRecognitionIntervalMs = 150'));
+    // O holístico já entrega os landmarks usados pelo desenho. Subir um
+    // segundo HandLandmarker no celular duplica CPU/GPU e causa throttling.
+    expect(index, isNot(contains('trackingWorker')));
+    expect(index, isNot(contains('ensureTrackingWorker')));
+    expect(index, contains('balancedRecognitionIntervalMs = 80'));
+    expect(index, contains('reducedRecognitionIntervalMs = 120'));
     expect(index, contains("performanceMode: 'balanced'"));
     expect(index, contains("self.performanceMode = 'reduced'"));
-    expect(index, contains('budget.trackingMaxEdge'));
     expect(index, contains('budget.recognitionMaxEdge'));
-    expect(index, contains('trackingDue && recognitionDue'));
     expect(index, contains('frameRate: { ideal: 24, max: 24 }'));
     expect(index, contains('overlayDetectionGraceMs = 220'));
-    expect(index, contains('visualTracking: true'));
     expect(index, contains(': 640'));
     expect(index, contains('resizeWidth'));
     expect(index, contains("resizeQuality: 'low'"));
