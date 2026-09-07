@@ -29202,7 +29202,8 @@ asF:function asF(){},
 wV:function wV(a,b,c){this.a=a
 this.b=b
 this.c=c},
-ajP:function ajP(){this.c=null
+ajP:function ajP(a){this.a=a
+this.c=null
 this.d=0},
 apu(a){var s=B.c.c6(a),r=A.bc("[!?,.;:]+",!0,!1,!1)
 s=A.cP(s.toUpperCase(),r,"")
@@ -98966,7 +98967,7 @@ if(s===p)r=++q.d
 else{q.c=p
 s=q.d=1
 r=s
-s=p}if(r<2)return null
+s=p}if(r<q.a)return null
 q.c=null
 q.d=0
 return s}}
@@ -99309,7 +99310,7 @@ p=!p.b(r)||!p.b(q)}if(p)return
 p=this.e
 p.push(A.rC(a,t.N,t.z));++this.r
 if(p.length>32)B.b.hZ(p,0)},
-ga1A(){return this.e.length>=12&&this.r>=4},
+ga1A(){return this.e.length>=8&&this.r>=2},
 Ea(){var s=0,r=A.G(t.bo),q,p=2,o=[],n=this,m,l,k,j,i,h,g
 var $async$Ea=A.H(function(a,b){if(a===1){o.push(b)
 s=p}for(;;)switch(s){case 0:if(n.a==null)throw A.e(A.S("Modelo n\xe3o carregado. Chame loadModel() primeiro."))
@@ -101099,7 +101100,7 @@ $0(){return this.a.rd(this.b)},
 $S:0}
 A.ub.prototype={
 al(){var s=t.hV,r=t.H7,q=t.N
-return new A.Ks(new A.Ql(),new A.aeR(A.b([],s)),new A.Gr(),new A.ai4(A.b([],s),A.b([],r),A.b([],r),A.a8D(A.a5O($.a5t,B.eR,B.O5,!0,B.eR,B.eR))),new A.afb(A.a7(["BOM_DIA","Bom dia!","BOM DIA","Bom dia!","BOA DIA","Bom dia!","BOM TARDE","Boa tarde!","BOA TARDE","Boa tarde!","BOM NOITE","Boa noite!","BOA NOITE","Boa noite!","AJUDA","Voc\xea pode me ajudar?","SA\xdaDE","Espero que voc\xea tenha sa\xfade.","EMERG\xcaNCIA","Isto \xe9 uma emerg\xeancia!","EU AJUDA","Eu preciso de ajuda.","EU IR HOSPITAL","Eu preciso ir ao hospital.","VOC\xca IR HOSPITAL","Voc\xea vai ao hospital?"],q,q)),new A.apt(),A.b([],t.s),new A.ajP(),B.Bx)}}
+return new A.Ks(new A.Ql(),new A.aeR(A.b([],s)),new A.Gr(),new A.ai4(A.b([],s),A.b([],r),A.b([],r),A.a8D(A.a5O($.a5t,B.eR,B.O5,!0,B.eR,B.eR))),new A.afb(A.a7(["BOM_DIA","Bom dia!","BOM DIA","Bom dia!","BOA DIA","Bom dia!","BOM TARDE","Boa tarde!","BOA TARDE","Boa tarde!","BOM NOITE","Boa noite!","BOA NOITE","Boa noite!","AJUDA","Voc\xea pode me ajudar?","SA\xdaDE","Espero que voc\xea tenha sa\xfade.","EMERG\xcaNCIA","Isto \xe9 uma emerg\xeancia!","EU AJUDA","Eu preciso de ajuda.","EU IR HOSPITAL","Eu preciso ir ao hospital.","VOC\xca IR HOSPITAL","Voc\xea vai ao hospital?"],q,q)),new A.apt(),A.b([],t.s),new A.ajP(1),B.Bx)}}
 A.Ks.prototype={
 aA(){var s,r=this
 r.aR()
