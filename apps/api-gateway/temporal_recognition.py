@@ -315,13 +315,52 @@ def extract_holistic_signature(frames):
 
 
 def holistic_temporal_distance(first, second):
-    if not first or not second or len(first) != len(second):
+    """Compara sinais tolerando diferenças naturais de velocidade.
+
+    A distância quadro a quadro anterior só funcionava quando a execução ao
+    vivo tinha exatamente o mesmo ritmo da gravação. Dynamic Time Warping
+    alinha trechos equivalentes sem exigir que o usuário repita ou imite a
+    cadência do treinamento.
+    """
+    if not first or not second:
         return math.inf
-    total = 0.0
-    for frame_a, frame_b in zip(first, second):
-        if len(frame_a) != 40 or len(frame_b) != 40:
-            return math.inf
-        total += math.sqrt(
-            sum((a - b) ** 2 for a, b in zip(frame_a, frame_b)) / 40
-        )
-    return total / len(first)
+
+    if any(len(frame) != 40 for frame in first + second):
+        return math.inf
+
+    first_count = len(first)
+    second_count = len(second)
+    # Uma banda pequena permite variação de ritmo sem alinhar partes muito
+    # distantes do sinal, o que preserva a separação entre classes.
+    band = max(abs(first_count - second_count), 4)
+    previous = [(math.inf, 0)] * (second_count + 1)
+    previous[0] = (0.0, 0)
+
+    for first_index in range(1, first_count + 1):
+        current = [(math.inf, 0)] * (second_count + 1)
+        start = max(1, first_index - band)
+        end = min(second_count, first_index + band)
+        for second_index in range(start, end + 1):
+            frame_a = first[first_index - 1]
+            frame_b = second[second_index - 1]
+            local_distance = math.sqrt(
+                sum((a - b) ** 2 for a, b in zip(frame_a, frame_b)) / 40
+            )
+            best_cost, best_steps = min(
+                previous[second_index],
+                current[second_index - 1],
+                previous[second_index - 1],
+                key=lambda candidate: candidate[0],
+            )
+            if not math.isfinite(best_cost):
+                continue
+            current[second_index] = (
+                best_cost + local_distance,
+                best_steps + 1,
+            )
+        previous = current
+
+    total, steps = previous[second_count]
+    if not math.isfinite(total) or steps == 0:
+        return math.inf
+    return total / steps
