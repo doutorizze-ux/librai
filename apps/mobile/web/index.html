@@ -54,6 +54,7 @@
       recognitionFps: 0,
       recognitionLatencyMs: 0,
       trackingDelegate: 'initializing',
+      performanceMode: 'balanced',
       inferenceInputWidth: 0,
       inferenceInputHeight: 0,
       handScreenRatio: 0,
@@ -84,6 +85,7 @@
         let lastSubmittedTimestamp = 0;
         let lastTrackingSubmittedTimestamp = 0;
         let lastRecognitionSubmittedAt = 0;
+        let lastTrackingSubmittedAt = 0;
         let bitmapResizeSupported = true;
         let lastTrackingFrameStartedAt = 0;
         let lastTrackingResultAt = 0;
@@ -91,9 +93,60 @@
         let lastOverlayDetectionAt = 0;
         let lastFaceDetectionAt = 0;
         let lastPoseDetectionAt = 0;
+        let highLoadSamples = 0;
+        let recoverySamples = 0;
         const motionTrails = [[], []];
-        const mediaPipeWorkerRevision = '20260809-dual-tracking-v1';
+        const mediaPipeWorkerRevision = '20260907-adaptive-load-v1';
         const overlayDetectionGraceMs = 220;
+        const balancedTrackingIntervalMs = 67;
+        const reducedTrackingIntervalMs = 100;
+        const balancedRecognitionIntervalMs = 110;
+        const reducedRecognitionIntervalMs = 150;
+
+        const inferenceBudget = () => self.performanceMode === 'reduced'
+          ? {
+              trackingIntervalMs: reducedTrackingIntervalMs,
+              recognitionIntervalMs: reducedRecognitionIntervalMs,
+              trackingMaxEdge: 288,
+              recognitionMaxEdge: 352
+            }
+          : {
+              trackingIntervalMs: balancedTrackingIntervalMs,
+              recognitionIntervalMs: balancedRecognitionIntervalMs,
+              trackingMaxEdge: 320,
+              recognitionMaxEdge: 416
+            };
+
+        // Navegadores móveis reduzem a frequência da CPU/GPU quando o aparelho
+        // aquece. A latência dos próprios modelos é um sinal mais confiável do
+        // que tentar adivinhar temperatura, que não é exposta pela Web API.
+        // Três resultados lentos ativam o orçamento reduzido; a recuperação é
+        // deliberadamente lenta para evitar ficar alternando entre os modos.
+        const updatePerformanceMode = () => {
+          const underPressure =
+            self.recognitionLatencyMs >= 190 ||
+            self.inferenceLatencyMs >= 95;
+          if (underPressure) {
+            highLoadSamples++;
+            recoverySamples = 0;
+          } else {
+            highLoadSamples = Math.max(0, highLoadSamples - 1);
+            recoverySamples++;
+          }
+
+          if (self.performanceMode === 'balanced' && highLoadSamples >= 3) {
+            self.performanceMode = 'reduced';
+            highLoadSamples = 0;
+            recoverySamples = 0;
+          } else if (
+            self.performanceMode === 'reduced' &&
+            recoverySamples >= 45
+          ) {
+            self.performanceMode = 'balanced';
+            highLoadSamples = 0;
+            recoverySamples = 0;
+          }
+        };
 
         const updateLatestLandmarks = () => {
           // Mantido somente para telas legadas. O reconhecimento v2 consome
@@ -654,6 +707,7 @@
             self.inferenceLatencyMs = self.recognitionLatencyMs;
             self.inferenceFps = self.recognitionFps;
           }
+          updatePerformanceMode();
 
           processResults(
             {
@@ -700,6 +754,7 @@
               : 0;
           }
           lastTrackingResultAt = resultAt;
+          updatePerformanceMode();
           updateVisualTracking(message.landmarks || [], resultAt);
         };
 
@@ -719,9 +774,11 @@
         const submitRecognitionFrame = async (now) => {
           if (frameInFlight || !handWorker) return;
           const submittedAt = performance.now();
+          const budget = inferenceBudget();
           if (
             self.captureMode === 'holistic' &&
-            submittedAt - lastRecognitionSubmittedAt < 80
+            submittedAt - lastRecognitionSubmittedAt <
+              budget.recognitionIntervalMs
           ) {
             return;
           }
@@ -737,7 +794,9 @@
 
           try {
             const bitmap = await createInferenceBitmap(
-              self.captureMode === 'holistic' ? 512 : 640
+              self.captureMode === 'holistic'
+                ? budget.recognitionMaxEdge
+                : 640
             );
             if (!self.isActive || sessionId !== cameraSessionId) {
               bitmap.close();
@@ -755,9 +814,17 @@
 
         const submitTrackingFrame = async (now) => {
           if (trackingFrameInFlight || !trackingWorker) return;
+          const submittedAt = performance.now();
+          const budget = inferenceBudget();
+          if (
+            submittedAt - lastTrackingSubmittedAt < budget.trackingIntervalMs
+          ) {
+            return;
+          }
+          lastTrackingSubmittedAt = submittedAt;
           const sessionId = cameraSessionId;
           trackingFrameInFlight = true;
-          lastTrackingFrameStartedAt = performance.now();
+          lastTrackingFrameStartedAt = submittedAt;
           const timestampMs = Math.max(
             lastTrackingSubmittedTimestamp + 1,
             Math.round(Number(now || lastTrackingFrameStartedAt))
@@ -765,7 +832,7 @@
           lastTrackingSubmittedTimestamp = timestampMs;
 
           try {
-            const bitmap = await createInferenceBitmap(448);
+            const bitmap = await createInferenceBitmap(budget.trackingMaxEdge);
             if (!self.isActive || sessionId !== cameraSessionId) {
               bitmap.close();
               return;
@@ -793,10 +860,33 @@
               videoElement.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
             return;
           }
-          if (trackingWorker) {
-            void submitTrackingFrame(now);
+          if (!trackingWorker) {
+            void submitRecognitionFrame(now);
+            return;
           }
-          void submitRecognitionFrame(now);
+
+          // Nunca crie duas cópias do mesmo quadro simultaneamente. Quando os
+          // dois modelos vencem juntos, alternamos a prioridade entre eles. O
+          // rastreador continua responsivo e o holístico recebe uma sequência
+          // regular, sem disputar CPU/GPU no mesmo instante.
+          const submittedAt = performance.now();
+          const budget = inferenceBudget();
+          const trackingDue = !trackingFrameInFlight &&
+            submittedAt - lastTrackingSubmittedAt >= budget.trackingIntervalMs;
+          const recognitionDue = !frameInFlight &&
+            submittedAt - lastRecognitionSubmittedAt >=
+              budget.recognitionIntervalMs;
+          if (trackingDue && recognitionDue) {
+            if (lastTrackingSubmittedAt <= lastRecognitionSubmittedAt) {
+              void submitTrackingFrame(now);
+            } else {
+              void submitRecognitionFrame(now);
+            }
+          } else if (trackingDue) {
+            void submitTrackingFrame(now);
+          } else if (recognitionDue) {
+            void submitRecognitionFrame(now);
+          }
         }
 
         if (videoElement) {
@@ -821,9 +911,13 @@
           lastSubmittedTimestamp = 0;
           lastTrackingSubmittedTimestamp = 0;
           lastRecognitionSubmittedAt = 0;
+          lastTrackingSubmittedAt = 0;
           lastOverlayDetectionAt = 0;
           lastFaceDetectionAt = 0;
           lastPoseDetectionAt = 0;
+          highLoadSamples = 0;
+          recoverySamples = 0;
+          self.performanceMode = 'balanced';
 
           try {
             if (typeof createImageBitmap !== 'function') {
@@ -858,7 +952,7 @@
                 facingMode: { ideal: "user" },
                 width: { ideal: 960, max: 1280 },
                 height: { ideal: 540, max: 720 },
-                frameRate: { ideal: 30, max: 30 },
+                frameRate: { ideal: 24, max: 24 },
                 resizeMode: { ideal: "crop-and-scale" }
               },
               audio: false
@@ -940,9 +1034,13 @@
           lastTrackingResultAt = 0;
           smoothedTrackingFrameInterval = 0;
           lastRecognitionSubmittedAt = 0;
+          lastTrackingSubmittedAt = 0;
           lastOverlayDetectionAt = 0;
           lastFaceDetectionAt = 0;
           lastPoseDetectionAt = 0;
+          highLoadSamples = 0;
+          recoverySamples = 0;
+          self.performanceMode = 'balanced';
           currentHands = [];
           currentHandFrame = null;
           currentHolisticFrame = null;
