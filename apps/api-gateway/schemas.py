@@ -418,7 +418,7 @@ class HolisticFrameV4(BaseModel):
 
 class HolisticPredictionRequestV4(BaseModel):
     format_version: Literal[4] = 4
-    frames: List[HolisticFrameV4] = Field(min_length=24, max_length=120)
+    frames: List[HolisticFrameV4] = Field(min_length=12, max_length=120)
 
     @field_validator("frames")
     @classmethod

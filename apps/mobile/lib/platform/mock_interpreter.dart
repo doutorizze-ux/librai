@@ -4,9 +4,9 @@ import '../domain/interfaces/sign_interpreter.dart';
 import 'app_config.dart';
 
 class MockSignInterpreter implements SignInterpreter {
-  static const int _minimumHolisticFrames = 24;
-  static const int _maximumHolisticFrames = 40;
-  static const int _holisticPredictionStride = 6;
+  static const int _minimumHolisticFrames = 12;
+  static const int _maximumHolisticFrames = 32;
+  static const int _holisticPredictionStride = 4;
 
   String? _loadedModelPath;
   final double confidenceThreshold = 0.75;

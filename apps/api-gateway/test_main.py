@@ -440,6 +440,28 @@ def test_holistic_translator_uses_v4_multiword_training_not_old_v3_label():
     assert prediction.json()["confidence"] >= 0.75
 
 
+def test_holistic_translator_recognizes_one_short_continuous_execution():
+    trained = train_holistic_draft(
+        "OLÁ",
+        "Professora Execução Curta",
+        capture_prefix="draft_short_execution_v4",
+    )
+    assert trained.status_code == 201, trained.text
+
+    prediction = client.post(
+        "/v1/translation/predict-sequence-v4",
+        json={
+            "format_version": 4,
+            "frames": holistic_frames(0.004, frame_count=12),
+        },
+    )
+
+    assert prediction.status_code == 200, prediction.text
+    assert prediction.json()["label"] == "OLÁ"
+    assert prediction.json()["support"] == 3
+    assert prediction.json()["confidence"] >= 0.75
+
+
 def test_holistic_translator_never_falls_back_to_incompatible_old_samples():
     headers = trainer_headers("Professor Somente Antigo")
     for index in range(5):

@@ -279,7 +279,10 @@ class _TranslationScreenState extends State<TranslationScreen> {
 
   void _scheduleHandsRelease() {
     if (_handsWereReleased || _handsReleaseTimer?.isActive == true) return;
-    _handsReleaseTimer = Timer(const Duration(milliseconds: 250), () {
+    // Uma perda breve do rastreador não deve apagar o movimento que acabou de
+    // ser capturado. Esse intervalo ainda mantém uma separação natural entre
+    // dois sinais consecutivos, sem obrigar o usuário a repetir o primeiro.
+    _handsReleaseTimer = Timer(const Duration(milliseconds: 450), () {
       _handsReleaseTimer = null;
       _handsWereReleased = true;
       _sequenceGeneration++;
