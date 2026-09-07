@@ -49,8 +49,12 @@ def split_flat_landmarks(flat_landmarks):
     ]
 
 
-def _resample(frames, target_count=TARGET_FRAME_COUNT):
-    if len(frames) < MIN_SEQUENCE_FRAMES:
+def _resample(
+    frames,
+    target_count=TARGET_FRAME_COUNT,
+    minimum_frames=MIN_SEQUENCE_FRAMES,
+):
+    if len(frames) < minimum_frames:
         return []
     if len(frames) == target_count:
         return frames
@@ -248,7 +252,11 @@ def extract_holistic_signature(frames):
         or len(source_timestamps) != len(set(source_timestamps))
     ):
         return None
-    sampled = _resample(frames)
+    # O conjunto holístico contém mãos, braços, tronco e expressão em cada
+    # quadro. O sinal já possui informação suficiente para uma primeira
+    # decisão com oito quadros distintos; a assinatura continua normalizada
+    # para 16 posições, como nas amostras de treinamento.
+    sampled = _resample(frames, minimum_frames=8)
     if not sampled:
         return None
 

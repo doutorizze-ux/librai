@@ -440,7 +440,7 @@ def test_holistic_translator_uses_v4_multiword_training_not_old_v3_label():
     assert prediction.json()["confidence"] >= 0.75
 
 
-def test_holistic_translator_recognizes_one_short_continuous_execution():
+def test_holistic_translator_recognizes_one_realtime_continuous_execution():
     trained = train_holistic_draft(
         "OLÁ",
         "Professora Execução Curta",
@@ -452,7 +452,7 @@ def test_holistic_translator_recognizes_one_short_continuous_execution():
         "/v1/translation/predict-sequence-v4",
         json={
             "format_version": 4,
-            "frames": holistic_frames(0.004, frame_count=12),
+            "frames": holistic_frames(0.004, frame_count=8),
         },
     )
 

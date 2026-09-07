@@ -30,7 +30,12 @@ class _TranslationScreenState extends State<TranslationScreen> {
   final List<String> _spellingBuffer = [];
   Timer? _spellingEndTimer;
   Timer? _handsReleaseTimer;
-  final PredictionConsensus _predictionConsensus = PredictionConsensus();
+  // O servidor já exige concordância entre três amostras do mesmo sinal,
+  // distância máxima e margem para os demais rótulos. Repetir esse consenso
+  // no cliente obrigava o usuário a executar o mesmo sinal novamente.
+  final PredictionConsensus _predictionConsensus = PredictionConsensus(
+    requiredConsecutiveMatches: 1,
+  );
   int _lastLandmarkRevision = -1;
   int _sequenceGeneration = 0;
   bool _handsWereReleased = true;

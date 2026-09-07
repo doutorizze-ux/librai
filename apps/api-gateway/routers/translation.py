@@ -418,10 +418,10 @@ def predict_holistic_sequence_v4(
     """Reconhece usando somente coletas holísticas v4 compatíveis."""
     frames = [frame.model_dump() for frame in payload.frames]
     candidate_frames = []
-    for window_size in (12, 16, 20, 24, 32, 40, 48, 64, 80, 96):
+    for window_size in (8, 10, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96):
         if len(frames) >= window_size:
             candidate_frames.append(frames[-window_size:])
-    if len(frames) not in {12, 16, 20, 24, 32, 40, 48, 64, 80, 96}:
+    if len(frames) not in {8, 10, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96}:
         candidate_frames.append(frames)
     signatures = [
         signature

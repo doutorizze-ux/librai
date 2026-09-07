@@ -240,15 +240,15 @@ void main() {
             },
           };
 
-      for (var index = 0; index < 11; index++) {
+      for (var index = 0; index < 7; index++) {
         interpreter.addHolisticFrame(frame(index));
       }
       expect(interpreter.hasEnoughHolisticFrames, isFalse);
 
-      interpreter.addHolisticFrame(frame(11));
+      interpreter.addHolisticFrame(frame(7));
       expect(interpreter.hasEnoughHolisticFrames, isTrue);
 
-      for (var index = 12; index < 80; index++) {
+      for (var index = 8; index < 80; index++) {
         interpreter.addHolisticFrame(frame(index));
       }
       expect(interpreter.bufferedHolisticFrameCount, equals(32));

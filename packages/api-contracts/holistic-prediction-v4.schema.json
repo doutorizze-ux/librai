@@ -9,9 +9,9 @@
     "format_version": { "const": 4 },
     "frames": {
       "type": "array",
-      "minItems": 12,
+      "minItems": 8,
       "maxItems": 120,
-      "description": "Continuous holistic camera window with at least 12 distinct frames. Raw images are never transmitted.",
+      "description": "Continuous holistic camera window with at least 8 distinct frames. Raw images are never transmitted.",
       "items": { "$ref": "holistic-training-batch-v4.schema.json#/$defs/frame" }
     }
   }

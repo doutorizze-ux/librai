@@ -32,4 +32,13 @@ void main() {
     expect(consensus.accept(label: 'OLÁ', confidence: 0.74), isNull);
     expect(consensus.accept(label: 'OLÁ', confidence: 0.90), isNull);
   });
+
+  test('permite decisão imediata quando o servidor já aplicou consenso', () {
+    final consensus = PredictionConsensus(requiredConsecutiveMatches: 1);
+
+    expect(
+      consensus.accept(label: 'OLÁ', confidence: 0.90),
+      'OLÁ',
+    );
+  });
 }
