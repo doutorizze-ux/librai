@@ -183,12 +183,13 @@ self.onmessage = async (event) => {
     if (!holisticLandmarker) {
       throw new Error("Rastreamento holístico ainda não foi inicializado.");
     }
+    const result = runAll(bitmap, timestampMs);
     self.postMessage({
       type: "result",
       sessionId,
       timestampMs,
       inferenceLatencyMs: Math.round(performance.now() - startedAt),
-      ...runAll(bitmap, timestampMs),
+      ...result,
     });
   } catch (error) {
     self.postMessage({
