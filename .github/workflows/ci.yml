@@ -167,6 +167,9 @@ jobs:
               subprocess.run(["node", "--check", worker], check=True)
           PY
 
+      - name: Test camera runtime with synthetic frames
+        run: node --test apps/mobile/test/web_camera_runtime.test.cjs
+
       - name: Run tests
         run: |
           cd apps/mobile

@@ -86,8 +86,7 @@
         let lastPoseDetectionAt = 0;
         let highLoadSamples = 0;
         let recoverySamples = 0;
-        const motionTrails = [[], []];
-        const mediaPipeWorkerRevision = '20260907-single-holistic-v1';
+        const mediaPipeWorkerRevision = '20260907-overlay-budget-v1';
         const overlayDetectionGraceMs = 220;
         const balancedRecognitionIntervalMs = 80;
         const reducedRecognitionIntervalMs = 120;
@@ -108,9 +107,10 @@
         // Três resultados lentos ativam o orçamento reduzido; a recuperação é
         // deliberadamente lenta para evitar ficar alternando entre os modos.
         const updatePerformanceMode = () => {
-          const underPressure =
-            self.recognitionLatencyMs >= 190 ||
-            self.inferenceLatencyMs >= 95;
+          // O limite de 95 ms pertencia ao rastreador de mãos separado.
+          // Agora inferenceLatencyMs copia a latência do único worker.
+          const underPressure = self.recognitionLatencyMs >=
+            (self.captureMode === 'holistic' ? 190 : 95);
           if (underPressure) {
             highLoadSamples++;
             recoverySamples = 0;
@@ -344,40 +344,15 @@
                 ? '#40C4FF'
                 : '#FF4664';
 
-          multiHandLandmarks.forEach((landmarks, handIndex) => {
-            const wrist = mapPoint(landmarks[0]);
-            const trail = motionTrails[handIndex] || motionTrails[0];
-            const trailNow = performance.now();
-            trail.push({ ...wrist, createdAt: trailNow });
-            while (trail.length > 6 ||
-                   (trail[0] && trailNow - trail[0].createdAt > 120)) {
-              trail.shift();
-            }
-
-            if (trail.length > 1) {
-              ctx.save();
-              ctx.lineCap = 'round';
-              for (let i = 1; i < trail.length; i++) {
-                ctx.beginPath();
-                ctx.strokeStyle = neonColor;
-                ctx.globalAlpha = i / trail.length * 0.42;
-                ctx.lineWidth = 2 + (i / trail.length) * 5;
-                ctx.moveTo(trail[i - 1].x, trail[i - 1].y);
-                ctx.lineTo(trail[i].x, trail[i].y);
-                ctx.stroke();
-              }
-              ctx.restore();
-            }
-
+          // Mostra somente a medição atual, sem rastro de posições antigas.
+          multiHandLandmarks.forEach((landmarks) => {
             ctx.strokeStyle = neonColor;
             ctx.lineWidth = Math.max(3, width / 240);
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
-            ctx.shadowColor = neonColor;
-            ctx.shadowBlur = 14;
+            ctx.shadowBlur = 0;
 
-            // Um único stroke por mão mantém o neon, mas evita dezenas de
-            // rasterizações de sombra independentes em cada quadro.
+            // Uma operação por mão, sem rasterização de sombra desfocada.
             ctx.beginPath();
             for (const [start, end] of connections) {
               const p1 = landmarks[start];
@@ -391,7 +366,6 @@
             }
             ctx.stroke();
 
-            ctx.shadowBlur = 10;
             ctx.fillStyle = '#F7FFFF';
             ctx.beginPath();
             for (const pt of landmarks) {
@@ -419,7 +393,6 @@
               ctx.clearRect(0, 0, width, height);
             }
           }
-          motionTrails.forEach(trail => trail.length = 0);
         };
 
         const clearCameraCanvas = () => {
@@ -428,7 +401,6 @@
           if (canvas && ctx) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
           }
-          motionTrails.forEach(trail => trail.length = 0);
         };
 
         const trackingQualityFor = (multiHandLandmarks) => {
